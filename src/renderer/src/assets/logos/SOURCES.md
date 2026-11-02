@@ -58,3 +58,16 @@ each in its brand colour; Simple Icons lists every mark's official source:
 App logos of the Catzoid family:
 
 - devcatz.png — the Catzoid site, public/brand/devcatz/icon-64.png (DevCatz app icon; Open in DevCatz)
+
+Service logos for container rows (`svc/`, matched by image name in `src/renderer/src/ui/logos.ts`), used only to
+identify what a container runs:
+
+- Databases (mysql, mariadb, postgresql, redis, valkey, mongodb, elasticsearch, sqlite) — copied from DBCatz
+  (`src/renderer/src/assets/logos/db`, sources listed there).
+- Search, storage and realtime servers (meilisearch, typesense, opensearch, manticore, zincsearch, minio, rustfs,
+  seaweedfs, nats, centrifugo, mercure) — copied from DevCatz (`src/renderer/src/assets/logos`, sources listed there).
+- The rest are the projects' GitHub organisation avatars, https://github.com/<org>.png?size=96: nginx (nginx),
+  node (nodejs), python (python), golang (golang), php (php), rabbitmq (rabbitmq), memcached (memcached), mailpit
+  (axllent), traefik (traefik), caddy (caddyserver), httpd (apache), cassandra (apache), grafana (grafana),
+  prometheus (prometheus), alpine (alpinelinux), ubuntu (canonical), debian (debian), keycloak (keycloak),
+  clickhouse (ClickHouse), adminer (vrana), jenkins (jenkinsci), gitea (go-gitea), n8n (n8n-io).

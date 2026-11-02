@@ -22,7 +22,7 @@ const backStack = ref<Entry[]>([]);
 const forwardStack = ref<Entry[]>([]);
 const here = ref<Entry | null>(null);
 
-const NAMES: Record<Section, string> = { containers: 'Containers', images: 'Images', volumes: 'Volumes', networks: 'Networks', engine: 'Engine', settings: 'Settings' };
+const NAMES: Record<Section, string> = { containers: 'Containers', images: 'Images', volumes: 'Volumes', networks: 'Networks', builds: 'Builds', engine: 'Engine', settings: 'Settings' };
 const TAB_NAMES: Record<string, string> = { info: 'Info', logs: 'Logs', terminal: 'Terminal', files: 'Files', stats: 'Stats', general: 'General', domains: 'Domains', ai: 'AI', updates: 'Updates', about: 'About' };
 
 function current(): Place {

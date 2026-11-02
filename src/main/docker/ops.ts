@@ -24,7 +24,8 @@ interface ApiContainer {
   Created: number;
   Ports: ApiPort[];
   Labels: Record<string, string>;
-  NetworkSettings?: { Networks?: Record<string, unknown> };
+  NetworkSettings?: { Networks?: Record<string, { IPAddress?: string }> };
+  HostConfig?: { NetworkMode?: string };
   Mounts?: { Type: string; Name?: string }[];
 }
 
@@ -49,6 +50,9 @@ function ports(list: ApiPort[]): DcPort[] {
 const health = (status: string): DcContainer['health'] => (/\(healthy\)/.test(status) ? 'healthy' : /\(unhealthy\)/.test(status) ? 'unhealthy' : /health: starting/.test(status) ? 'starting' : null);
 
 export type UrlFor = (c: Omit<DcContainer, 'url'>) => string | null;
+/** Custom domain names (Domains keeps them); filled in here so the list shows them. */
+export let domainNameOf: (key: string) => string | null = () => null;
+export const setDomainNameLookup = (fn: (key: string) => string | null) => (domainNameOf = fn);
 
 function shape(c: ApiContainer, urlFor: UrlFor): DcContainer {
   const base: Omit<DcContainer, 'url'> = {
@@ -64,13 +68,18 @@ function shape(c: ApiContainer, urlFor: UrlFor): DcContainer {
     workingDir: c.Labels?.[WORKDIR] ?? null,
     ports: ports(c.Ports ?? []),
     networks: Object.keys(c.NetworkSettings?.Networks ?? {}),
+    ip: Object.values(c.NetworkSettings?.Networks ?? {}).map((n) => n.IPAddress).find((x) => !!x) ?? null,
+    domainKey: c.Labels?.[PROJECT] && c.Labels?.[SERVICE] ? `${c.Labels[PROJECT]}/${c.Labels[SERVICE]}` : (c.Names[0] ?? c.Id.slice(0, 12)).replace(/^\//, ''),
+    domainName: null,
   };
+  base.domainName = domainNameOf(base.domainKey);
   return { ...base, url: urlFor(base) };
 }
 
 export async function listContainers(urlFor: UrlFor): Promise<DcContainer[]> {
   const list = await docker.get<ApiContainer[]>('/containers/json', { all: true });
-  return list.map((c) => shape(c, urlFor)).sort((a, b) => (a.project ?? '￿').localeCompare(b.project ?? '￿') || a.name.localeCompare(b.name));
+  // DoCatz's own router (domains for containers without a published port) is not one of the user's containers.
+  return list.filter((c) => !c.Labels?.['com.mrcatz.docatz.router']).map((c) => shape(c, urlFor)).sort((a, b) => (a.project ?? '￿').localeCompare(b.project ?? '￿') || a.name.localeCompare(b.name));
 }
 
 /** Raw labels of every container (compose projects and their files). */

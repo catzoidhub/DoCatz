@@ -7,6 +7,7 @@ import DcNavButtons from './DcNavButtons.vue';
 import LogsPane from './LogsPane.vue';
 import TermPane from './TermPane.vue';
 import FilesPane from './FilesPane.vue';
+import { serviceLook } from './logos';
 
 /**
  * One container (DoCatz TODO #12 / #13 / #15): its actions, and tabs — Info (image, command, ports, domain, mounts,
@@ -15,6 +16,7 @@ import FilesPane from './FilesPane.vue';
 const props = defineProps<{ container: DcContainer; stats: DcStats | null }>();
 const c = computed(() => props.container);
 const detail = ref<DcContainerDetail | null>(null);
+const look = computed(() => serviceLook(c.value.image));
 const TABS: { id: ContainerTab; label: string }[] = [
   { id: 'info', label: 'Info' },
   { id: 'logs', label: 'Logs' },
@@ -60,6 +62,23 @@ const copy = (text: string, what: string) => {
   notify('success', `${what} copied`);
 };
 const running = computed(() => c.value.state === 'running');
+
+// The domain's name (before .docatz.<tld>): editable, the ending stays as Settings → Domains says.
+const editingName = ref(false);
+const nameInput = ref('');
+const suffix = computed(() => (c.value.url ? new URL(c.value.url).hostname.replace(/^.*?\.(docatz\.)/, '$1') : 'docatz.localhost'));
+const currentName = computed(() => (c.value.url ? new URL(c.value.url).hostname.slice(0, -(suffix.value.length + 1)) : ''));
+function startName() {
+  nameInput.value = currentName.value;
+  editingName.value = true;
+}
+async function saveName() {
+  const ok = await attempt(() => api.setDomainName(c.value.domainKey, nameInput.value.trim() || null));
+  if (ok !== undefined) {
+    editingName.value = false;
+    notify('success', nameInput.value.trim() ? `Now at ${nameInput.value.trim()}.${suffix.value}` : 'Back to the default name');
+  }
+}
 const memPct = computed(() => (props.stats && props.stats.memLimit ? (props.stats.memUsed / props.stats.memLimit) * 100 : 0));
 </script>
 
@@ -67,6 +86,10 @@ const memPct = computed(() => (props.stats && props.stats.memLimit ? (props.stat
   <section class="flex h-full flex-col">
     <header class="drag win-top flex h-14 shrink-0 items-end gap-3 border-b border-base-300/60 px-4 pb-2">
       <div class="no-drag"><DcNavButtons /></div>
+      <span class="mb-0.5 grid size-9 shrink-0 place-items-center overflow-hidden rounded-xl border border-base-300/70 bg-base-100" :title="look.label">
+        <img v-if="look.logo" :src="look.logo" alt="" class="size-7 rounded object-contain" draggable="false" />
+        <svg v-else viewBox="0 0 20 20" class="size-5 text-primary" fill="currentColor"><path fill-rule="evenodd" clip-rule="evenodd" d="M3 6.5A2.5 2.5 0 0 1 5.5 4h9A2.5 2.5 0 0 1 17 6.5v7a2.5 2.5 0 0 1-2.5 2.5h-9A2.5 2.5 0 0 1 3 13.5v-7ZM6 7a.75.75 0 0 0-.75.75v4.5a.75.75 0 0 0 1.5 0v-4.5A.75.75 0 0 0 6 7Zm2.75.75a.75.75 0 0 1 1.5 0v4.5a.75.75 0 0 1-1.5 0v-4.5ZM14 7a.75.75 0 0 0-.75.75v4.5a.75.75 0 0 0 1.5 0v-4.5A.75.75 0 0 0 14 7Z" /></svg>
+      </span>
       <div class="min-w-0 flex-1 pb-0.5">
         <div class="flex items-center gap-2">
           <h1 class="truncate text-base font-semibold tracking-tight">{{ c.name }}</h1>
@@ -129,10 +152,23 @@ const memPct = computed(() => (props.stats && props.stats.memLimit ? (props.stat
                   <span v-else class="text-xs opacity-50">not published</span>
                 </li>
               </ul>
-              <div v-if="detail.url" class="flex items-center gap-2 pt-1">
-                <span class="text-sm opacity-60">Domain</span>
-                <a class="link font-mono text-xs" @click="api.openUrl(detail.url)">{{ detail.url }}</a>
-                <button class="btn btn-ghost btn-xs" @click="copy(detail.url, 'URL')">Copy</button>
+              <div v-if="detail.url" class="space-y-1.5 pt-1">
+                <div v-if="!editingName" class="flex flex-wrap items-center gap-2">
+                  <span class="text-sm opacity-60">Domain</span>
+                  <a class="link font-mono text-xs" @click="api.openUrl(detail.url)">{{ detail.url }}</a>
+                  <button class="btn btn-ghost btn-xs" @click="copy(detail.url, 'URL')">Copy</button>
+                  <button class="btn btn-ghost btn-xs" title="Change the name in front of .docatz" @click="startName">Edit</button>
+                  <span v-if="c.domainName" class="badge badge-ghost badge-xs">custom</span>
+                </div>
+                <form v-else class="flex flex-wrap items-center gap-1.5" @submit.prevent="saveName">
+                  <span class="text-sm opacity-60">Domain</span>
+                  <input v-model="nameInput" class="input input-sm w-56 font-mono text-xs" spellcheck="false" autofocus @keydown.esc.prevent="editingName = false" />
+                  <span class="font-mono text-xs opacity-60">.{{ suffix }}</span>
+                  <button class="btn btn-primary btn-xs">Save</button>
+                  <button v-if="c.domainName" type="button" class="btn btn-ghost btn-xs" title="Back to the name DoCatz picks" @click="nameInput = ''; saveName()">Default</button>
+                  <button type="button" class="btn btn-ghost btn-xs" @click="editingName = false">Cancel</button>
+                </form>
+                <p v-if="editingName" class="text-xs opacity-55">Letters, digits and dashes; dots make sub-names (api.shop). The ending .{{ suffix }} follows Settings → Domains.</p>
               </div>
             </div>
           </div>

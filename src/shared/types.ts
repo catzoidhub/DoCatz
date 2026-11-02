@@ -90,7 +90,7 @@ export interface DcDomains {
   /** The shared CA: its certificate, the app that made it, whether this computer trusts it. */
   ca: { cert: string; by: string; trusted: boolean } | null;
   /** Names without a port: on, the app whose proxy :443 / :80 point at, and whether DoCatz's domains answer on it. */
-  cleanUrls: { on: boolean; by: string | null; reachesDocatz: boolean };
+  cleanUrls: { on: boolean; by: string | null; reachesDocatz: boolean; /** Nothing answers on :443 (the app it points at is not running). */ frontDown: boolean };
   /** The ports DoCatz's proxy listens on (loopback only). */
   httpsPort: number;
   httpPort: number;
@@ -178,9 +178,14 @@ export interface DcContainer {
   /** The compose file folder (com.docker.compose.project.working_dir). */
   workingDir: string | null;
   ports: DcPort[];
-  /** https://<service>.<project>.docatz.<tld> or https://<name>.docatz.<tld>, when it publishes a TCP port. */
+  /** https://<service>.<project>.docatz.<tld> or https://<name>.docatz.<tld> — every running container on a network. */
   url: string | null;
   networks: string[];
+  /** The container's own IP on its first network (DoCatz's router reaches it inside the VM). */
+  ip: string | null;
+  /** What its domain name is kept under (`<project>/<service>` or the container's name), and the custom name if set. */
+  domainKey: string;
+  domainName: string | null;
 }
 export interface DcContainerDetail extends DcContainer {
   command: string;
@@ -282,6 +287,39 @@ export interface DcComposeProject {
   dir: string | null;
   containers: number;
   running: number;
+}
+
+/** A compose project's own .env in DoCatz (like a Dokploy app's environment). */
+export interface DcProjectEnv {
+  project: string;
+  exists: boolean;
+  mtime: number | null;
+  /** Values hidden and editing off until unlocked (as DevCatz's .env tab). */
+  locked: boolean;
+  /** The compose project's folder, and the files a new DoCatz .env can start from. */
+  dir: string | null;
+  projectEnv: string | null;
+  example: string | null;
+}
+
+/** A build from BuildKit's history (Builds section). */
+export interface DcBuild {
+  ref: string;
+  name: string;
+  status: 'completed' | 'failed' | 'cancelled' | 'running';
+  createdAt: number;
+  durationMs: number | null;
+  steps: { total: number; completed: number; cached: number };
+  error: string | null;
+}
+export interface DcBuildDetail extends DcBuild {
+  context: string;
+  dockerfile: string;
+  target: string;
+  platforms: string[];
+  /** Base images it pulled (alpine@3.20 …). */
+  bases: string[];
+  image: string | null;
 }
 
 // ------------------------------------------------------------ AI answers
@@ -542,6 +580,23 @@ export interface DoCatzApi {
   prunePreview(kind: DcPruneKind): Promise<DcPrunePreview>;
   prune(kind: DcPruneKind): Promise<{ removed: number; freed: number }>;
 
+  // a compose project's own .env in DoCatz
+  envState(project: string, dir: string | null): Promise<DcProjectEnv>;
+  envRead(project: string): Promise<{ content: string; mtime: number }>;
+  /** Saves; resolves with the new mtime. Refused when the file changed since `mtime`. */
+  envWrite(project: string, content: string, mtime: number | null): Promise<number>;
+  envCreate(project: string, dir: string | null, from: 'env' | 'example' | 'empty'): Promise<DcProjectEnv>;
+  envLock(project: string, on: boolean): Promise<DcProjectEnv>;
+  envRemove(project: string): Promise<void>;
+  /** The name in front of `.docatz.<tld>` for a container (compose: per service); null = the default name. */
+  setDomainName(key: string, name: string | null): Promise<void>;
+
+  // builds (BuildKit history)
+  builds(): Promise<DcBuild[]>;
+  build(ref: string): Promise<DcBuildDetail>;
+  buildLogs(ref: string): Promise<string>;
+  buildRemove(ref: string): Promise<void>;
+
   // domains (shared with DevCatz, #61)
   domains(): Promise<DcDomains>;
   setDomains(patch: DcDomainsPatch): Promise<DcDomains>;
@@ -564,6 +619,8 @@ export const API_METHODS: (keyof DoCatzApi)[] = [
   'engineState', 'engineStart', 'engineStop', 'engineRestart', 'engineReset', 'engineConfigure', 'engineCancel', 'engineLog', 'contextSet', 'cliInstall', 'cliPath', 'diskUsage',
   'containers', 'container', 'containerEnv', 'containerAction', 'containerRemove', 'stats', 'logsFollow', 'logsStop', 'termOpen', 'termInput', 'termResize', 'termClose', 'files', 'fileSave', 'projects', 'composePick', 'composeRun', 'composeProject', 'runCancel', 'readText', 'writeText',
   'images', 'imageRemove', 'imagePull', 'volumes', 'volumeRemove', 'networks', 'networkRemove', 'prunePreview', 'prune',
+  'envState', 'envRead', 'envWrite', 'envCreate', 'envLock', 'envRemove', 'setDomainName',
+  'builds', 'build', 'buildLogs', 'buildRemove',
   'domains', 'setDomains', 'caTrust', 'cleanUrls', 'resolver',
   'appMenu', 'menuShortcuts', 'menuKey',
 ];

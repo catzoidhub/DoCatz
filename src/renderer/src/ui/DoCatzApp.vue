@@ -8,6 +8,7 @@ import ContainersView from './ContainersView.vue';
 import ImagesView from './ImagesView.vue';
 import VolumesView from './VolumesView.vue';
 import NetworksView from './NetworksView.vue';
+import BuildsView from './BuildsView.vue';
 import EngineView from './EngineView.vue';
 import DcSettings from './DcSettings.vue';
 import AskDocatz from './AskDocatz.vue';
@@ -30,6 +31,7 @@ const ICONS: Record<string, string> = {
   images: 'M10 2.5 17 6v8l-7 3.5L3 14V6l7-3.5Zm0 1.68L5.04 6.65 10 9.13l4.96-2.48L10 4.18ZM4.5 7.86v5.21l4.75 2.37v-5.2L4.5 7.85Zm11 0-4.75 2.38v5.2l4.75-2.37V7.86Z',
   volumes: 'M10 2.5c-3.87 0-7 1.12-7 2.5v10c0 1.38 3.13 2.5 7 2.5s7-1.12 7-2.5V5c0-1.38-3.13-2.5-7-2.5Zm0 1.5c3.45 0 5.5.95 5.5 1s-2.05 1-5.5 1-5.5-.95-5.5-1 2.05-1 5.5-1ZM4.5 7.08C5.83 7.66 7.8 8 10 8s4.17-.34 5.5-.92V10c0 .05-2.05 1-5.5 1s-5.5-.95-5.5-1V7.08Zm0 5C5.83 12.66 7.8 13 10 13s4.17-.34 5.5-.92V15c0 .05-2.05 1-5.5 1s-5.5-.95-5.5-1v-2.92Z',
   networks: 'M10 2a2.5 2.5 0 0 1 .75 4.89V9h3.5a1.75 1.75 0 0 1 1.75 1.75v1.36a2.5 2.5 0 1 1-1.5 0v-1.36a.25.25 0 0 0-.25-.25h-8.5a.25.25 0 0 0-.25.25v1.36a2.5 2.5 0 1 1-1.5 0v-1.36C4 9.78 4.78 9 5.75 9h3.5V6.89A2.5 2.5 0 0 1 10 2Z',
+  builds: 'M11.98 1.8a1 1 0 0 1 .87 1.16L12.2 7H16a1 1 0 0 1 .78 1.63l-7 8.6a1 1 0 0 1-1.76-.8L8.67 12.6H5a1 1 0 0 1-.78-1.63l7-8.82a1 1 0 0 1 .76-.35Z',
   engine: 'M7 2a1 1 0 0 1 1 1v1h4V3a1 1 0 1 1 2 0v1h.5A2.5 2.5 0 0 1 17 6.5V7h1a1 1 0 1 1 0 2h-1v2h1a1 1 0 1 1 0 2h-1v.5a2.5 2.5 0 0 1-2.5 2.5H14v1a1 1 0 1 1-2 0v-1H8v1a1 1 0 1 1-2 0v-1h-.5A2.5 2.5 0 0 1 3 13.5V13H2a1 1 0 1 1 0-2h1V9H2a1 1 0 1 1 0-2h1v-.5A2.5 2.5 0 0 1 5.5 4H6V3a1 1 0 0 1 1-1Zm0 5a.5.5 0 0 0-.5.5v5a.5.5 0 0 0 .5.5h6a.5.5 0 0 0 .5-.5v-5A.5.5 0 0 0 13 7H7Z',
   cog: 'M7.84 1.804A1 1 0 0 1 8.82 1h2.36a1 1 0 0 1 .98.804l.331 1.652a6.993 6.993 0 0 1 1.929 1.115l1.598-.54a1 1 0 0 1 1.186.447l1.18 2.044a1 1 0 0 1-.205 1.251l-1.267 1.113a7.047 7.047 0 0 1 0 2.228l1.267 1.113a1 1 0 0 1 .206 1.25l-1.18 2.045a1 1 0 0 1-1.187.447l-1.598-.54a6.993 6.993 0 0 1-1.929 1.115l-.33 1.652a1 1 0 0 1-.98.804H8.82a1 1 0 0 1-.98-.804l-.331-1.652a6.993 6.993 0 0 1-1.929-1.115l-1.598.54a1 1 0 0 1-1.186-.447l-1.18-2.044a1 1 0 0 1 .205-1.251l1.267-1.114a7.05 7.05 0 0 1 0-2.227L1.821 7.773a1 1 0 0 1-.206-1.25l1.18-2.045a1 1 0 0 1 1.187-.447l1.598.54A6.992 6.992 0 0 1 7.51 3.456l.33-1.652ZM10 13a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z',
 };
@@ -38,6 +40,7 @@ const RAIL: { id: Section; label: string }[] = [
   { id: 'images', label: 'Images' },
   { id: 'volumes', label: 'Volumes' },
   { id: 'networks', label: 'Networks' },
+  { id: 'builds', label: 'Builds' },
   { id: 'engine', label: 'Engine' },
 ];
 const running = computed(() => containers.value.filter((c) => c.state === 'running').length);
@@ -70,7 +73,7 @@ function openRoute(route: string) {
   } else if (head === 'settings') {
     section.value = 'settings';
     if (arg) settingsTab.value = arg as typeof settingsTab.value;
-  } else if (['images', 'volumes', 'networks', 'engine'].includes(head)) section.value = head as Section;
+  } else if (['images', 'volumes', 'networks', 'builds', 'engine'].includes(head)) section.value = head as Section;
 }
 
 const askOn = aiOn('ask');
@@ -186,6 +189,7 @@ function openAppMenu(e: MouseEvent) {
         <ImagesView v-else-if="section === 'images'" />
         <VolumesView v-else-if="section === 'volumes'" />
         <NetworksView v-else-if="section === 'networks'" />
+        <BuildsView v-else-if="section === 'builds'" />
         <EngineView v-else-if="section === 'engine'" />
         <DcSettings v-else-if="section === 'settings'" />
       </template>

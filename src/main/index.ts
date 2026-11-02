@@ -5,6 +5,8 @@ import { pipeline } from 'node:stream/promises';
 import type { Duplex } from 'node:stream';
 import { API_METHODS, type DcContainer, type DoCatzApi, type SiblingApp } from '@shared/types';
 import { AskAi } from './ai';
+import { buildDetail, buildLogs, listBuilds, removeBuild } from './builds';
+import { envCreate, envRead, envRemove, envSetLocked, envState, envWrite } from './envs';
 import { writeBridge } from './bridge';
 import { removeContext, setPath as setCliPath } from './cli';
 import { findCatzoidApp, openCatzoidApp, platformId } from './companion';
@@ -33,6 +35,7 @@ import { appMenuPopup, applyMenu, mainWindow, menuKey, menuShortcuts, openWindow
 
 const engine = new Engine();
 const domains = new Domains();
+ops.setDomainNameLookup(domains.nameOf);
 const runs = new Runs();
 const updater = new Updater();
 const reporter = new Reporter();
@@ -62,7 +65,7 @@ async function refresh(): Promise<void> {
     } catch {
       containers = [];
     }
-    domains.setRoutes(containers);
+    await domains.setRoutes(containers).catch((e) => console.warn('routes:', (e as Error).message));
     writeBridge(containers, containers.length || (await engine.up()) ? 'running' : 'stopped', { httpsPort: domains.httpsPort, httpPort: domains.httpPort });
     send('app:changed', null);
     tray.update(await engine.state().catch(() => null), containers);
@@ -336,6 +339,22 @@ function api(): DoCatzApi {
     networkRemove: (id) => needEngine(() => ops.networkRemove(id)),
     prunePreview: (kind) => needEngine(() => ops.prunePreview(kind)),
     prune: (kind) => needEngine(() => ops.prune(kind)),
+
+    envState: async (project, dir) => envState(project, dir),
+    envRead: async (project) => envRead(project),
+    envWrite: async (project, content, mtime) => envWrite(project, content, mtime),
+    envCreate: async (project, dir, from) => envCreate(project, dir, from),
+    envLock: async (project, on) => {
+      envSetLocked(project, on);
+      return envState(project, null);
+    },
+    envRemove: async (project) => envRemove(project),
+    setDomainName: async (key, name) => domains.setName(key, name),
+
+    builds: () => needEngine(() => listBuilds()),
+    build: (ref) => needEngine(() => buildDetail(ref)),
+    buildLogs: (ref) => needEngine(() => buildLogs(ref)),
+    buildRemove: (ref) => needEngine(() => removeBuild(ref)),
 
     domains: () => domains.refresh(),
     setDomains: (patch) => domains.set(patch),

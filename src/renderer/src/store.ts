@@ -33,7 +33,7 @@ export async function attempt<T>(fn: () => Promise<T>, success?: string): Promis
 
 // ---------------------------------------------------------------- where the user is
 
-export type Section = 'containers' | 'images' | 'volumes' | 'networks' | 'engine' | 'settings';
+export type Section = 'containers' | 'images' | 'volumes' | 'networks' | 'builds' | 'engine' | 'settings';
 export const section = ref<Section>('containers');
 /** The open container (by name) in Containers, and its tab. */
 export const openContainer = ref<string | null>(null);

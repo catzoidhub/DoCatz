@@ -6,7 +6,9 @@ import { api, attempt, bytes, composeFile, composeOpen, containers, engineUp, fi
 import ContainerDetail from './ContainerDetail.vue';
 import EngineGate from './EngineGate.vue';
 import RunPanel from './RunPanel.vue';
+import ProjectEnv from './ProjectEnv.vue';
 import ConfirmDialog from '../components/ConfirmDialog.vue';
+import { serviceLook } from './logos';
 
 /**
  * Containers (DoCatz TODO #12): grouped by compose project, each with its state, ports and domain, and live CPU /
@@ -59,6 +61,10 @@ async function act(c: DcContainer, action: 'start' | 'stop' | 'restart') {
   const { [c.id]: _, ...rest } = busy.value;
   busy.value = rest;
 }
+/** A compose project's .env in DoCatz, open on the right instead of a container. */
+const envProject = ref<string | null>(null);
+const envDir = computed(() => containers.value.find((c) => c.project === envProject.value)?.workingDir ?? null);
+watch(openContainer, (c) => c && (envProject.value = null));
 const runToken = ref<string | null>(null);
 const confirmDown = ref<string | null>(null);
 async function compose(project: string, action: DcComposeAction) {
@@ -68,6 +74,7 @@ async function compose(project: string, action: DcComposeAction) {
 }
 const run = computed(() => (runToken.value ? runs.value[runToken.value] : null));
 
+const look = (c: DcContainer) => serviceLook(c.image);
 const dot = (c: DcContainer) => (c.state === 'running' ? (c.health === 'unhealthy' ? 'status-error' : c.health === 'starting' ? 'status-warning' : 'status-success') : c.state === 'paused' || c.state === 'restarting' ? 'status-warning' : c.state === 'dead' ? 'status-error' : '');
 const portLine = (c: DcContainer) => c.ports.filter((p) => p.public).map((p) => (p.public === p.private ? `${p.public}` : `${p.public}→${p.private}`)).join(' · ');
 
@@ -100,35 +107,46 @@ function openCompose() {
       <div class="min-h-0 flex-1 overflow-y-auto px-2 pb-3">
         <p v-if="!containers.length" class="px-3 py-6 text-center text-sm opacity-60">No containers yet. Open a compose file, or run one from a terminal with <span class="font-mono">docker --context docatz run …</span></p>
         <p v-else-if="!shown.length" class="px-3 py-6 text-center text-sm opacity-60">Nothing matches.</p>
-        <section v-for="[project, list] in groups" :key="project" class="mb-1.5">
-          <div class="group flex items-center gap-1 rounded-lg px-2 py-1 hover:bg-base-300/40">
-            <button class="flex min-w-0 flex-1 items-center gap-1.5 text-left" @click="toggle(project)">
-              <svg viewBox="0 0 20 20" class="size-3 shrink-0 opacity-50 transition-transform" :class="{ '-rotate-90': collapsed.has(project) }" fill="currentColor"><path d="M5.5 7.5 10 12l4.5-4.5h-9Z" /></svg>
-              <span class="truncate text-xs font-semibold" :class="{ 'opacity-60': !project }">{{ project || 'Other containers' }}</span>
-              <span class="text-[10px] opacity-45">{{ list.filter((c) => c.state === 'running').length }}/{{ list.length }}</span>
+        <section v-for="[project, list] in groups" :key="project" class="mb-3">
+          <!-- the compose project: its name, how many run, and compose actions on hover -->
+          <div class="group flex items-center gap-2 rounded-lg px-2 py-1.5">
+            <button class="flex min-w-0 flex-1 items-center gap-2 text-left" @click="toggle(project)">
+              <span class="grid size-6 shrink-0 place-items-center rounded-md" :class="project ? 'bg-primary/15 text-primary' : 'bg-base-300/60 opacity-70'">
+                <svg v-if="project" viewBox="0 0 20 20" class="size-3.5" fill="currentColor"><path d="M2 5.5A2.5 2.5 0 0 1 4.5 3h3.38a2 2 0 0 1 1.41.59L10.7 5H15.5A2.5 2.5 0 0 1 18 7.5v7A2.5 2.5 0 0 1 15.5 17h-11A2.5 2.5 0 0 1 2 14.5v-9Z" /></svg>
+                <svg v-else viewBox="0 0 20 20" class="size-3.5" fill="currentColor"><path fill-rule="evenodd" clip-rule="evenodd" d="M3 6.5A2.5 2.5 0 0 1 5.5 4h9A2.5 2.5 0 0 1 17 6.5v7a2.5 2.5 0 0 1-2.5 2.5h-9A2.5 2.5 0 0 1 3 13.5v-7Z" /></svg>
+              </span>
+              <span class="truncate text-[13px] font-semibold tracking-tight" :class="{ 'opacity-70': !project }">{{ project || 'Other containers' }}</span>
+              <span class="sec-count shrink-0" :class="{ 'is-live': list.some((c) => c.state === 'running') }">{{ list.filter((c) => c.state === 'running').length }}/{{ list.length }}</span>
+              <svg viewBox="0 0 20 20" class="size-3 shrink-0 opacity-40 transition-transform" :class="{ '-rotate-90': collapsed.has(project) }" fill="currentColor"><path d="M5.5 7.5 10 12l4.5-4.5h-9Z" /></svg>
             </button>
-            <template v-if="project">
-              <button class="btn btn-ghost btn-xs opacity-0 group-hover:opacity-100" title="docker compose up (recreates what changed)" @click="compose(project, 'up')">Up</button>
-              <button class="btn btn-ghost btn-xs opacity-0 group-hover:opacity-100" title="docker compose restart" @click="compose(project, 'restart')">Restart</button>
-              <button class="btn btn-ghost btn-xs opacity-0 group-hover:opacity-100" title="docker compose stop" @click="compose(project, 'stop')">Stop</button>
-              <button class="btn btn-ghost btn-xs text-error opacity-0 group-hover:opacity-100" title="docker compose down: removes the containers and networks (volumes stay)" @click="confirmDown = project">Down</button>
-            </template>
+            <div v-if="project" class="flex shrink-0 items-center opacity-0 transition-opacity group-hover:opacity-100">
+              <button class="btn btn-ghost btn-xs btn-square" title=".env in DoCatz: the values its containers get" @click="envProject = project; openContainer = null"><svg viewBox="0 0 20 20" class="size-3.5" fill="currentColor"><path fill-rule="evenodd" d="M8 7a5 5 0 1 1 3.61 4.804l-1.903 1.903A1 1 0 0 1 9 14H8v1a1 1 0 0 1-1 1H6v1a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1v-2a1 1 0 0 1 .293-.707L8.196 8.39A5.002 5.002 0 0 1 8 7Zm5-3a.75.75 0 0 0 0 1.5A1.5 1.5 0 0 1 14.5 7 .75.75 0 0 0 16 7a3 3 0 0 0-3-3Z" clip-rule="evenodd" /></svg></button>
+              <button class="btn btn-ghost btn-xs btn-square" title="docker compose up (recreates what changed)" @click="compose(project, 'up')"><svg viewBox="0 0 20 20" class="size-3.5" fill="currentColor"><path d="M6.3 4.2A1 1 0 0 0 5 5.1v9.8a1 1 0 0 0 1.5.86l8.2-4.9a1 1 0 0 0 0-1.72l-8.2-4.9a1 1 0 0 0-.2-.04Z" /></svg></button>
+              <button class="btn btn-ghost btn-xs btn-square" title="docker compose restart" @click="compose(project, 'restart')"><svg viewBox="0 0 20 20" class="size-3.5" fill="currentColor"><path fill-rule="evenodd" d="M15.3 7.3A6 6 0 1 0 16 11a1 1 0 1 1 2 0 8 8 0 1 1-2.3-5.6V4a1 1 0 1 1 2 0v4a1 1 0 0 1-1 1h-4a1 1 0 1 1 0-2h2.6Z" clip-rule="evenodd" /></svg></button>
+              <button class="btn btn-ghost btn-xs btn-square" title="docker compose stop" @click="compose(project, 'stop')"><svg viewBox="0 0 20 20" class="size-3.5" fill="currentColor"><rect x="5" y="5" width="10" height="10" rx="1.5" /></svg></button>
+              <button class="btn btn-ghost btn-xs btn-square text-error" title="docker compose down: removes the containers and networks (volumes stay)" @click="confirmDown = project"><svg viewBox="0 0 20 20" class="size-3.5" fill="currentColor"><path fill-rule="evenodd" d="M8.75 1A2.75 2.75 0 0 0 6 3.75v.44c-.8.08-1.59.18-2.38.3a.75.75 0 1 0 .23 1.48l.15-.02.84 10.52A2.75 2.75 0 0 0 7.58 19h4.84a2.75 2.75 0 0 0 2.74-2.53l.84-10.52.15.02a.75.75 0 0 0 .23-1.48c-.79-.12-1.58-.22-2.38-.3v-.44A2.75 2.75 0 0 0 11.25 1h-2.5Z" clip-rule="evenodd" /></svg></button>
+            </div>
           </div>
-          <ul v-show="!collapsed.has(project)">
+          <ul v-show="!collapsed.has(project)" class="mt-0.5 space-y-0.5 border-l border-base-300/60 pl-2 ml-[1.15rem]">
             <li v-for="c in list" :key="c.id">
-              <div class="group flex cursor-default items-center gap-2 rounded-lg px-2 py-1.5" :class="openContainer === c.name ? 'bg-primary/15' : 'hover:bg-base-300/40'" @click="openContainer = c.name">
-                <span class="status status-sm shrink-0" :class="dot(c)" :title="c.status" />
+              <div class="group flex cursor-default items-center gap-2.5 rounded-xl px-2 py-1.5 transition-colors" :class="openContainer === c.name ? 'bg-primary/15 ring-1 ring-primary/30' : 'hover:bg-base-300/40'" @click="openContainer = c.name">
+                <!-- what it runs: its logo (or the container icon), with its state on the corner -->
+                <span class="relative shrink-0" :title="`${look(c).label} · ${c.status}`">
+                  <span class="grid size-8 place-items-center overflow-hidden rounded-lg border border-base-300/70 bg-base-100" :class="{ 'opacity-50 grayscale': c.state !== 'running' }">
+                    <img v-if="look(c).logo" :src="look(c).logo!" alt="" class="size-6 rounded object-contain" draggable="false" />
+                    <svg v-else viewBox="0 0 20 20" class="size-[18px] text-primary" fill="currentColor"><path fill-rule="evenodd" clip-rule="evenodd" d="M3 6.5A2.5 2.5 0 0 1 5.5 4h9A2.5 2.5 0 0 1 17 6.5v7a2.5 2.5 0 0 1-2.5 2.5h-9A2.5 2.5 0 0 1 3 13.5v-7ZM6 7a.75.75 0 0 0-.75.75v4.5a.75.75 0 0 0 1.5 0v-4.5A.75.75 0 0 0 6 7Zm2.75.75a.75.75 0 0 1 1.5 0v4.5a.75.75 0 0 1-1.5 0v-4.5ZM14 7a.75.75 0 0 0-.75.75v4.5a.75.75 0 0 0 1.5 0v-4.5A.75.75 0 0 0 14 7Z" /></svg>
+                  </span>
+                  <span class="status status-xs absolute -right-0.5 -bottom-0.5 ring-2 ring-base-200" :class="dot(c) || 'bg-base-content/30'" />
+                </span>
                 <div class="min-w-0 flex-1">
                   <div class="flex items-center gap-1.5">
                     <span class="truncate text-[13px] font-medium">{{ c.project && c.service ? c.service : c.name }}</span>
                     <span v-if="c.health === 'unhealthy'" class="badge badge-error badge-soft badge-xs">unhealthy</span>
                   </div>
-                  <div class="truncate text-[11px] opacity-55">
-                    {{ c.image }}<template v-if="portLine(c)"> · {{ portLine(c) }}</template>
-                  </div>
+                  <div class="truncate text-[11px] opacity-55">{{ c.image }}<template v-if="portLine(c)"> · {{ portLine(c) }}</template></div>
                 </div>
-                <span v-if="stats[c.id]" class="shrink-0 text-right font-mono text-[10px] leading-tight opacity-55">{{ stats[c.id].cpu.toFixed(0) }}%<br />{{ bytes(stats[c.id].memUsed) }}</span>
-                <div class="flex shrink-0 items-center opacity-0 group-hover:opacity-100" @click.stop>
+                <span v-if="stats[c.id]" class="shrink-0 text-right font-mono text-[10px] leading-tight opacity-55 group-hover:hidden">{{ stats[c.id].cpu.toFixed(0) }}%<br />{{ bytes(stats[c.id].memUsed) }}</span>
+                <div class="hidden shrink-0 items-center group-hover:flex" @click.stop>
                   <span v-if="busy[c.id]" class="loading loading-spinner loading-xs" />
                   <template v-else>
                     <button v-if="c.url && c.state === 'running'" class="btn btn-ghost btn-xs btn-square" :title="`Open ${c.url}`" @click="api.openUrl(c.url)">
@@ -154,7 +172,8 @@ function openCompose() {
     </aside>
 
     <!-- the open container -->
-    <ContainerDetail v-if="current" :key="current.id" :container="current" :stats="stats[current.id] ?? null" class="min-w-0 flex-1" />
+ <ProjectEnv v-if="envProject" :key="envProject" :project="envProject" :dir="envDir" class="min-w-0 flex-1" @close="envProject = null" />
+    <ContainerDetail v-else-if="current" :key="current.id" :container="current" :stats="stats[current.id] ?? null" class="min-w-0 flex-1" />
     <div v-else class="drag grid min-w-0 flex-1 place-items-center p-8 text-center">
       <div class="no-drag max-w-sm space-y-3">
         <p class="text-base font-semibold tracking-tight">{{ containers.length ? 'Pick a container' : 'Nothing running yet' }}</p>

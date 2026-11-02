@@ -28,9 +28,10 @@ export class DockerClient {
     return p.length ? `?${p.map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(String(v))}`).join('&')}` : '';
   }
 
-  private raw(method: string, path: string, o: { query?: Query; body?: unknown; timeout?: number; headers?: Record<string, string> } = {}): Promise<IncomingMessage> {
+  /** One request; a Buffer body goes as it is (archives), anything else as JSON. */
+  raw(method: string, path: string, o: { query?: Query; body?: unknown; timeout?: number; headers?: Record<string, string> } = {}): Promise<IncomingMessage> {
     return new Promise((resolve, reject) => {
-      const body = o.body === undefined ? undefined : JSON.stringify(o.body);
+      const body = o.body === undefined ? undefined : Buffer.isBuffer(o.body) ? o.body : JSON.stringify(o.body);
       const req = request(
         {
           socketPath: socketPath(),

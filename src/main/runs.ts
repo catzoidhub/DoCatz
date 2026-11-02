@@ -1,7 +1,8 @@
 import { existsSync } from 'node:fs';
-import { basename, dirname } from 'node:path';
+import { dirname } from 'node:path';
 import type { DcComposeAction, DcComposeProject, DcRun } from '@shared/types';
 import { cliInstalled, composeBin } from './cli';
+import { composeEnvArgs, projectNameOf } from './envs';
 import { composeDirLabel, composeFilesLabel, composeProjectLabel, containerLabels, imagePull } from './docker/ops';
 import { dockerHost } from './paths';
 import { run } from './proc';
@@ -56,9 +57,13 @@ export class Runs {
     if (!cliInstalled()) throw new Error('Docker Compose is not installed yet — start the engine once, or install the CLIs in Engine');
     const missing = files.find((f) => !existsSync(f));
     if (missing) throw new Error(`${missing} is not there any more`);
-    const title = `${project ?? basename(dirname(files[0]))}: compose ${action}`;
+    const name = project ?? projectNameOf(files[0]);
+    const title = `${name}: compose ${action}`;
     const { abort, run: r, line } = this.begin(token, title);
-    const args = [...files.flatMap((f) => ['-f', f]), ...(project ? ['-p', project] : []), ...ARGS[action]];
+    // The project's DoCatz .env (envs.ts), when it has one: for ${VAR} and for every container.
+    const env = await composeEnvArgs(files, name).catch(() => [] as string[]);
+    const args = [...files.flatMap((f) => ['-f', f]), ...env, '-p', name, ...ARGS[action]];
+    if (env.length) line(`Using ${name}'s .env in DoCatz`);
     line(`$ docker compose ${args.join(' ')}`);
     const res = await run(composeBin(), args, { cwd: dirname(files[0]), env: { ...process.env, DOCKER_HOST: dockerHost(), COMPOSE_ANSI: 'never', COMPOSE_PROGRESS: 'plain' }, signal: abort.signal, onLine: line });
     this.end(r, abort.signal.aborted ? 'Cancelled' : res.code !== 0 ? `docker compose exited ${res.code}` : undefined);

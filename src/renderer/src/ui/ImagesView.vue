@@ -64,7 +64,7 @@ const run = computed(() => (pullToken.value ? runs.value[pullToken.value] : null
     </div>
     <div class="min-h-0 flex-1 overflow-y-auto px-2">
       <table class="table table-sm">
-        <thead><tr><th>Image</th><th class="w-28">ID</th><th class="w-24 text-right">Size</th><th class="w-28">Created</th><th class="w-24">In use</th><th class="w-12" /></tr></thead>
+        <thead><tr><th>Image</th><th class="w-28">ID</th><th class="w-24 text-right">Size</th><th class="w-28 whitespace-nowrap">Created</th><th class="w-32 whitespace-nowrap">In use</th><th class="w-12" /></tr></thead>
         <tbody>
           <tr v-for="i in shown" :key="i.id" class="group">
             <td>
@@ -73,7 +73,7 @@ const run = computed(() => (pullToken.value ? runs.value[pullToken.value] : null
             <td class="font-mono text-[11px] opacity-60">{{ i.id.slice(7, 19) }}</td>
             <td class="text-right text-xs tabular-nums">{{ bytes(i.size) }}</td>
             <td class="text-xs opacity-70">{{ ago(i.created) }}</td>
-            <td class="text-xs"><span v-if="i.containers" class="badge badge-ghost badge-sm">{{ i.containers }} container{{ i.containers === 1 ? '' : 's' }}</span><span v-else class="opacity-45">unused</span></td>
+            <td class="text-xs whitespace-nowrap"><span v-if="i.containers" class="badge badge-ghost badge-sm whitespace-nowrap">{{ i.containers }} container{{ i.containers === 1 ? '' : 's' }}</span><span v-else class="opacity-45">unused</span></td>
             <td class="text-right"><button class="btn btn-ghost btn-xs text-error opacity-0 group-hover:opacity-100" @click="removing = i">Remove</button></td>
           </tr>
           <tr v-if="!shown.length"><td colspan="6" class="py-8 text-center text-sm opacity-55">No images{{ query ? ' match' : ' yet — pull one, or run a compose file' }}.</td></tr>

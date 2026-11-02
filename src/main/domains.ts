@@ -11,6 +11,7 @@ import forge from 'node-forge';
 import type { DcContainer, DcDomains, DcDomainsPatch, TaskProgress } from '@shared/types';
 import { findCatzoidApp } from './companion';
 import { DNS_HOST, DNS_PORT, DnsServer } from './dns';
+import { Router, ROUTER_PORT, type RouterTarget } from './docker/router';
 import { isWin } from './platform';
 import { lastLine, run } from './proc';
 import { readShared, SHARED_DIR, writeShared, type SharedDomains } from './shared';
@@ -37,6 +38,7 @@ const DEFAULT_HTTP = 8780;
 const ME = 'docatz';
 const CA_NAME = 'Catzoid Local CA';
 const HTTPS_KEY = 'domainsHttps';
+const NAMES_KEY = 'domainNames';
 const DEVCATZ_DATA = isWin ? join(process.env.APPDATA ?? join(homedir(), 'AppData', 'Roaming'), 'DevCatz') : join(homedir(), 'Library', 'Application Support', 'DevCatz');
 /** Private ports that usually serve the app (picked first when a container publishes several). */
 const WEB_PORTS = [80, 8080, 3000, 8000, 5173, 5000, 4200, 8888, 4000, 9000, 443, 8443];
@@ -65,13 +67,15 @@ const shared = (): SharedDomains => readShared().domains ?? {};
 export class Domains {
   private ca: Ca | null = null;
   private contexts = new Map<string, SecureContext>();
-  private routes = new Map<string, number>();
+  /** host → where it goes: the router (the container's own IP inside the VM) or a published port on localhost. */
+  private routes = new Map<string, { router: boolean; port: number }>();
+  private router = new Router();
   private servers: Server[] = [];
   private dns = new DnsServer();
   private devcatz: string | null = null;
   private task: DcDomains['task'] = null;
   private taskClear: ReturnType<typeof setTimeout> | undefined;
-  private probe: { at: number; reaches: boolean; resolves: boolean } | null = null;
+  private probe: { at: number; reaches: boolean; resolves: boolean; frontDown?: boolean } | null = null;
   readonly httpsPort = Number(process.env.DOCATZ_HTTPS_PORT) || DEFAULT_HTTPS;
   readonly httpPort = Number(process.env.DOCATZ_HTTP_PORT) || DEFAULT_HTTP;
   /** URLs changed (TLD, HTTPS, forwarding): the list follows. */
@@ -109,7 +113,21 @@ export class Domains {
       this.listen(s, this.httpsPort, host);
     }
     await this.startDns();
+    // Whether :443 reaches DoCatz changes when DevCatz starts or quits (it is the front when installed): check every
+    // 10 s, and when it changes the URLs follow at once.
+    const probe = async () => {
+      const on = shared().cleanUrls?.on === true;
+      const r = on ? await this.reachesDocatz() : 'no';
+      const reaches = r === 'yes';
+      const changed = this.probe?.reaches !== reaches || this.probe?.frontDown !== (r === 'down');
+      this.probe = { at: Date.now(), reaches, frontDown: r === 'down', resolves: this.probe?.resolves ?? (await this.resolves()) };
+      if (changed) this.onChange();
+    };
+    void probe();
+    this.probeTimer = setInterval(() => void probe(), 10_000);
   }
+
+  private probeTimer: ReturnType<typeof setInterval> | null = null;
 
   private listen(s: Server, port: number, host: string): void {
     s.on('error', (e: NodeJS.ErrnoException) => console.warn(`DoCatz proxy: ${host}:${port} — ${e.code === 'EADDRINUSE' ? 'the port is in use' : e.message}`));
@@ -125,6 +143,7 @@ export class Domains {
   }
 
   stop(): void {
+    if (this.probeTimer) clearInterval(this.probeTimer);
     for (const s of this.servers) s.close();
     this.servers = [];
     void this.dns.stop();
@@ -132,11 +151,30 @@ export class Domains {
 
   // ---------------------------------------------------------------- names and routes
 
-  /** The container's host name, or null when it publishes no TCP port. */
-  hostFor(c: Pick<DcContainer, 'name' | 'project' | 'service' | 'ports'>): string | null {
-    if (!c.ports.some((p) => p.type === 'tcp' && p.public)) return null;
-    const name = c.project && c.service ? `${label(c.service)}.${label(c.project)}` : label(c.name);
+  /** The container's host name: every container on a network (its own IP), or one that publishes a TCP port. */
+  hostFor(c: Pick<DcContainer, 'name' | 'project' | 'service' | 'ports' | 'ip' | 'domainKey'>): string | null {
+    if (!c.ip && !c.ports.some((p) => p.type === 'tcp' && p.public)) return null;
+    const name = this.nameOf(c.domainKey) ?? (c.project && c.service ? `${label(c.service)}.${label(c.project)}` : label(c.name));
     return `${name}.docatz.${this.tld()}`;
+  }
+
+  // ---------------------------------------------------------------- custom names (the part before .docatz.<tld>)
+
+  nameOf = (key: string): string | null => (store.extra<Record<string, string>>(NAMES_KEY) ?? {})[key] ?? null;
+
+  /** A name of one or more labels (`shop`, `api.shop`); the suffix .docatz.<tld> always follows the settings. */
+  setName(key: string, name: string | null): void {
+    const all = { ...(store.extra<Record<string, string>>(NAMES_KEY) ?? {}) };
+    const n = name?.trim().toLowerCase().replace(/\.+$/, '') ?? '';
+    if (!n) delete all[key];
+    else {
+      if (!/^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?(\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)*$/.test(n)) throw new Error('A name is letters, digits and dashes, parts separated by dots — like shop or api.shop');
+      if (/(^|\.)docatz$/.test(n)) throw new Error('The name comes before .docatz — leave that part out');
+      if (Object.entries(all).some(([k, v]) => k !== key && v === n)) throw new Error(`${n}.docatz.${this.tld()} is already another container's name`);
+      all[key] = n;
+    }
+    store.setExtra(NAMES_KEY, all);
+    this.onChange();
   }
 
   /** https://<host>[:port] — without the port only when :443 / :80 reach DoCatz's proxy. */
@@ -148,21 +186,48 @@ export class Domains {
     return `${https ? 'https' : 'http'}://${host}${clean ? '' : `:${https ? this.httpsPort : this.httpPort}`}`;
   };
 
-  setRoutes(containers: DcContainer[]): void {
-    const next = new Map<string, number>();
+  /**
+   * The proxy's table. A container with its own IP goes through the router to that IP and its port — the first exposed
+   * port, else the one it listens on, else 80 — so nothing needs publishing (as OrbStack). A published port on
+   * localhost is the fallback when the router cannot run.
+   */
+  async setRoutes(containers: DcContainer[]): Promise<void> {
+    const next = new Map<string, { router: boolean; port: number }>();
+    const targets: RouterTarget[] = [];
     for (const c of containers) {
-      if (c.state !== 'running') continue;
+      if (c.state !== 'running') {
+        this.router.forget(c.id);
+        continue;
+      }
       const host = this.hostFor(c);
       if (!host) continue;
-      const tcp = c.ports.filter((p) => p.type === 'tcp' && p.public);
-      const pick = tcp.find((p) => WEB_PORTS.includes(p.private)) ?? tcp[0];
-      if (pick?.public) next.set(host, pick.public);
+      const published = c.ports.filter((p) => p.type === 'tcp' && p.public);
+      const fallback = (published.find((p) => WEB_PORTS.includes(p.private)) ?? published[0])?.public ?? null;
+      if (c.ip) {
+        const exposed = c.ports.filter((p) => p.type === 'tcp').map((p) => p.private);
+        const port = exposed.find((p) => WEB_PORTS.includes(p)) ?? exposed[0] ?? (await this.router.listeningPort(c.id)) ?? 80;
+        targets.push({ host, ip: c.ip, port });
+        next.set(host, { router: true, port });
+      } else if (fallback) next.set(host, { router: false, port: fallback });
+    }
+    try {
+      if (targets.length) await this.router.update(targets);
+    } catch (e) {
+      console.warn('DoCatz router:', (e as Error).message);
+      // Without the router only published ports can be reached.
+      for (const c of containers) {
+        const host = this.hostFor(c);
+        const p = c.ports.find((x) => x.type === 'tcp' && x.public);
+        if (host && next.get(host)?.router) p?.public ? next.set(host, { router: false, port: p.public }) : next.delete(host);
+      }
     }
     this.routes = next;
   }
 
+  /** The local port to send a request to: the router's (it picks the container by Host) or a published port. */
   private target(req: IncomingMessage): number | null {
-    return this.routes.get((req.headers.host ?? '').split(':')[0].toLowerCase()) ?? null;
+    const r = this.routes.get((req.headers.host ?? '').split(':')[0].toLowerCase());
+    return r ? (r.router ? ROUTER_PORT : r.port) : null;
   }
 
   private forward(req: IncomingMessage, res: ServerResponse): void {
@@ -170,7 +235,7 @@ export class Domains {
     const port = this.target(req);
     if (!port) {
       res.writeHead(502, { 'content-type': 'text/html; charset=utf-8' });
-      res.end(`<!doctype html><meta charset="utf-8"><title>DoCatz</title><body style="font:15px system-ui;padding:3rem;color:#334"><h2>Nothing runs at ${String(req.headers.host ?? '').replace(/[<>&"]/g, '')}</h2><p>The container is stopped, or it publishes no port. Start it in DoCatz.</p>`);
+      res.end(`<!doctype html><meta charset="utf-8"><title>DoCatz</title><body style="font:15px system-ui;padding:3rem;color:#334"><h2>Nothing runs at ${String(req.headers.host ?? '').replace(/[<>&"]/g, '')}</h2><p>No running container has this name. Start it in DoCatz.</p>`);
       return;
     }
     // Through DevCatz's proxy (#80) the request arrives on the HTTP port with X-Forwarded-Proto https: keep it (never
@@ -434,18 +499,18 @@ export class Domains {
     return this.devcatz !== null && /EADDRINUSE|taken|DevCatz/i.test(this.dns.error ?? '');
   }
 
-  /** Does https://<name>.docatz.<tld> on :443 reach DoCatz's proxy (directly or through DevCatz's)? */
-  private reachesDocatz(): Promise<boolean> {
+  /** Does https://<name>.docatz.<tld> on :443 reach DoCatz's proxy (directly or through DevCatz's)? 'down': nothing answers there. */
+  private reachesDocatz(): Promise<'yes' | 'no' | 'down'> {
     return new Promise((resolve) => {
       const host = `docatz-check.docatz.${this.tld()}`;
       const req = httpsRequest({ host: '::1', port: 443, path: '/', servername: host, headers: { host }, rejectUnauthorized: false, timeout: 1500 }, (res) => {
         res.resume();
-        resolve(res.headers[MARK] === '1');
+        resolve(res.headers[MARK] === '1' ? 'yes' : 'no');
       });
-      req.on('error', () => resolve(false));
+      req.on('error', () => resolve('down'));
       req.on('timeout', () => {
         req.destroy();
-        resolve(false);
+        resolve('down');
       });
       req.end();
     });
@@ -463,15 +528,15 @@ export class Domains {
     const tld = this.tld();
     const zones = resolverZones(tld);
     if (!this.probe || Date.now() - this.probe.at > 20_000) {
-      const [reaches, resolves] = await Promise.all([d.cleanUrls?.on ? this.reachesDocatz() : Promise.resolve(false), this.resolves()]);
-      this.probe = { at: Date.now(), reaches, resolves };
+      const [r, resolves] = await Promise.all([d.cleanUrls?.on ? this.reachesDocatz() : Promise.resolve('no' as const), this.resolves()]);
+      this.probe = { at: Date.now(), reaches: r === 'yes', frontDown: r === 'down', resolves };
     }
     const trusted = this.ca ? (d.ca?.trusted ?? (await this.recordTrust())) : false;
     return {
       tld,
       https: this.https(),
       ca: this.ca ? { cert: this.ca.files.cert, by: this.ca.files.by, trusted } : null,
-      cleanUrls: { on: d.cleanUrls?.on === true, by: d.cleanUrls?.on ? d.cleanUrls.by : null, reachesDocatz: this.probe.reaches },
+      cleanUrls: { on: d.cleanUrls?.on === true, by: d.cleanUrls?.on ? d.cleanUrls.by : null, reachesDocatz: this.probe.reaches, frontDown: this.probe.frontDown === true },
       httpsPort: this.httpsPort,
       httpPort: this.httpPort,
       resolver: { needed: zones.length > 0, status: zones.length ? await resolverStatus(tld, DNS_HOST).catch(() => 'none' as const) : 'ours', resolves: this.probe.resolves, dnsError: this.dns.running || (await this.devcatzDns()) ? null : this.dns.error, zones },

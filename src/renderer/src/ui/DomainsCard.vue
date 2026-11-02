@@ -104,7 +104,7 @@ const zoneNames = computed(() => (d.value?.resolver.zones ?? []).map((z) => `*.$
           <span class="flex min-w-0 flex-col">
             <span class="label-caps">Names without a port</span>
             <span class="text-xs opacity-50">
-              <template v-if="d.cleanUrls.on">On (to {{ appName(d.cleanUrls.by) }}’s proxy).<template v-if="!d.cleanUrls.reachesDocatz"> DoCatz’s names keep their :{{ d.httpsPort }} until DevCatz is updated to hand them on.</template></template>
+              <template v-if="d.cleanUrls.on">On (to {{ appName(d.cleanUrls.by) }}’s proxy).<template v-if="d.cleanUrls.frontDown"> {{ appName(d.cleanUrls.by) }} is not running, so nothing answers on port 443: DoCatz’s names keep their :{{ d.httpsPort }} until {{ appName(d.cleanUrls.by) }} is open.</template><template v-else-if="!d.cleanUrls.reachesDocatz"> DoCatz’s names keep their :{{ d.httpsPort }} until DevCatz is updated to hand them on.</template></template>
               <template v-else>Off.</template>
             </span>
           </span>
