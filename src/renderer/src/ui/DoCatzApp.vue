@@ -167,7 +167,7 @@ function openAppMenu(e: MouseEvent) {
         >
           <span class="rail-icon"><svg class="size-5" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" clip-rule="evenodd" :d="ICONS[r.id]" /></svg></span>
           {{ r.label }}
-          <span v-if="r.id === 'containers' && running" class="absolute top-1 right-3 rounded-full bg-success px-1.5 text-[10px] font-semibold leading-4 text-success-content ring-2 ring-base-200" :title="`${running} running`">{{ running }}</span>
+          <span v-if="r.id === 'containers' && running" class="absolute top-1 right-3 rounded-full bg-primary px-1.5 text-[10px] font-semibold leading-4 text-primary-content ring-2 ring-base-200" :title="`${running} running`">{{ running }}</span>
           <span v-if="r.id === 'engine'" class="absolute top-1.5 right-4 size-2 rounded-full ring-2 ring-base-200" :class="engineDot" :title="`Engine: ${engine?.status ?? '…'}`" />
         </button>
       </div>
