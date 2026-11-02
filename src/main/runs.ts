@@ -1,5 +1,5 @@
 import { existsSync } from 'node:fs';
-import { dirname } from 'node:path';
+import { dirname, sep } from 'node:path';
 import type { DcComposeAction, DcComposeProject, DcRun } from '@shared/types';
 import { cliInstalled, composeBin } from './cli';
 import { composeEnvArgs, projectNameOf } from './envs';
@@ -15,6 +15,8 @@ import { run } from './proc';
 
 const ARGS: Record<DcComposeAction, string[]> = {
   up: ['up', '--detach', '--remove-orphans'],
+  // Build & Up: rebuild the images, then recreate what changed (a changed .env included).
+  'build-up': ['up', '--detach', '--build', '--remove-orphans'],
   down: ['down'],
   restart: ['restart'],
   stop: ['stop'],
@@ -58,7 +60,7 @@ export class Runs {
     const missing = files.find((f) => !existsSync(f));
     if (missing) throw new Error(`${missing} is not there any more`);
     const name = project ?? projectNameOf(files[0]);
-    const title = `${name}: compose ${action}`;
+    const title = `${name}: ${action === 'build-up' ? 'Build & Up' : `compose ${action}`}`;
     const { abort, run: r, line } = this.begin(token, title);
     // The project's DoCatz .env (envs.ts), when it has one: for ${VAR} and for every container.
     const env = await composeEnvArgs(files, name).catch(() => [] as string[]);
@@ -93,7 +95,8 @@ export async function projects(): Promise<DcComposeProject[]> {
     const p = byName.get(name) ?? { name, files: [], dir: c.labels[composeDirLabel] ?? null, containers: 0, running: 0 };
     p.containers++;
     if (c.state === 'running') p.running++;
-    for (const f of (c.labels[composeFilesLabel] ?? '').split(',').map((x) => x.trim()).filter(Boolean)) if (!p.files.includes(f)) p.files.push(f);
+    // The override DoCatz adds for the project's .env (envs.ts) is DoCatz's own, not one of the project's files.
+    for (const f of (c.labels[composeFilesLabel] ?? '').split(',').map((x) => x.trim()).filter(Boolean)) if (!p.files.includes(f) && !f.endsWith('.override.yaml') && !f.includes(`${sep}DoCatz${sep}env${sep}`)) p.files.push(f);
     byName.set(name, p);
   }
   return [...byName.values()].sort((a, b) => a.name.localeCompare(b.name));

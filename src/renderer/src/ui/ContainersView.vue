@@ -9,6 +9,7 @@ import RunPanel from './RunPanel.vue';
 import ProjectDetail from './ProjectDetail.vue';
 import ConfirmDialog from '../components/ConfirmDialog.vue';
 import ServiceMark from './ServiceMark.vue';
+import { frameworkTag } from '../frameworks';
 
 /**
  * Containers (DoCatz TODO #12): grouped by compose project, each with its state, ports and domain, and live CPU /
@@ -81,6 +82,8 @@ async function compose(project: string, action: DcComposeAction) {
 const run = computed(() => (runToken.value ? runs.value[runToken.value] : null));
 
 const dot = (c: DcContainer) => (c.state === 'running' ? (c.health === 'unhealthy' ? 'status-error' : c.health === 'starting' ? 'status-warning' : 'status-success') : c.state === 'paused' || c.state === 'restarting' ? 'status-warning' : c.state === 'dead' ? 'status-error' : '');
+/** A built image shows as what it was built from, not its bare id. */
+const imageLine = (c: DcContainer) => (/^[0-9a-f]{12}$/.test(c.image) || (c.framework && c.project && c.image.startsWith(`${c.project}-`)) ? `built from source${c.framework ? ` · ${frameworkTag(c.framework.framework, c.framework.library).label}` : ''}` : c.image);
 const portLine = (c: DcContainer) => c.ports.filter((p) => p.public).map((p) => (p.public === p.private ? `${p.public}` : `${p.public}→${p.private}`)).join(' · ');
 
 function openCompose() {
@@ -147,7 +150,7 @@ function openCompose() {
                     <span class="truncate text-[13px] font-medium">{{ c.project && c.service ? c.service : c.name }}</span>
                     <span v-if="c.health === 'unhealthy'" class="badge badge-error badge-soft badge-xs">unhealthy</span>
                   </div>
-                  <div class="truncate text-[11px] opacity-55">{{ c.image }}<template v-if="portLine(c)"> · {{ portLine(c) }}</template></div>
+                  <div class="truncate text-[11px] opacity-55">{{ imageLine(c) }}<template v-if="portLine(c)"> · {{ portLine(c) }}</template></div>
                 </div>
                 <span v-if="stats[c.id]" class="shrink-0 text-right font-mono text-[10px] leading-tight opacity-55 group-hover:hidden">{{ stats[c.id].cpu.toFixed(0) }}%<br />{{ bytes(stats[c.id].memUsed) }}</span>
                 <div class="hidden shrink-0 items-center group-hover:flex" @click.stop>

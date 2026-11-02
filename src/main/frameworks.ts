@@ -1,5 +1,5 @@
 import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
-import { dirname, join } from 'node:path';
+import { dirname, isAbsolute, join } from 'node:path';
 import type { DcFramework, DcFrameworkName } from '@shared/types';
 import { cliInstalled, composeBin } from './cli';
 import { dockerHost } from './paths';
@@ -93,6 +93,24 @@ export function detectFramework(dir: string): DcFramework | null {
   return null;
 }
 
+/**
+ * A build's framework: a monorepo builds from the workspace root (`context: .`) with the app's own Dockerfile
+ * (`dockerfile: apps/web/Dockerfile`), so the Dockerfile's folder is looked at first — the root package.json of a bun /
+ * npm workspace names no framework. Then the folders between it and the context, then the context itself.
+ */
+function detectBuild(context: string, dockerfile?: string): DcFramework | null {
+  const df = dockerfile ? (isAbsolute(dockerfile) ? dockerfile : join(context, dockerfile)) : null;
+  const dirs: string[] = [];
+  for (let d = df ? dirname(df) : context; d.startsWith(context) && d.length >= context.length; d = dirname(d)) {
+    dirs.push(d);
+    if (d === context) break;
+  }
+  if (!dirs.includes(context)) dirs.push(context);
+  const found = dirs.map((d) => detectFramework(d)).filter((f): f is DcFramework => f !== null);
+  // A specific framework wins over a bare language (node, php, python) found higher up.
+  return found.find((f) => !['node', 'php', 'python'].includes(f.framework) || f.library) ?? found[0] ?? null;
+}
+
 interface Cached {
   key: string;
   services: Record<string, DcFramework | null>;
@@ -114,11 +132,12 @@ export async function learnProject(project: string, files: string[], onLearned: 
   pending.add(project);
   try {
     const r = await run(composeBin(), [...files.flatMap((f) => ['-f', f]), '-p', project, 'config', '--format', 'json', '--no-interpolate'], { cwd: dirname(files[0]), env: { ...process.env, DOCKER_HOST: dockerHost() }, timeout: 30_000 });
-    const cfg = r.code === 0 ? (JSON.parse(r.stdout) as { services?: Record<string, { build?: { context?: string } | string }> }) : null;
+    const cfg = r.code === 0 ? (JSON.parse(r.stdout) as { services?: Record<string, { build?: { context?: string; dockerfile?: string } | string }> }) : null;
     const services: Record<string, DcFramework | null> = {};
     for (const [name, s] of Object.entries(cfg?.services ?? {})) {
       const ctx = typeof s.build === 'string' ? s.build : s.build?.context;
-      services[name] = ctx && existsSync(ctx) ? detectFramework(ctx) : null;
+      const dockerfile = typeof s.build === 'object' ? s.build.dockerfile : undefined;
+      services[name] = ctx && existsSync(ctx) ? detectBuild(ctx, dockerfile) : null;
     }
     cache.set(project, { key, services });
     onLearned();

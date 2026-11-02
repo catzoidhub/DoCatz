@@ -7,6 +7,7 @@ import DcNavButtons from './DcNavButtons.vue';
 import ProjectEnv from './ProjectEnv.vue';
 import RunPanel from './RunPanel.vue';
 import ServiceMark from './ServiceMark.vue';
+import { frameworkTag } from '../frameworks';
 import TimeChart, { type Series } from './TimeChart.vue';
 
 /**
@@ -117,7 +118,8 @@ const rateText = (v: number) => `${bytes(v)}/s`;
       </div>
       <div class="no-drag flex shrink-0 items-center gap-1">
         <span v-if="busy" class="loading loading-spinner loading-sm mx-2" />
-        <button class="btn btn-sm btn-primary" :disabled="busy" title="docker compose up: recreates what changed" @click="compose('up')">Up</button>
+        <button class="btn btn-sm btn-primary" :disabled="busy" title="docker compose up --build: rebuild the images, then recreate what changed (a changed .env included)" @click="compose('build-up')">Build &amp; Up</button>
+        <button class="btn btn-sm" :disabled="busy" title="docker compose up: recreates what changed, without building" @click="compose('up')">Up</button>
         <button class="btn btn-sm" :disabled="busy" @click="compose('restart')">Restart</button>
         <button class="btn btn-sm" :disabled="busy" @click="compose('stop')">Stop</button>
         <button class="btn btn-ghost btn-sm btn-square" title="Close" @click="openProject = null">✕</button>
@@ -145,6 +147,21 @@ const rateText = (v: number) => `${bytes(v)}/s`;
           </div>
           <div class="card">
             <div class="card-body gap-2">
+              <h2>Frameworks</h2>
+              <p class="text-xs opacity-60">What each service is built from (found in its build folder, the way DevCatz detects a site), or the image it runs.</p>
+              <ul class="grid gap-2 sm:grid-cols-2">
+                <li v-for="c in containers" :key="c.id" class="flex items-center gap-2.5 rounded-box border border-base-300/60 bg-base-200/40 px-3 py-2">
+                  <ServiceMark :container="c" size="md" />
+                  <span class="min-w-0">
+                    <span class="block truncate text-sm font-medium leading-tight">{{ c.service }}</span>
+                    <span class="block truncate text-[11px] leading-tight opacity-60">{{ c.framework ? frameworkTag(c.framework.framework, c.framework.library).label : `image ${c.image}` }}</span>
+                  </span>
+                </li>
+              </ul>
+            </div>
+          </div>
+          <div class="card">
+            <div class="card-body gap-2">
               <h2>Compose files</h2>
               <p v-if="!info?.files.length" class="text-sm opacity-60">This project was not started from a compose file DoCatz can find.</p>
               <ul v-else class="space-y-1">
@@ -159,9 +176,10 @@ const rateText = (v: number) => `${bytes(v)}/s`;
           <div class="card">
             <div class="card-body gap-3">
               <h2>Deploy</h2>
-              <p class="text-xs opacity-60">Runs with the project’s .env in DoCatz (Environment tab) when it has one.</p>
+              <p class="text-xs opacity-60">Runs with the project’s .env in DoCatz (Environment tab) when it has one. <b>Build &amp; Up</b> rebuilds the images and recreates every container whose image or environment changed.</p>
               <div class="flex flex-wrap gap-1.5">
-                <button class="btn btn-sm btn-primary" :disabled="busy" @click="compose('up')">Up</button>
+                <button class="btn btn-sm btn-primary" :disabled="busy" title="docker compose up --build" @click="compose('build-up')">Build &amp; Up</button>
+                <button class="btn btn-sm" :disabled="busy" title="docker compose up, without building" @click="compose('up')">Up</button>
                 <button class="btn btn-sm" :disabled="busy" @click="compose('build')">Build</button>
                 <button class="btn btn-sm" :disabled="busy" @click="compose('pull')">Pull</button>
                 <button class="btn btn-sm" :disabled="busy" @click="compose('restart')">Restart</button>

@@ -241,6 +241,15 @@ pre,
 .btn-primary:not(.btn-outline):not(.btn-ghost):not(.btn-soft):not(.btn-link):hover {
   filter: brightness(1.05);
 }
+/* Disabled or busy: the gradient stays under it, so keep the label in its own colour and fade the whole button.
+   daisyUI's grey disabled text would vanish on the sky blue (Catzoid family rule, as DBCatz). */
+.btn-primary:not(.btn-outline):not(.btn-ghost):not(.btn-soft):not(.btn-link):is(:disabled, [disabled], .btn-disabled) {
+  --btn-fg: var(--color-primary-content);
+  color: var(--color-primary-content);
+  opacity: 0.55;
+  box-shadow: none;
+  filter: none;
+}
 .btn {
   transition:
     background-color 120ms ease,
@@ -1872,7 +1881,7 @@ button.dc-card-head:hover {
   width: 2rem;
   height: 2rem;
   border-radius: 0.7rem;
-  color: white;
+  color: var(--color-primary-content);
   background: var(--accent-gradient, var(--color-primary));
   transition: opacity 120ms ease, transform 120ms ease;
 }
@@ -1881,7 +1890,8 @@ button.dc-card-head:hover {
   height: 1rem;
 }
 .ask-send:disabled {
-  opacity: 0.35;
+  /* Faded, still readable (as disabled primary buttons). */
+  opacity: 0.55;
 }
 .ask-send:not(:disabled):hover {
   transform: translateY(-1px);

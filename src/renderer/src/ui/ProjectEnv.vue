@@ -2,7 +2,7 @@
 import { keyLabel } from '@shared/platform';
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import type { DcProjectEnv } from '@shared/types';
-import { api, attempt, notify, runs, token } from '../store';
+import { api, attempt, containers, notify, runs, token } from '../store';
 import CodeEditor from '../components/CodeEditor.vue';
 import CatMood from './CatMood.vue';
 import RunPanel from './RunPanel.vue';
@@ -50,7 +50,7 @@ async function save() {
   if (at === undefined) return;
   saved.value = content.value;
   mtime.value = at;
-  notify('success', 'Saved. Recreate the project to give the containers the new values.');
+  notify('success', 'Saved — run Build & Up to give the containers the new values.');
 }
 async function setLocked(on: boolean) {
   if (on && dirty.value && !confirm('Lock without saving your changes?')) return;
@@ -92,14 +92,19 @@ const problems = computed(() => {
 });
 const varCount = computed(() => (locked.value ? saved.value : content.value).split('\n').filter((l) => /^\s*(?:export\s+)?[A-Za-z_][A-Za-z0-9_.]*\s*=/.test(l)).length);
 
-// Recreate: compose up through DoCatz, which hands the containers this .env.
+// Build & Up through DoCatz, which hands the containers this .env (a container keeps the environment it was created with).
 const runToken = ref<string | null>(null);
 const run = computed(() => (runToken.value ? runs.value[runToken.value] : null));
 async function recreate() {
   if (dirty.value) await save();
   runToken.value = token();
-  await attempt(() => api.composeProject(props.project, 'up', runToken.value!));
+  await attempt(() => api.composeProject(props.project, 'build-up', runToken.value!));
 }
+/** The .env changed after a container of the project was created: those containers still have the old values. */
+const stale = computed(() => {
+  if (!mtime.value) return [] as string[];
+  return containers.value.filter((c) => c.project === props.project && c.created < mtime.value! - 1000).map((c) => c.service ?? c.name);
+});
 </script>
 
 <template>
@@ -118,7 +123,7 @@ async function recreate() {
           <svg class="size-4" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M14.5 1A4.5 4.5 0 0 0 10 5.5V9H3a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-6a2 2 0 0 0-2-2h-1.5V5.5a3 3 0 1 1 6 0v2.75a.75.75 0 0 0 1.5 0V5.5A4.5 4.5 0 0 0 14.5 1Z" clip-rule="evenodd" /></svg>
           Lock
         </button>
-        <button class="no-drag btn btn-sm btn-primary" :disabled="run !== null && !run.done" title="docker compose up through DoCatz: containers whose values changed are recreated" @click="recreate">Recreate</button>
+        <button class="no-drag btn btn-sm btn-primary" :disabled="run !== null && !run.done" title="docker compose up --build through DoCatz: rebuilds, then recreates the containers so they get these values" @click="recreate">Build &amp; Up</button>
       </template>
       <button v-if="!embedded" class="no-drag btn btn-ghost btn-sm btn-square" title="Close" @click="emit('close')">✕</button>
     </header>
@@ -134,6 +139,12 @@ async function recreate() {
           <button v-if="state.example" class="btn btn-sm" :class="{ 'btn-primary': !state.projectEnv }" @click="create('example')">Start from {{ state.example }}</button>
           <button class="btn btn-sm" :class="{ 'btn-primary': !state.projectEnv && !state.example }" @click="create('empty')">Start empty</button>
         </div>
+      </div>
+      <!-- Saved but not applied: the containers keep the environment they were created with -->
+      <div v-if="state?.exists && stale.length && !(run && !run.done)" role="alert" class="alert alert-warning alert-soft text-sm">
+        <CatMood mood="warning" class="-my-1 size-8 shrink-0" />
+        <span class="min-w-0">This .env changed after {{ stale.join(', ') }} {{ stale.length === 1 ? 'was' : 'were' }} created, so {{ stale.length === 1 ? 'it still has' : 'they still have' }} the old values. Run <b>Build &amp; Up</b> to recreate {{ stale.length === 1 ? 'it' : 'them' }} with these.</span>
+        <button class="btn btn-warning btn-sm shrink-0" @click="recreate">Build &amp; Up</button>
       </div>
       <!-- Locked: masked, read-only -->
       <CodeEditor v-else-if="locked" :model-value="maskedText" language="env" readonly fill />
@@ -153,7 +164,7 @@ async function recreate() {
       </div>
       <div v-if="state?.exists" role="note" class="flex items-start gap-2 text-xs opacity-60">
         <CatMood mood="info" class="size-6 shrink-0" />
-        <span>DoCatz gives these values to every service when it runs {{ project }} (Up, Recreate, the compose dialog), on top of the project’s own .env. A run started elsewhere (a terminal, DevCatz) uses the project’s .env only.</span>
+        <span>DoCatz gives these values to every service when it runs {{ project }} (Build &amp; Up, Up, the compose dialog), on top of the project’s own .env. A container keeps the values it was created with: after a change, Build &amp; Up. A run started elsewhere (a terminal, DevCatz) uses the project’s .env only.</span>
       </div>
     </div>
     <RunPanel v-if="run" :run="run" tall @close="runToken = null" />

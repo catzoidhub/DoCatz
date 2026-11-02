@@ -285,7 +285,7 @@ export interface DcTermData {
   data: string;
   exited?: boolean;
 }
-export type DcComposeAction = 'up' | 'down' | 'restart' | 'stop' | 'pull' | 'build';
+export type DcComposeAction = 'up' | 'build-up' | 'down' | 'restart' | 'stop' | 'pull' | 'build';
 /** A compose run (up / down / restart / pull / build) or an image pull as it goes (#17). */
 export interface DcRun {
   token: string;
