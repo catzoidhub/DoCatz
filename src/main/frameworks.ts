@@ -114,6 +114,103 @@ function detectBuild(context: string, dockerfile?: string): DcFramework | null {
   return found.find((f) => !['node', 'php', 'python'].includes(f.framework) || f.library) ?? found[0] ?? null;
 }
 
+/**
+ * The apps of a bun / npm / yarn / pnpm workspace at `root` (`apps/*`, `packages/*`, no deep globs), as DevCatz lists
+ * them: every folder a pattern names, with its package name when it has a package.json.
+ */
+function workspaceApps(root: string): { dir: string; rel: string; name: string | null }[] {
+  const pkg = readJson<{ workspaces?: string[] | { packages?: string[] } }>(join(root, 'package.json'));
+  const patterns = Array.isArray(pkg?.workspaces) ? [...pkg.workspaces] : [...(pkg?.workspaces?.packages ?? [])];
+  for (const m of readText(join(root, 'pnpm-workspace.yaml')).matchAll(/^\s*-\s*['"]?([^'"\n#]+)['"]?/gm)) patterns.push(m[1].trim());
+  const out: { dir: string; rel: string; name: string | null }[] = [];
+  const add = (rel: string) => {
+    const dir = join(root, rel);
+    out.push({ dir, rel, name: readJson<{ name?: string }>(join(dir, 'package.json'))?.name ?? null });
+  };
+  for (const pattern of patterns) {
+    if (pattern.startsWith('!')) continue;
+    const clean = pattern.replace(/\/+$/, '');
+    if (/\/\*+$/.test(clean)) {
+      const base = clean.replace(/\/\*+$/, '');
+      try {
+        for (const e of readdirSync(join(root, base)).sort()) if (e !== 'node_modules' && !e.startsWith('.') && statSync(join(root, base, e)).isDirectory()) add(`${base}/${e}`);
+      } catch {
+        /* no such folder */
+      }
+    } else if (!clean.includes('*') && existsSync(join(root, clean))) add(clean);
+  }
+  return out;
+}
+
+/**
+ * The part of a multi-stage Dockerfile that builds `target`: its stage and the stages it starts from or copies from
+ * (`FROM deps AS web-build`, `COPY --from=web-build`). The whole file without a target.
+ */
+function stageText(text: string, target?: string): string {
+  if (!target) return text;
+  const stages = new Map<string, string>();
+  const parts = text.split(/^(?=FROM\s)/im);
+  for (const part of parts) {
+    const m = /^FROM\s+(?:--\S+\s+)*(\S+)(?:\s+AS\s+(\S+))?/i.exec(part);
+    if (m?.[2]) stages.set(m[2].toLowerCase(), part);
+  }
+  if (!stages.has(target.toLowerCase())) return text;
+  const seen = new Set<string>();
+  const visit = (name: string) => {
+    const part = stages.get(name);
+    if (!part || seen.has(name)) return;
+    seen.add(name);
+    const from = /^FROM\s+(?:--\S+\s+)*(\S+)/i.exec(part)?.[1].toLowerCase();
+    if (from) visit(from);
+    for (const m of part.matchAll(/--from=(\S+)/gi)) visit(m[1].toLowerCase());
+  };
+  visit(target.toLowerCase());
+  return [...seen].map((n) => stages.get(n)).join('\n');
+}
+
+interface ServiceCfg {
+  build?: { context?: string; dockerfile?: string; target?: string } | string;
+  image?: string;
+  container_name?: string;
+  working_dir?: string;
+  entrypoint?: string[] | string | null;
+  command?: string[] | string | null;
+}
+
+/**
+ * Which workspace app a service of a monorepo runs: what its Dockerfile, entrypoint / command and the scripts they
+ * start say (`apps/api`, `--filter @scope/api`), else its service / container / image name (`api`, `halo-web-dev`).
+ */
+function workspaceAppOf(root: string, name: string, svc: ServiceCfg, dockerfile: string | null): string | null {
+  // apps with a framework of their own first: a shared package (types, ui) is only built on the way to the app
+  const listed = workspaceApps(root);
+  // apps/* and services/* too, workspace members or not (a Go API next to a bun workspace of apps/web)
+  for (const base of ['apps', 'services']) {
+    try {
+      for (const e of readdirSync(join(root, base)).sort()) {
+        const rel = `${base}/${e}`;
+        if (!e.startsWith('.') && e !== 'node_modules' && statSync(join(root, rel)).isDirectory() && !listed.some((a) => a.rel === rel)) listed.push({ dir: join(root, rel), rel, name: readJson<{ name?: string }>(join(root, rel, 'package.json'))?.name ?? null });
+      }
+    } catch {
+      /* no such folder */
+    }
+  }
+  const known = listed.map((a) => ({ ...a, fw: detectFramework(a.dir) })).filter((a) => a.fw);
+  const real = known.filter((a) => a.fw!.framework !== 'node' || a.fw!.library);
+  const apps = real.length ? real : known;
+  if (!apps.length) return null;
+  const words = [svc.entrypoint, svc.command].flatMap((x) => (Array.isArray(x) ? x : x ? x.split(/\s+/) : []));
+  // a script the container starts, read from the project (/app/docker/dev-api.sh → <root>/docker/dev-api.sh)
+  const scripts = words.filter((w) => /\.(sh|bash|mjs|js|ts)$/.test(w)).map((w) => readText(join(root, w.replace(new RegExp(`^${(svc.working_dir ?? '/app').replace(/\/+$/, '')}/`), '').replace(/^\.?\//, ''))));
+  const hints = [dockerfile ? stageText(readText(dockerfile), typeof svc.build === 'object' ? svc.build.target : undefined) : '', words.join(' '), ...scripts].join('\n');
+  const score = (a: { rel: string; name: string | null }) => (hints.split(a.rel).length - 1) * 2 + (a.name ? hints.split(a.name).length - 1 : 0) * 2;
+  const best = apps.map((a) => ({ a, n: score(a) })).sort((x, y) => y.n - x.n)[0];
+  if (best.n > 0 && apps.filter((a) => score(a) === best.n).length === 1) return best.a.dir;
+  const tokens = new Set([name, svc.container_name ?? '', svc.image ?? ''].flatMap((t) => t.toLowerCase().split(/[^a-z0-9]+/)).filter(Boolean));
+  const byName = apps.filter((a) => tokens.has(a.rel.split('/').pop()!.toLowerCase()));
+  return byName.length === 1 ? byName[0].dir : null;
+}
+
 interface Cached {
   key: string;
   services: Record<string, DcFramework | null>;
@@ -135,16 +232,24 @@ export async function learnProject(project: string, files: string[], onLearned: 
   pending.add(project);
   try {
     const r = await run(composeBin(), [...files.flatMap((f) => ['-f', f]), '-p', project, 'config', '--format', 'json', '--no-interpolate'], { cwd: dirname(files[0]), env: { ...process.env, DOCKER_HOST: dockerHost() }, timeout: 30_000 });
-    const cfg = r.code === 0 ? (JSON.parse(r.stdout) as { services?: Record<string, { build?: { context?: string; dockerfile?: string } | string }> }) : null;
+    if (r.code !== 0) console.warn(`frameworks of ${project}: compose config failed`, r.stderr?.slice(0, 300));
+    const cfg = r.code === 0 ? (JSON.parse(r.stdout) as { services?: Record<string, ServiceCfg> }) : null;
     const services: Record<string, DcFramework | null> = {};
     for (const [name, s] of Object.entries(cfg?.services ?? {})) {
       const ctx = typeof s.build === 'string' ? s.build : s.build?.context;
       const dockerfile = typeof s.build === 'object' ? s.build.dockerfile : undefined;
-      services[name] = ctx && existsSync(ctx) ? detectBuild(ctx, dockerfile) : null;
+      if (!ctx || !existsSync(ctx)) {
+        services[name] = null;
+        continue;
+      }
+      // A monorepo built from its root (`context: .`, a shared docker/ folder): the workspace app the service runs.
+      const app = workspaceAppOf(ctx, name, s, dockerfile ? (isAbsolute(dockerfile) ? dockerfile : join(ctx, dockerfile)) : null);
+      services[name] = (app && detectFramework(app)) || detectBuild(ctx, dockerfile);
     }
     cache.set(project, { key, services });
     onLearned();
-  } catch {
+  } catch (e) {
+    console.warn(`frameworks of ${project}:`, (e as Error).message);
     cache.set(project, { key, services: {} });
   } finally {
     pending.delete(project);

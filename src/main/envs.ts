@@ -133,8 +133,11 @@ const safe = (project: string) => {
 export const envFile = (project: string) => join(envDir(), `${safe(project)}.env`);
 const overrideFile = (project: string) => join(envDir(), `${safe(project)}.override.yaml`);
 
-/** Compose's own project name for a folder (what `docker compose` uses without -p). */
-export const projectNameOf = (file: string) => basename(dirname(file)).toLowerCase().replace(/[^a-z0-9_-]/g, '');
+/** Compose's own project name for a file (what `docker compose` uses without -p): its top-level `name:`, else its folder's. */
+export const projectNameOf = (file: string) => {
+  const own = /^name:\s*["']?([A-Za-z0-9][\w.-]*)["']?\s*(?:#.*)?$/m.exec(readText(file))?.[1];
+  return (own ?? basename(dirname(file))).toLowerCase().replace(/[^a-z0-9_-]/g, '');
+};
 
 function locked(project: string): boolean {
   return (store.extra<Record<string, boolean>>(LOCK_KEY) ?? {})[project] !== false;

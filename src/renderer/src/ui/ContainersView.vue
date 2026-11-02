@@ -199,7 +199,8 @@ const run = computed(() => (runToken.value ? runs.value[runToken.value] : null))
 
 const dot = (c: DcContainer) => (c.state === 'running' ? (c.health === 'unhealthy' ? 'status-error' : c.health === 'starting' ? 'status-warning' : 'status-success') : c.state === 'paused' || c.state === 'restarting' ? 'status-warning' : c.state === 'dead' ? 'status-error' : '');
 /** A built image shows as what it was built from, not its bare id. */
-const imageLine = (c: DcContainer) => (/^[0-9a-f]{12}$/.test(c.image) || (c.framework && c.project && c.image.startsWith(`${c.project}-`)) ? `built from source${c.framework ? ` · ${frameworkTag(c.framework.framework, c.framework.library).label}` : ''}` : c.image);
+// a framework is only learnt for a service with `build:` — built from source, whatever its image is named (image: halo-api-dev)
+const imageLine = (c: DcContainer) => (/^[0-9a-f]{12}$/.test(c.image) || c.framework ? `built from source${c.framework ? ` · ${frameworkTag(c.framework.framework, c.framework.library).label}` : ''}` : c.image);
 const portLine = (c: DcContainer) => c.ports.filter((p) => p.public).map((p) => (p.public === p.private ? `${p.public}` : `${p.public}→${p.private}`)).join(' · ');
 
 function openCompose() {
