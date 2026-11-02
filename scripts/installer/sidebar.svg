@@ -24,7 +24,7 @@
   <image href="../../resources/icon.png" x="40" y="62" width="84" height="84"/>
   <g font-family="-apple-system, 'Segoe UI', 'Helvetica Neue', sans-serif" text-anchor="middle" fill="#2f2878">
     <text x="82" y="176" font-size="19" font-weight="700" letter-spacing="-0.3">DoCatz</text>
-    <text x="82" y="194" font-size="9.5" font-weight="500" fill-opacity="0.75">Curiosity won’t kill this cat.</text>
+    <text x="82" y="194" font-size="9.5" font-weight="500" fill-opacity="0.75">If it fits, it ships.</text>
   </g>
   <g fill="none" stroke="#2f2878" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round">
     <path d="M62 262 L68 268 L62 274" stroke-opacity="0.3"/>

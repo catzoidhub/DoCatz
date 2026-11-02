@@ -10,7 +10,7 @@ body:
     id: problem
     attributes:
       label: What are you trying to do?
-      description: The job, not the solution yet — "I copy query results into a spreadsheet to compare two databases".
+      description: The job, not the solution yet — "I restart the same three containers every morning before work".
     validations:
       required: true
   - type: textarea

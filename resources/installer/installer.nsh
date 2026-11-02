@@ -14,7 +14,7 @@
 
   !macro customWelcomePage
     !define MUI_WELCOMEPAGE_TITLE "Welcome to DoCatz"
-    !define MUI_WELCOMEPAGE_TEXT "A database client for MySQL, MariaDB, PostgreSQL, SQLite, Redis, Valkey, MongoDB and Elasticsearch: browse and edit tables, write queries, export and back up, with an AI helper when you want one.$\r$\n$\r$\nDoCatz installs for your account only: no administrator rights needed, and your connections and their passwords stay on this PC, encrypted for your account.$\r$\n$\r$\nPrivacy: DoCatz checks catzoid.com for updates and sends crash reports only if you agree; both can be turned off in Settings. Policy: catzoid.com/legal/privacy$\r$\n$\r$\nClick Next to continue."
+    !define MUI_WELCOMEPAGE_TEXT "A fast, light Docker engine and container manager: your containers grouped by compose project, with logs, a terminal, files and a domain each.$\r$\n$\r$\nIt installs for your account only — no administrator rights needed."
     !insertmacro skipPageIfUpdated
     !insertmacro MUI_PAGE_WELCOME
 
