@@ -102,49 +102,39 @@ const run = (cmd: string) => attempt(() => api.runInTerminal(cmd));
   <section class="flex h-full flex-col">
     <header class="drag win-top flex h-14 shrink-0 items-end gap-3 border-b border-base-300/60 px-4 pb-2">
       <div class="no-drag"><DcNavButtons /></div>
-      <div class="min-w-0 flex-1 pb-0.5"><h1 class="text-base font-semibold tracking-tight">Commands</h1><p class="truncate text-xs opacity-55">Copy one, or run it in a terminal — always on the DoCatz engine.</p></div>
+      <div class="min-w-0 flex-1 pb-0.5"><h1 class="text-base font-semibold tracking-tight">Commands</h1><p class="truncate text-xs opacity-55">Copy one, or run it in {{ terminalName }} — always on the DoCatz engine.</p></div>
+      <label v-if="running.length" class="no-drag flex items-center gap-2 pb-0.5 text-xs" title="The container the “Inside a container” commands are about">
+        <ServiceMark v-if="target" :container="target" size="sm" />
+        <select :value="target?.name" class="select select-sm w-56" @change="picked = ($event.target as HTMLSelectElement).value">
+          <option v-for="c in running" :key="c.id" :value="c.name">{{ c.project ? `${c.project} / ${c.service}` : c.name }}</option>
+        </select>
+      </label>
     </header>
     <div class="min-h-0 flex-1 overflow-y-auto">
-      <div class="mx-auto max-w-3xl space-y-6 px-6 py-6">
-        <!-- the container the container commands are about -->
-        <div v-if="running.length" class="flex flex-wrap items-center gap-3 rounded-box border border-base-300/60 bg-base-200/40 px-4 py-3">
-          <ServiceMark v-if="target" :container="target" size="md" />
-          <div class="min-w-0 flex-1">
-            <p class="text-sm font-medium leading-tight">Commands about a container</p>
-            <p class="text-xs opacity-55">Pick one; <b>Inside a container</b> below follows it.</p>
+      <div class="mx-auto max-w-4xl space-y-4 px-6 py-5">
+        <section v-for="g in groups" :key="g.title" class="card">
+          <div class="flex items-center gap-2.5 border-b border-base-300/50 px-4 py-2.5">
+            <span class="grid size-7 shrink-0 place-items-center rounded-lg bg-[color-mix(in_oklch,var(--c-commands)_16%,transparent)] text-[var(--c-commands)]"><svg viewBox="0 0 20 20" class="size-4" fill="currentColor"><path fill-rule="evenodd" clip-rule="evenodd" :d="g.icon" /></svg></span>
+            <h2 class="text-sm font-semibold tracking-tight">{{ g.title }}</h2>
+            <span class="min-w-0 truncate text-xs opacity-50" :title="g.hint">{{ g.hint }}</span>
           </div>
-          <select :value="target?.name" class="select select-sm w-64" @change="picked = ($event.target as HTMLSelectElement).value">
-            <option v-for="c in running" :key="c.id" :value="c.name">{{ c.project ? `${c.project} / ${c.service}` : c.name }}</option>
-          </select>
-        </div>
-
-        <section v-for="g in groups" :key="g.title" class="space-y-3">
-          <div class="flex items-start gap-3 px-1">
-            <span class="grid size-9 shrink-0 place-items-center rounded-xl bg-[color-mix(in_oklch,var(--c-commands)_16%,transparent)] text-[var(--c-commands)]"><svg viewBox="0 0 20 20" class="size-5" fill="currentColor"><path fill-rule="evenodd" clip-rule="evenodd" :d="g.icon" /></svg></span>
-            <div class="min-w-0"><h2 class="text-base font-semibold tracking-tight">{{ g.title }}</h2><p class="text-xs opacity-55">{{ g.hint }}</p></div>
-          </div>
-          <ul class="card divide-y divide-base-300/50">
-            <li v-for="c in g.items" :key="c.title" class="group flex flex-wrap items-center gap-x-4 gap-y-2 px-5 py-3.5 transition-colors hover:bg-base-200/40">
-              <div class="min-w-0 flex-1 basis-[22rem] space-y-1.5">
-                <p class="text-sm font-medium leading-tight">{{ c.title }}</p>
-                <code class="selectable block rounded-lg bg-base-200/70 px-3 py-2 font-mono text-[12px] leading-relaxed break-all whitespace-pre-wrap">{{ c.cmd }}</code>
-                <p v-if="c.note" class="text-[11px] leading-snug opacity-50">{{ c.note }}</p>
-              </div>
-              <div class="flex shrink-0 items-center gap-1.5 self-end sm:self-center">
-                <button class="btn btn-sm gap-1.5" title="Copy to the clipboard" @click="copy(c.cmd)">
+          <ul class="divide-y divide-base-300/40">
+            <li v-for="c in g.items" :key="c.title" class="group grid grid-cols-[13.5rem_minmax(0,1fr)_auto] items-center gap-3 px-4 py-2 transition-colors hover:bg-base-200/40">
+              <span class="truncate text-[13px]" :title="c.note ? `${c.title} — ${c.note}` : c.title">{{ c.title }}<span v-if="c.note" class="ml-1 cursor-help opacity-40" title="">ⓘ</span></span>
+              <code class="selectable min-w-0 truncate rounded-md bg-base-200/70 px-2.5 py-1 font-mono text-[12px]" :title="c.cmd">{{ c.cmd }}</code>
+              <span class="flex items-center gap-1">
+                <button class="btn btn-ghost btn-xs btn-square" title="Copy to the clipboard" @click="copy(c.cmd)">
                   <svg viewBox="0 0 20 20" class="size-3.5" fill="currentColor"><path d="M7 3.5A1.5 1.5 0 0 1 8.5 2h3.879a1.5 1.5 0 0 1 1.06.44l3.122 3.12A1.5 1.5 0 0 1 17 6.622V12.5a1.5 1.5 0 0 1-1.5 1.5h-1v-3.379a3 3 0 0 0-.879-2.121L10.5 5.379A3 3 0 0 0 8.379 4.5H7v-1Z" /><path d="M4.5 6A1.5 1.5 0 0 0 3 7.5v9A1.5 1.5 0 0 0 4.5 18h7a1.5 1.5 0 0 0 1.5-1.5v-5.879a1.5 1.5 0 0 0-.44-1.06L9.44 6.439A1.5 1.5 0 0 0 8.378 6H4.5Z" /></svg>
-                  Copy
                 </button>
-                <button class="btn btn-sm btn-primary gap-1.5" :title="`Open ${terminalName} and run it on the DoCatz engine`" @click="run(c.cmd)">
-                  <svg viewBox="0 0 20 20" class="size-3.5" fill="currentColor"><path d="M6.3 4.2A1 1 0 0 0 5 5.1v9.8a1 1 0 0 0 1.5.86l8.2-4.9a1 1 0 0 0 0-1.72l-8.2-4.9a1 1 0 0 0-.2-.04Z" /></svg>
+                <button class="btn btn-xs btn-primary gap-1" :title="`Open ${terminalName} and run it on the DoCatz engine`" @click="run(c.cmd)">
+                  <svg viewBox="0 0 20 20" class="size-3" fill="currentColor"><path d="M6.3 4.2A1 1 0 0 0 5 5.1v9.8a1 1 0 0 0 1.5.86l8.2-4.9a1 1 0 0 0 0-1.72l-8.2-4.9a1 1 0 0 0-.2-.04Z" /></svg>
                   Run
                 </button>
-              </div>
+              </span>
             </li>
           </ul>
         </section>
-
-        <p class="px-1 text-xs opacity-50">Run opens {{ terminalName }} with DoCatz’s docker first on PATH and the <span class="font-mono">docatz</span> context, so a command never lands on another engine.</p>
+        <p class="px-1 text-xs opacity-50">Run opens {{ terminalName }} with DoCatz’s docker first on PATH and the <span class="font-mono">docatz</span> context, so a command never lands on another engine. Hover a command to see all of it.</p>
       </div>
     </div>
   </section>
