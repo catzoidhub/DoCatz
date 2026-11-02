@@ -9,7 +9,7 @@ import type { Duplex } from 'node:stream';
 import { API_METHODS, type DcContainer, type DoCatzApi, type SiblingApp } from '@shared/types';
 import { AskAi } from './ai';
 import { buildDetail, buildLogs, listBuilds, removeBuild } from './builds';
-import { composeEnvironmentKeys, envCreate, envRead, envRemove, envSetLocked, envState, envWrite, expectedEnv } from './envs';
+import { composeEnvironmentKeys, envCreate, ownServices, envRead, envRemove, envSetLocked, envState, envWrite, expectedEnv } from './envs';
 import { writeBridge } from './bridge';
 import { removeContext, setPath as setCliPath } from './cli';
 import { findCatzoidApp, openCatzoidApp, platformId } from './companion';
@@ -376,17 +376,21 @@ function api(): DoCatzApi {
     envState: async (project, dir) => envState(project, dir),
     envRead: async (project) => envRead(project),
     envWrite: async (project, content, mtime) => envWrite(project, content, mtime),
-    envCreate: async (project, dir, from) => envCreate(project, dir, from),
+    envCreate: async (project, dir, from) => {
+      // the stack's own database / cache / mail catcher, so a copied .env points at them rather than at the computer
+      const files = (await projects().catch(() => [])).find((p) => p.name === project)?.files ?? [];
+      return envCreate(project, dir, from, await ownServices(files, project).catch(() => new Map()));
+    },
     envLock: async (project, on) => {
       envSetLocked(project, on);
       return envState(project, null);
     },
     envRemove: async (project) => envRemove(project),
     envDrift: async (project) => {
-      const want = expectedEnv(project);
+      const files = (await projects().catch(() => [])).find((p) => p.name === project)?.files ?? [];
+      const want = expectedEnv(project, await ownServices(files, project).catch(() => new Map()));
       if (!Object.keys(want).length) return [];
       const list = (await ops.listContainers(domains.urlFor)).filter((c) => c.project === project && c.state === 'running');
-      const files = (await projects().catch(() => [])).find((p) => p.name === project)?.files ?? [];
       const fixed = await composeEnvironmentKeys(files, project).catch(() => ({}) as Record<string, Set<string>>);
       const out: { container: string; service: string; keys: string[] }[] = [];
       for (const c of list) {

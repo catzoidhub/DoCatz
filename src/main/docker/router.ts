@@ -97,9 +97,10 @@ export class Router {
       const r = await execRun(containerId, ['cat', '/proc/net/tcp', '/proc/net/tcp6']);
       const set = new Set<number>();
       for (const line of r.stdout.split('\n')) {
-        // local address 0.0.0.0 / :: / the container's own (not 127.0.0.1 only: the router could not reach it)
+        // local address 0.0.0.0 / :: / the container's own — never loopback, which the router cannot reach: 127.0.0.0/8
+        // (Docker's own DNS listens on 127.0.0.11 in every container of a compose network), ::1 and ::ffff:127.x
         const m = /^\s*\d+:\s+([0-9A-F]+):([0-9A-F]{4})\s+[0-9A-F]+:[0-9A-F]{4}\s+0A\s/.exec(line);
-        if (m && !/^0100007F$|^0{24}01000000$/.test(m[1])) set.add(parseInt(m[2], 16));
+        if (m && !/^[0-9A-F]{6}7F$|^0{24}01000000$|^0{16}FFFF0000[0-9A-F]{6}7F$/.test(m[1])) set.add(parseInt(m[2], 16));
       }
       ports = [...set].sort((a, b) => a - b);
     } catch {

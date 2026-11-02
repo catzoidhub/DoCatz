@@ -27,14 +27,73 @@ const SCHEMES = /^(mysql|mariadb|postgres|postgresql|redis|rediss|mongodb|mongod
 /** The app's own address stays as it is (APP_URL, ASSET_URL, VITE_*): that is where a browser reaches it. */
 const KEEP = /^(APP_|ASSET_|VITE_)/;
 
-/** The value a key should have inside a container (null: leave it), by DevCatz's rule. */
-export function containerValue(key: string, value: string): string | null {
+// ---------------------------------------------------------------- the stack's own services
+
+/** What a service is, from its image: a database, a cache, a mail catcher… with the port it listens on inside. */
+type Kind = 'postgres' | 'mysql' | 'redis' | 'mongodb' | 'amqp' | 'smtp' | 'memcached' | 'nats';
+const KINDS: [Kind, RegExp, number][] = [
+  ['postgres', /(^|\/)(postgres|postgis|timescaledb)[^/]*(:|$)/i, 5432],
+  ['mysql', /(^|\/)(mysql|mariadb|percona)[^/]*(:|$)/i, 3306],
+  ['redis', /(^|\/)(redis|valkey|keydb|dragonfly)[^/]*(:|$)/i, 6379],
+  ['mongodb', /(^|\/)mongo[^/]*(:|$)/i, 27017],
+  ['amqp', /(^|\/)rabbitmq[^/]*(:|$)/i, 5672],
+  ['smtp', /(^|\/)(mailpit|mailhog|mailcatcher|smtp4dev|mailcrab)[^/]*(:|$)/i, 1025],
+  ['memcached', /(^|\/)memcached[^/]*(:|$)/i, 11211],
+  ['nats', /(^|\/)nats[^/]*(:|$)/i, 4222],
+];
+const SCHEME_KIND: Record<string, Kind> = { postgres: 'postgres', postgresql: 'postgres', mysql: 'mysql', mariadb: 'mysql', redis: 'redis', rediss: 'redis', mongodb: 'mongodb', 'mongodb+srv': 'mongodb', amqp: 'amqp', amqps: 'amqp', smtp: 'smtp', smtps: 'smtp', memcache: 'memcached', memcached: 'memcached', nats: 'nats' };
+/** A *_HOST key's kind from its name (DB_HOST: the stack's one database, if it has exactly one). */
+function hostKind(key: string, own: OwnServices): Kind | null {
+  const k = key.toUpperCase();
+  if (/REDIS|VALKEY/.test(k)) return 'redis';
+  if (/MAIL|SMTP/.test(k)) return 'smtp';
+  if (/MONGO/.test(k)) return 'mongodb';
+  if (/RABBIT|AMQP/.test(k)) return 'amqp';
+  if (/MEMCACHE/.test(k)) return 'memcached';
+  if (/NATS/.test(k)) return 'nats';
+  if (/PG|POSTGRES/.test(k)) return 'postgres';
+  if (/MYSQL|MARIADB/.test(k)) return 'mysql';
+  if (/^(DB|DATABASE)_/.test(k)) {
+    const dbs = (['postgres', 'mysql', 'mongodb'] as Kind[]).filter((x) => own.has(x));
+    return dbs.length === 1 ? dbs[0] : null;
+  }
+  return null;
+}
+/** The stack's own services by kind (the first of each): service name and its port inside the network. */
+export type OwnServices = Map<Kind, { service: string; port: number }>;
+
+/** The services of a compose project that are a database, a cache, a mail catcher… (empty when compose can't tell). */
+export async function ownServices(files: string[], project: string): Promise<OwnServices> {
+  const out: OwnServices = new Map();
+  if (!files.length) return out;
+  const r = await run(composeBin(), [...files.flatMap((f) => ['-f', f]), '-p', project, 'config', '--format', 'json'], { cwd: dirname(files[0]), env: { ...process.env, DOCKER_HOST: dockerHost() }, timeout: 30_000 });
+  if (r.code !== 0) return out;
+  const cfg = JSON.parse(r.stdout) as { services?: Record<string, { image?: string; profiles?: string[] }> };
+  for (const [name, svc] of Object.entries(cfg.services ?? {})) {
+    if (!svc.image || svc.profiles?.length) continue;
+    const hit = KINDS.find(([, re]) => re.test(svc.image!));
+    if (hit && !out.has(hit[0])) out.set(hit[0], { service: name, port: hit[2] });
+  }
+  return out;
+}
+
+/**
+ * The value a key should have inside a container (null: leave it), by DevCatz's rule: a loopback host is the computer,
+ * so host.docker.internal — unless the stack runs that kind of service itself, then it is that service.
+ */
+export function containerValue(key: string, value: string, own: OwnServices = new Map()): string | null {
   if (KEEP.test(key)) return null;
   const v = value.trim().replace(/^(['"])(.*)\1$/, '$2');
-  if (/_HOST$/i.test(key) && LOOPBACK.test(v)) return HOST;
+  if (/_HOST$/i.test(key) && LOOPBACK.test(v)) {
+    const kind = hostKind(key, own);
+    return (kind && own.get(kind)?.service) || HOST;
+  }
   if (/_(URL|URI|DSN)$/i.test(key)) {
-    const m = /^([a-z][a-z0-9+.-]*):\/\/([^/?#]*@)?(\[::1\]|127\.0\.0\.1|localhost)(?=[:/?#]|$)/i.exec(v);
-    if (m && SCHEMES.test(m[1])) return v.replace(m[0], `${m[1]}://${m[2] ?? ''}${HOST}`);
+    const m = /^([a-z][a-z0-9+.-]*):\/\/([^/?#]*@)?(\[::1\]|127\.0\.0\.1|localhost)(:\d+)?(?=[/?#]|$)/i.exec(v);
+    if (m && SCHEMES.test(m[1])) {
+      const svc = own.get(SCHEME_KIND[m[1].toLowerCase()]);
+      return v.replace(m[0], svc ? `${m[1]}://${m[2] ?? ''}${svc.service}:${svc.port}` : `${m[1]}://${m[2] ?? ''}${HOST}${m[4] ?? ''}`);
+    }
   }
   return null;
 }
@@ -50,14 +109,14 @@ function parse(text: string): Map<string, string> {
 }
 
 /** A copied .env with its loopback hosts pointed at host.docker.internal; `changed` lists the keys. */
-export function pointHosts(text: string): { text: string; changed: string[] } {
+export function pointHosts(text: string, own: OwnServices = new Map()): { text: string; changed: string[] } {
   const changed: string[] = [];
   const out = text
     .split('\n')
     .map((line) => {
       const m = /^(\s*(?:export\s+)?)([A-Za-z_][A-Za-z0-9_.]*)(\s*=\s*)(.*)$/.exec(line);
       if (!m) return line;
-      const next = containerValue(m[2], m[4].replace(/\s+#.*$/, ''));
+      const next = containerValue(m[2], m[4].replace(/\s+#.*$/, ''), own);
       if (next === null) return line;
       changed.push(m[2]);
       const q = /^(['"])/.exec(m[4].trim())?.[1] ?? '';
@@ -114,14 +173,16 @@ export function envWrite(project: string, content: string, mtime: number | null)
 }
 
 /** A new DoCatz .env: a copy of the project's .env, its .env.example, or empty. */
-export function envCreate(project: string, dir: string | null, from: 'env' | 'example' | 'empty'): DcProjectEnv {
+export function envCreate(project: string, dir: string | null, from: 'env' | 'example' | 'empty', own: OwnServices = new Map()): DcProjectEnv {
   const s = envState(project, dir);
   let content = `# ${project} in DoCatz — the values its containers get when DoCatz runs them.\n# The project's own .env stays as it is (DevCatz uses it on this computer).\n`;
   const source = from === 'env' ? s.projectEnv : from === 'example' ? s.example : null;
   if (source && dir) {
-    // Hosts on this computer (127.0.0.1, localhost) become host.docker.internal: inside a container they would be the container.
-    const p = pointHosts(readFileSync(join(dir, source), 'utf8'));
-    content += `\n# Started from ${source}${p.changed.length ? `; pointed at ${HOST} for the containers: ${p.changed.join(', ')}` : ''}\n${p.text}`;
+    // Hosts on this computer (127.0.0.1, localhost) become host.docker.internal — or the stack's own service of that
+    // kind: inside a container they would be the container.
+    const p = pointHosts(readFileSync(join(dir, source), 'utf8'), own);
+    const to = own.size ? `the stack's own services (${[...own.values()].map((x) => x.service).join(', ')}) or ${HOST}` : HOST;
+    content += `\n# Started from ${source}${p.changed.length ? `; pointed at ${to} for the containers: ${p.changed.join(', ')}` : ''}\n${p.text}`;
   }
   mkdirSync(envDir(), { recursive: true, mode: 0o700 });
   envWrite(project, content, null);
@@ -132,7 +193,7 @@ export function envCreate(project: string, dir: string | null, from: 'env' | 'ex
  * The values each container should have from DoCatz's .env (loopback hosts pointed as on a run) — compared by the
  * window with what the containers really have, to say which keys are not applied yet.
  */
-export function expectedEnv(project: string): Record<string, string> {
+export function expectedEnv(project: string, own: OwnServices = new Map()): Record<string, string> {
   let file: string;
   try {
     file = envFile(project);
@@ -146,7 +207,7 @@ export function expectedEnv(project: string): Record<string, string> {
   const out: Record<string, string> = {};
   for (const [k, v] of vars) {
     const filled = fill(v);
-    out[k] = containerValue(k, filled) ?? filled;
+    out[k] = containerValue(k, filled, own) ?? filled;
   }
   return out;
 }
@@ -190,7 +251,8 @@ export async function composeEnvArgs(files: string[], project: string): Promise<
   // The project's .env (read by its own env_file / compose) with the DoCatz values on top: every loopback host among
   // them goes to the containers as host.docker.internal, in a last env_file that wins (DevCatz does the same).
   const merged = new Map([...parse(readText(join(dirname(files[0]), '.env'))), ...(own ? parse(readFileSync(file, 'utf8')) : [])]);
-  const pointed = [...merged].map(([k, v]) => [k, containerValue(k, v)] as const).filter((x): x is readonly [string, string] => x[1] !== null);
+  const stack = await ownServices(files, project).catch(() => new Map() as OwnServices);
+  const pointed = [...merged].map(([k, v]) => [k, containerValue(k, v, stack)] as const).filter((x): x is readonly [string, string] => x[1] !== null);
   const hostsFile = join(envDir(), `${safe(project)}.hosts.env`);
   if (pointed.length) writeFileSync(hostsFile, `# Written by DoCatz before each run: hosts on this computer, as containers reach them.\n${pointed.map(([k, v]) => `${k}=${v}`).join('\n')}\n`, { mode: 0o600 });
   else rmSync(hostsFile, { force: true });
