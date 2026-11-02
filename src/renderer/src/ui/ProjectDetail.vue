@@ -133,19 +133,19 @@ const rateText = (v: number) => `${bytes(v)}/s`;
 
 <template>
   <section class="flex h-full min-w-0 flex-col">
-    <header class="drag win-top flex h-20 shrink-0 items-center gap-3 border-b border-base-300/60 px-4">
+    <header class="drag win-top @container flex h-20 shrink-0 items-center gap-3 border-b border-base-300/60 px-4">
       <div class="no-drag"><DcNavButtons /></div>
       <img v-if="gateway" :src="gatewayLogo(gateway.kind) ?? devcatzLogo" class="size-9 shrink-0 rounded-xl border border-base-300/70 bg-base-100 object-contain p-1" :alt="gateway.name" />
       <span v-else class="grid size-9 shrink-0 place-items-center rounded-xl bg-primary/15 text-primary">
         <svg viewBox="0 0 20 20" class="size-5" fill="currentColor"><path :d="PROJECT_ICON" /></svg>
       </span>
       <div class="min-w-0 flex-1">
-        <div class="flex items-center gap-2">
-          <h1 class="truncate text-base font-semibold tracking-tight">{{ project }}</h1>
+        <div class="flex min-w-0 items-center gap-2">
+          <h1 class="min-w-0 truncate text-base font-semibold tracking-tight" :title="project">{{ project }}</h1>
           <button v-if="!gateway" class="no-drag btn btn-ghost btn-xs btn-square" :class="isFavorite(project) ? 'text-warning' : 'opacity-50 hover:opacity-100'" :title="isFavorite(project) ? 'Remove from Favorites' : 'Add to Favorites'" @click="toggleFavorite(project)">
             <svg viewBox="0 0 20 20" class="size-4" :fill="isFavorite(project) ? 'currentColor' : 'none'" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"><path d="M10.868 2.884c-.321-.772-1.415-.772-1.736 0l-1.83 4.401-4.753.381c-.833.067-1.171 1.107-.536 1.651l3.62 3.102-1.106 4.637c-.194.813.691 1.456 1.405 1.02L10 15.591l4.069 2.485c.713.436 1.598-.207 1.404-1.02l-1.106-4.637 3.62-3.102c.635-.544.297-1.584-.536-1.65l-4.752-.382-1.831-4.401Z" /></svg>
           </button>
-          <span class="badge badge-sm" :class="running ? 'badge-success badge-soft' : 'badge-ghost'">{{ running }}/{{ containers.length }} running</span>
+          <span class="badge badge-sm shrink-0 whitespace-nowrap" :class="running ? 'badge-success badge-soft' : 'badge-ghost'">{{ running }}/{{ containers.length }} running</span>
         </div>
         <p class="truncate text-xs opacity-55">{{ gateway ? `DevCatz gateway${gateway.version ? ` ${gateway.version}` : ''} · read-only` : 'Compose project' }}<template v-if="dir"> · {{ dir }}</template></p>
       </div>
@@ -154,7 +154,7 @@ const rateText = (v: number) => `${bytes(v)}/s`;
         <button class="btn btn-ghost btn-sm btn-square" title="Close" @click="openProject = null">✕</button>
       </div>
       <div v-else class="no-drag flex shrink-0 items-center gap-1">
-        <button v-if="httpServices.length" class="btn btn-sm gap-2" :title="`An environment with ${httpServices.join(', ')}’s address${httpServices.length > 1 ? 'es' : ''}, and their routes as requests`" @click="dialcatzLink(project)"><img :src="dialcatzLogo" alt="" class="size-5 drop-shadow-sm" draggable="false" />Open in DialCatz</button>
+        <button v-if="httpServices.length" class="btn btn-sm gap-2 max-@3xl:btn-square" aria-label="Open in DialCatz" :title="`Open in DialCatz: an environment with ${httpServices.join(', ')}’s address${httpServices.length > 1 ? 'es' : ''}, and their routes as requests`" @click="dialcatzLink(project)"><img :src="dialcatzLogo" alt="" class="size-5 drop-shadow-sm" draggable="false" /><span class="max-@3xl:hidden">Open in DialCatz</span></button>
         <button class="btn btn-sm btn-primary" :disabled="busy" title="docker compose up --build: rebuild the images, then recreate what changed (a changed .env included)" @click="compose('build-up')"><span v-if="doing === 'build-up'" class="loading loading-spinner loading-xs" /><template v-else>Build &amp; Up</template></button>
         <button v-if="!allUp || doing === 'up'" class="btn btn-sm" :disabled="busy" title="docker compose up: recreates what changed, without building" @click="compose('up')"><span v-if="doing === 'up'" class="loading loading-spinner loading-xs" /><template v-else>Up</template></button>
         <button v-if="running || doing === 'restart'" class="btn btn-sm" :disabled="busy" @click="compose('restart')"><span v-if="doing === 'restart'" class="loading loading-spinner loading-xs" /><template v-else>Restart</template></button>

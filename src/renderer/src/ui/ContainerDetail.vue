@@ -90,10 +90,10 @@ const memPct = computed(() => (props.stats && props.stats.memLimit ? (props.stat
 
 <template>
   <section class="flex h-full flex-col">
-    <header class="drag win-top flex h-20 shrink-0 items-center gap-3 border-b border-base-300/60 px-4">
+    <header class="drag win-top @container flex h-20 shrink-0 items-center gap-3 border-b border-base-300/60 px-4">
       <div class="no-drag"><DcNavButtons /></div>
       <ServiceMark :container="c" size="lg" />
-      <div class="min-w-[10rem] flex-1">
+      <div class="min-w-0 flex-1">
         <div class="flex min-w-0 items-center gap-2">
           <h1 class="min-w-0 truncate text-base font-semibold tracking-tight" :title="c.name">{{ c.name }}</h1>
           <span class="badge badge-sm shrink-0" :class="running ? 'badge-success badge-soft' : 'badge-ghost'">{{ c.state }}</span>
@@ -120,7 +120,7 @@ const memPct = computed(() => (props.stats && props.stats.memLimit ? (props.stat
         <!-- a DevCatz gateway's container: read-only here, DevCatz starts, stops and removes it -->
         <button v-else-if="gatewayKind" class="btn btn-sm btn-primary" title="DevCatz installs, starts and stops its gateways" @click="gatewayLink(gatewayKind)">Open in DevCatz</button>
         <template v-else>
-          <button v-if="db" class="btn btn-sm gap-2" :title="`${db.engine} on ${db.host}:${db.port}${db.user ? ` as ${db.user}` : ''}, with the password the container was started with`" @click="dbcatzLink(db.id)"><img :src="dbcatzLogo" alt="" class="size-5 drop-shadow-sm" draggable="false" />Open in DBCatz</button>
+          <button v-if="db" class="btn btn-sm gap-2 max-@3xl:btn-square" aria-label="Open in DBCatz" :title="`Open in DBCatz: ${db.engine} on ${db.host}:${db.port}${db.user ? ` as ${db.user}` : ''}, with the password the container was started with`" @click="dbcatzLink(db.id)"><img :src="dbcatzLogo" alt="" class="size-5 drop-shadow-sm" draggable="false" /><span class="max-@3xl:hidden">Open in DBCatz</span></button>
           <button v-if="running" class="btn btn-sm" @click="act('stop')">Stop</button>
           <button v-else class="btn btn-sm btn-primary" @click="act('start')">Start</button>
           <button class="btn btn-sm" @click="act('restart')">Restart</button>
