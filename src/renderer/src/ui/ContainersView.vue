@@ -249,21 +249,23 @@ function openCompose() {
 
         <template v-for="s in sections" :key="s.key">
           <!-- a section: Favorites, a group of the user's, the rest — a drop target -->
+          <!-- a section heading (as the macOS sidebar): small caps, its count, and the fold chevron on the RIGHT, so the
+               left column keeps one chevron per project only -->
           <div
             v-if="s.title"
-            class="mt-2 mb-0.5 flex items-center gap-1 rounded-md px-2 py-1 text-[11px] font-semibold tracking-wide uppercase transition-colors"
-            :class="dropSection === s.key ? 'bg-primary/15 text-primary' : 'opacity-60'"
+            class="group/sec mt-3 mb-1 flex cursor-pointer items-center gap-1.5 rounded-md py-1 pr-2 pl-1.5 text-[11px] font-semibold tracking-wide uppercase transition-colors select-none"
+            :class="dropSection === s.key ? 'bg-primary/15 text-primary' : 'text-base-content/55 hover:text-base-content/80'"
+            :title="s.collapsed ? `Show ${s.title}` : `Hide ${s.title}`"
+            @click="toggleSection(s)"
             @dragover.prevent="dropSection = s.key"
             @dragleave="dropSection = dropSection === s.key ? null : dropSection"
             @drop.prevent="onDropSection(s)"
             @contextmenu.prevent="s.group && openMenu($event, { group: s.group })"
           >
-            <button class="flex min-w-0 flex-1 items-center gap-1 text-left" @click="toggleSection(s)">
-              <svg class="size-3 shrink-0 transition-transform" :class="{ '-rotate-90': s.collapsed }" viewBox="0 0 20 20" fill="currentColor"><path d="M5.2 7.2a.75.75 0 0 1 1.06 0L10 10.94l3.74-3.74a.75.75 0 1 1 1.06 1.06l-4.27 4.27a.75.75 0 0 1-1.06 0L5.2 8.26a.75.75 0 0 1 0-1.06Z" /></svg>
-              <svg v-if="s.key === 'fav'" class="size-3 shrink-0 text-warning" viewBox="0 0 20 20" fill="currentColor"><path :d="STAR" /></svg>
-              <span class="truncate">{{ s.title }}</span>
-            </button>
+            <svg v-if="s.key === 'fav'" class="size-3 shrink-0 text-warning" viewBox="0 0 20 20" fill="currentColor"><path :d="STAR" /></svg>
+            <span class="min-w-0 flex-1 truncate">{{ s.title }}</span>
             <span class="sec-count normal-case" :class="{ 'is-live': sectionRunning(s) }">{{ s.projects.length }}</span>
+            <svg class="size-3.5 shrink-0 opacity-45 transition group-hover/sec:opacity-90" :class="{ '-rotate-90': s.collapsed }" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M5.22 8.22a.75.75 0 0 1 1.06 0L10 11.94l3.72-3.72a.75.75 0 1 1 1.06 1.06l-4.25 4.25a.75.75 0 0 1-1.06 0L5.22 9.28a.75.75 0 0 1 0-1.06Z" clip-rule="evenodd" /></svg>
           </div>
           <template v-if="!s.collapsed">
             <p v-if="s.group && !s.projects.length" class="px-3 py-1 text-xs opacity-50">Drop projects here</p>
@@ -337,12 +339,10 @@ function openCompose() {
 
         <!-- containers of no compose project -->
         <template v-if="loose.length">
-          <div class="mt-2 mb-0.5 flex items-center gap-1 px-2 py-1 text-[11px] font-semibold tracking-wide uppercase opacity-60">
-            <button class="flex min-w-0 flex-1 items-center gap-1 text-left" @click="listView.toggle('loose')">
-              <svg class="size-3 shrink-0 transition-transform" :class="{ '-rotate-90': listView.isCollapsed('loose') }" viewBox="0 0 20 20" fill="currentColor"><path d="M5.2 7.2a.75.75 0 0 1 1.06 0L10 10.94l3.74-3.74a.75.75 0 1 1 1.06 1.06l-4.27 4.27a.75.75 0 0 1-1.06 0L5.2 8.26a.75.75 0 0 1 0-1.06Z" /></svg>
-              <span>Other containers</span>
-            </button>
+          <div class="group/sec mt-3 mb-1 flex cursor-pointer items-center gap-1.5 rounded-md py-1 pr-2 pl-1.5 text-[11px] font-semibold tracking-wide uppercase text-base-content/55 transition-colors select-none hover:text-base-content/80" @click="listView.toggle('loose')">
+            <span class="min-w-0 flex-1 truncate">Other containers</span>
             <span class="sec-count normal-case">{{ loose.length }}</span>
+            <svg class="size-3.5 shrink-0 opacity-45 transition group-hover/sec:opacity-90" :class="{ '-rotate-90': listView.isCollapsed('loose') }" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M5.22 8.22a.75.75 0 0 1 1.06 0L10 11.94l3.72-3.72a.75.75 0 1 1 1.06 1.06l-4.25 4.25a.75.75 0 0 1-1.06 0L5.22 9.28a.75.75 0 0 1 0-1.06Z" clip-rule="evenodd" /></svg>
           </div>
           <ul v-if="!listView.isCollapsed('loose')" class="space-y-0.5">
             <li v-for="c in loose" :key="c.id">
