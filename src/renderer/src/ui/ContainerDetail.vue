@@ -120,7 +120,7 @@ const memPct = computed(() => (props.stats && props.stats.memLimit ? (props.stat
         <!-- a DevCatz gateway's container: read-only here, DevCatz starts, stops and removes it -->
         <button v-else-if="gatewayKind" class="btn btn-sm btn-primary" title="DevCatz installs, starts and stops its gateways" @click="gatewayLink(gatewayKind)">Open in DevCatz</button>
         <template v-else>
-          <button v-if="db" class="btn btn-ghost btn-sm gap-1.5" :title="`Open in DBCatz: ${db.engine} on ${db.host}:${db.port}${db.user ? ` as ${db.user}` : ''}, with the password the container was started with`" @click="dbcatzLink(db.id)"><img :src="dbcatzLogo" alt="" class="size-4" draggable="false" />DBCatz</button>
+          <button v-if="db" class="btn btn-ghost btn-sm gap-1.5" :title="`${db.engine} on ${db.host}:${db.port}${db.user ? ` as ${db.user}` : ''}, with the password the container was started with`" @click="dbcatzLink(db.id)"><img :src="dbcatzLogo" alt="" class="size-4" draggable="false" />Open in DBCatz</button>
           <button v-if="running" class="btn btn-sm" @click="act('stop')">Stop</button>
           <button v-else class="btn btn-sm btn-primary" @click="act('start')">Start</button>
           <button class="btn btn-sm" @click="act('restart')">Restart</button>
