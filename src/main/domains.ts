@@ -140,7 +140,8 @@ export class Domains {
    * closed, DoCatz listens on those ports itself (its own names answer; DevCatz's get a page saying to open DevCatz),
    * and lets go of them as soon as DevCatz starts (checked every 2 s while standing in; DevCatz retries its bind).
    */
-  private standIn: Server[] = [];
+  /** The stand-in's listeners by host:port — only those that took their port (see standInCheck). */
+  private standIn = new Map<string, Server>();
   private standInTimer: ReturnType<typeof setInterval> | null = null;
 
   private async devcatzRunning(): Promise<boolean> {
@@ -151,33 +152,40 @@ export class Domains {
   private async standInCheck(): Promise<void> {
     const c = shared().cleanUrls;
     const wanted = !!c?.on && c.by === 'devcatz' && this.devcatz !== null && this.ca !== null && !(await this.devcatzRunning());
-    if (wanted && !this.standIn.length) this.startStandIn(c!.httpsPort, c!.httpPort);
-    else if (!wanted && this.standIn.length) this.stopStandIn();
+    // A port still held when DevCatz had only just quit (or by a DevCatz not seen as running, a development one) is
+    // tried again at every check — it used to count as taken for good, and the names kept their :port until a restart.
+    if (wanted && this.standIn.size < 4) this.startStandIn(c!.httpsPort, c!.httpPort);
+    else if (!wanted && this.standIn.size) this.stopStandIn();
   }
 
+  /** Listens on the ports not yet held (127.0.0.1 and ::1, HTTP and HTTPS); one that is taken drops out, for the next try. */
   private startStandIn(httpsPort: number, httpPort: number): void {
     const handler = (req: IncomingMessage, res: ServerResponse) => this.forward(req, res);
     const upgrade = (req: IncomingMessage, socket: Socket, head: Buffer) => this.upgrade(req, socket, head);
     const https = this.leaf('docatz.localhost');
     for (const host of ['127.0.0.1', '::1']) {
-      const h = createHttp(handler);
-      h.on('upgrade', upgrade);
-      const t = createHttps({ SNICallback: (name, cb) => cb(null, this.context(name)), ...https }, handler);
-      t.on('upgrade', upgrade);
-      for (const [srv, port] of [[h, httpPort], [t, httpsPort]] as const) {
-        srv.on('error', () => srv.close());
+      for (const [tls, port] of [[false, httpPort], [true, httpsPort]] as const) {
+        const key = `${host}:${port}`;
+        if (this.standIn.has(key)) continue;
+        const srv = tls ? createHttps({ SNICallback: (name, cb) => cb(null, this.context(name)), ...https }, handler) : createHttp(handler);
+        srv.on('upgrade', upgrade);
+        srv.on('error', (e: NodeJS.ErrnoException) => {
+          console.warn(`DoCatz stand-in for DevCatz: ${key} — ${e.code ?? e.message}`);
+          if (this.standIn.get(key) === srv) this.standIn.delete(key);
+          srv.close();
+        });
         srv.listen(port, host);
-        this.standIn.push(srv);
+        this.standIn.set(key, srv);
       }
     }
-    this.standInTimer = setInterval(() => void this.devcatzRunning().then((up) => up && this.stopStandIn()), 2000);
+    this.standInTimer ??= setInterval(() => void this.devcatzRunning().then((up) => up && this.stopStandIn()), 2000);
   }
 
   private stopStandIn(): void {
     if (this.standInTimer) clearInterval(this.standInTimer);
     this.standInTimer = null;
-    for (const s of this.standIn) s.close();
-    this.standIn = [];
+    for (const s of this.standIn.values()) s.close();
+    this.standIn.clear();
     this.probe = null;
     this.onChange();
   }
@@ -292,7 +300,7 @@ export class Domains {
     res.setHeader(MARK, '1');
     const port = this.target(req);
     const host = String(req.headers.host ?? '').split(':')[0].toLowerCase();
-    if (!port && this.standIn.length && !host.endsWith(`.docatz.${this.tld()}`)) {
+    if (!port && this.standIn.size && !host.endsWith(`.docatz.${this.tld()}`)) {
       res.writeHead(503, { 'content-type': 'text/html; charset=utf-8' });
       res.end(`<!doctype html><meta charset="utf-8"><title>DevCatz is closed</title><body style="font:15px system-ui;padding:3rem;color:#334"><h2>${host.replace(/[<>&"]/g, '')} is a DevCatz site</h2><p>Open DevCatz to serve it. DoCatz answers here only for its own names while DevCatz is closed.</p>`);
       return;

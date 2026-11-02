@@ -95,8 +95,10 @@ export async function projects(): Promise<DcComposeProject[]> {
     const p = byName.get(name) ?? { name, files: [], dir: c.labels[composeDirLabel] ?? null, containers: 0, running: 0 };
     p.containers++;
     if (c.state === 'running') p.running++;
-    // The override DoCatz adds for the project's .env (envs.ts) is DoCatz's own, not one of the project's files.
-    for (const f of (c.labels[composeFilesLabel] ?? '').split(',').map((x) => x.trim()).filter(Boolean)) if (!p.files.includes(f) && !f.endsWith('.override.yaml') && !f.includes(`${sep}DoCatz${sep}env${sep}`)) p.files.push(f);
+    // The override DoCatz adds for the project's .env (envs.ts) is DoCatz's own, not one of the project's files; so is
+    // DevCatz's per-run override (<DevCatz data>/docker/<project>.env-override.yaml: its .env, host-gateway) when the
+    // project was last run from DevCatz — DoCatz's runs bring their own instead of carrying DevCatz's along.
+    for (const f of (c.labels[composeFilesLabel] ?? '').split(',').map((x) => x.trim()).filter(Boolean)) if (!p.files.includes(f) && !f.endsWith('.override.yaml') && !f.includes(`${sep}DoCatz${sep}env${sep}`) && !f.includes(`${sep}DevCatz${sep}docker${sep}`)) p.files.push(f);
     byName.set(name, p);
   }
   return [...byName.values()].sort((a, b) => a.name.localeCompare(b.name));
