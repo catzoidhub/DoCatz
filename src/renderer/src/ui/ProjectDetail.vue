@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue';
 import type { DcComposeAction, DcComposeProject, DcContainer, DcStats } from '@shared/types';
+import { currentOS } from '@shared/platform';
 import { api, attempt, bytes, changes, composeFile, composeOpen, containerTab, notify, openContainer, isFavorite, openProject, PROJECT_ICON, projectTab, runs, statsHistory, toggleFavorite, token, type ProjectTab } from '../store';
 import ConfirmDialog from '../components/ConfirmDialog.vue';
 import DcNavButtons from './DcNavButtons.vue';
@@ -30,17 +31,31 @@ async function load() {
 }
 watch([() => props.project, changes], load, { immediate: true });
 const dir = computed(() => info.value?.dir ?? props.containers.find((c) => c.workingDir)?.workingDir ?? null);
+/** Windows: the project sits on a drive (C:\, D:\ …) the engine reaches through WSL's mount, where file watchers stay quiet. */
+const onWindowsDrive = computed(() => currentOS === 'windows' && /^[A-Za-z]:[\\/]/.test(dir.value ?? ''));
 const running = computed(() => props.containers.filter((c) => c.state === 'running').length);
+/** Every service up: Up has nothing to start (Build & Up still rebuilds); none up: Restart and Stop have nothing to do. */
+const allUp = computed(() => props.containers.length > 0 && running.value === props.containers.length);
 
 // ---- General: compose actions
 const runToken = ref<string | null>(null);
 const run = computed(() => (runToken.value ? runs.value[runToken.value] : null));
-const busy = computed(() => run.value !== null && !run.value.done);
+/** The action now running: its own button turns into a spinner, every action button is off until it is done. */
+const doing = ref<DcComposeAction | null>(null);
+// The run is not in `runs` until its first event: undefined until then, still busy.
+const busy = computed(() => doing.value !== null && !run.value?.done);
 const confirmDown = ref(false);
 async function compose(action: DcComposeAction) {
+  if (busy.value) return;
+  doing.value = action;
   runToken.value = token();
   await attempt(() => api.composeProject(props.project, action, runToken.value!));
+  // Refused before it ran (no run came back): the buttons are on again.
+  if (!run.value) doing.value = null;
 }
+watch(() => run.value?.done, (done) => done && (doing.value = null));
+/** Stops the running compose; what it already started or stopped stays so (compose does not roll back). */
+const cancel = () => runToken.value && attempt(() => api.runCancel(runToken.value!));
 function editCompose(file: string) {
   composeFile.value = file;
   composeOpen.value = true;
@@ -120,11 +135,11 @@ const rateText = (v: number) => `${bytes(v)}/s`;
         <p class="truncate text-xs opacity-55">Compose project<template v-if="dir"> · {{ dir }}</template></p>
       </div>
       <div class="no-drag flex shrink-0 items-center gap-1">
-        <span v-if="busy" class="loading loading-spinner loading-sm mx-2" />
-        <button class="btn btn-sm btn-primary" :disabled="busy" title="docker compose up --build: rebuild the images, then recreate what changed (a changed .env included)" @click="compose('build-up')">Build &amp; Up</button>
-        <button class="btn btn-sm" :disabled="busy" title="docker compose up: recreates what changed, without building" @click="compose('up')">Up</button>
-        <button class="btn btn-sm" :disabled="busy" @click="compose('restart')">Restart</button>
-        <button class="btn btn-sm" :disabled="busy" @click="compose('stop')">Stop</button>
+        <button class="btn btn-sm btn-primary" :disabled="busy" title="docker compose up --build: rebuild the images, then recreate what changed (a changed .env included)" @click="compose('build-up')"><span v-if="doing === 'build-up'" class="loading loading-spinner loading-xs" /><template v-else>Build &amp; Up</template></button>
+        <button v-if="!allUp || doing === 'up'" class="btn btn-sm" :disabled="busy" title="docker compose up: recreates what changed, without building" @click="compose('up')"><span v-if="doing === 'up'" class="loading loading-spinner loading-xs" /><template v-else>Up</template></button>
+        <button v-if="running || doing === 'restart'" class="btn btn-sm" :disabled="busy" @click="compose('restart')"><span v-if="doing === 'restart'" class="loading loading-spinner loading-xs" /><template v-else>Restart</template></button>
+        <button v-if="running || doing === 'stop'" class="btn btn-sm" :disabled="busy" @click="compose('stop')"><span v-if="doing === 'stop'" class="loading loading-spinner loading-xs" /><template v-else>Stop</template></button>
+        <button v-if="busy" class="btn btn-sm btn-ghost" title="Stop this docker compose run: what it already started or stopped stays so" @click="cancel">Cancel</button>
         <button class="btn btn-ghost btn-sm btn-square" title="Close" @click="openProject = null">✕</button>
       </div>
     </header>
@@ -174,6 +189,21 @@ const rateText = (v: number) => `${bytes(v)}/s`;
                   <button class="btn btn-ghost btn-xs" @click="api.reveal(f)">Show</button>
                 </li>
               </ul>
+              <!-- Windows: a project on a Windows drive is mounted into WSL (/mnt/d/…), where no file-change events arrive -->
+              <details v-if="onWindowsDrive" class="mt-1 rounded-lg bg-base-200/60 px-3 py-2 text-xs">
+                <summary class="cursor-pointer opacity-80">Live reload inside the containers needs polling on Windows</summary>
+                <div class="mt-2 space-y-1.5 opacity-80">
+                  <p>
+                    {{ dir }} is on a Windows drive. Containers see your edits at once, but Windows sends no “file changed” event into Linux, so dev servers
+                    that watch files (<span class="font-mono">node --watch</span>, nodemon, Vite, webpack, air) do not restart or reload on their own.
+                  </p>
+                  <p>
+                    Turn on polling in the service: <span class="font-mono">CHOKIDAR_USEPOLLING=true</span> (Vite, many Node tools),
+                    <span class="font-mono">WATCHPACK_POLLING=true</span> (webpack, Next.js), <span class="font-mono">nodemon -L</span>, or the watcher’s own
+                    poll option (air: <span class="font-mono">poll = true</span>). Or keep the project inside WSL, where events arrive.
+                  </p>
+                </div>
+              </details>
             </div>
           </div>
           <div class="card">
@@ -181,13 +211,14 @@ const rateText = (v: number) => `${bytes(v)}/s`;
               <h2>Deploy</h2>
               <p class="text-xs opacity-60">Runs with the project’s .env in DoCatz (Environment tab) when it has one. <b>Build &amp; Up</b> rebuilds the images and recreates every container whose image or environment changed.</p>
               <div class="flex flex-wrap gap-1.5">
-                <button class="btn btn-sm btn-primary" :disabled="busy" title="docker compose up --build" @click="compose('build-up')">Build &amp; Up</button>
-                <button class="btn btn-sm" :disabled="busy" title="docker compose up, without building" @click="compose('up')">Up</button>
-                <button class="btn btn-sm" :disabled="busy" @click="compose('build')">Build</button>
-                <button class="btn btn-sm" :disabled="busy" @click="compose('pull')">Pull</button>
-                <button class="btn btn-sm" :disabled="busy" @click="compose('restart')">Restart</button>
-                <button class="btn btn-sm" :disabled="busy" @click="compose('stop')">Stop</button>
-                <button class="btn btn-sm btn-outline btn-error" :disabled="busy" @click="confirmDown = true">Down…</button>
+                <button class="btn btn-sm btn-primary" :disabled="busy" title="docker compose up --build" @click="compose('build-up')"><span v-if="doing === 'build-up'" class="loading loading-spinner loading-xs" /><template v-else>Build &amp; Up</template></button>
+                <button v-if="!allUp || doing === 'up'" class="btn btn-sm" :disabled="busy" title="docker compose up, without building" @click="compose('up')"><span v-if="doing === 'up'" class="loading loading-spinner loading-xs" /><template v-else>Up</template></button>
+                <button class="btn btn-sm" :disabled="busy" @click="compose('build')"><span v-if="doing === 'build'" class="loading loading-spinner loading-xs" /><template v-else>Build</template></button>
+                <button class="btn btn-sm" :disabled="busy" @click="compose('pull')"><span v-if="doing === 'pull'" class="loading loading-spinner loading-xs" /><template v-else>Pull</template></button>
+                <button v-if="running || doing === 'restart'" class="btn btn-sm" :disabled="busy" @click="compose('restart')"><span v-if="doing === 'restart'" class="loading loading-spinner loading-xs" /><template v-else>Restart</template></button>
+                <button v-if="running || doing === 'stop'" class="btn btn-sm" :disabled="busy" @click="compose('stop')"><span v-if="doing === 'stop'" class="loading loading-spinner loading-xs" /><template v-else>Stop</template></button>
+                <button class="btn btn-sm btn-outline btn-error" :disabled="busy" @click="confirmDown = true"><span v-if="doing === 'down'" class="loading loading-spinner loading-xs" /><template v-else>Down…</template></button>
+                <button v-if="busy" class="btn btn-sm btn-ghost" title="Stop this docker compose run: what it already started or stopped stays so" @click="cancel">Cancel</button>
               </div>
             </div>
           </div>

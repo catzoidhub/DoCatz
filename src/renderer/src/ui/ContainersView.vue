@@ -175,6 +175,7 @@ const current = computed(() => containers.value.find((c) => c.name === openConta
 // ---- actions
 const busy = ref<Record<string, string>>({});
 async function act(c: DcContainer, action: 'start' | 'stop' | 'restart') {
+  if (busy.value[c.id]) return;
   busy.value = { ...busy.value, [c.id]: action };
   await attempt(() => api.containerAction(c.id, action));
   const { [c.id]: _, ...rest } = busy.value;
@@ -190,10 +191,28 @@ function showProject(project: string, tab: ProjectTab = 'general') {
 }
 const runToken = ref<string | null>(null);
 const confirmDown = ref<string | null>(null);
+/** The compose run each project's row started (up / stop), so its row shows a spinner until that run is done. */
+const projectRun = ref<Record<string, { token: string; action: DcComposeAction }>>({});
+const projectBusy = (p: string) => {
+  const r = projectRun.value[p];
+  return !!r && !runs.value[r.token]?.done;
+};
+/** Stops the row's compose run; what it already started or stopped stays so (compose does not roll back). */
+const cancelProject = (p: string) => {
+  const r = projectRun.value[p];
+  if (r) void attempt(() => api.runCancel(r.token));
+};
 async function compose(project: string, action: DcComposeAction) {
+  if (projectBusy(project)) return;
   const t = token();
   runToken.value = t;
+  projectRun.value = { ...projectRun.value, [project]: { token: t, action } };
   await attempt(() => api.composeProject(project, action, t));
+  // Refused before it ran (no run came back): the row is clickable again. A cancelled run ends as done (error: Cancelled).
+  if (!runs.value[t]) {
+    const { [project]: _, ...rest } = projectRun.value;
+    projectRun.value = rest;
+  }
 }
 const run = computed(() => (runToken.value ? runs.value[runToken.value] : null));
 
@@ -301,10 +320,21 @@ function openCompose() {
                 >
                   <svg viewBox="0 0 20 20" class="size-3.5" :fill="isFavorite(project) ? 'currentColor' : 'none'" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"><path :d="STAR" /></svg>
                 </button>
-                <div class="hidden shrink-0 items-center group-hover:flex">
+                <!-- while compose up / stop runs: a spinner in place of ▶ / ■ (nothing to start again); hovered, it is ✕ to cancel the run -->
+                <button
+                  v-if="projectBusy(project)"
+                  class="group/run btn btn-ghost btn-xs btn-square shrink-0 hover:text-error"
+                  :title="`docker compose ${projectRun[project]?.action}… — click to cancel`"
+                  @click.stop="cancelProject(project)"
+                >
+                  <span class="loading loading-spinner loading-xs group-hover/run:hidden" />
+                  <svg viewBox="0 0 20 20" class="hidden size-3.5 group-hover/run:block" fill="currentColor"><path d="M5.3 5.3a1 1 0 0 1 1.4 0L10 8.6l3.3-3.3a1 1 0 1 1 1.4 1.4L11.4 10l3.3 3.3a1 1 0 0 1-1.4 1.4L10 11.4l-3.3 3.3a1 1 0 0 1-1.4-1.4L8.6 10 5.3 6.7a1 1 0 0 1 0-1.4Z" /></svg>
+                </button>
+                <div v-else class="hidden shrink-0 items-center group-hover:flex">
                   <button class="btn btn-ghost btn-xs btn-square" title=".env in DoCatz" @click="showProject(project, 'env')"><svg viewBox="0 0 20 20" class="size-3.5" fill="currentColor"><path fill-rule="evenodd" d="M8 7a5 5 0 1 1 3.61 4.804l-1.903 1.903A1 1 0 0 1 9 14H8v1a1 1 0 0 1-1 1H6v1a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1v-2a1 1 0 0 1 .293-.707L8.196 8.39A5.002 5.002 0 0 1 8 7Zm5-3a.75.75 0 0 0 0 1.5A1.5 1.5 0 0 1 14.5 7 .75.75 0 0 0 16 7a3 3 0 0 0-3-3Z" clip-rule="evenodd" /></svg></button>
-                  <button class="btn btn-ghost btn-xs btn-square" title="docker compose up" @click="compose(project, 'up')"><svg viewBox="0 0 20 20" class="size-3.5" fill="currentColor"><path d="M6.3 4.2A1 1 0 0 0 5 5.1v9.8a1 1 0 0 0 1.5.86l8.2-4.9a1 1 0 0 0 0-1.72l-8.2-4.9a1 1 0 0 0-.2-.04Z" /></svg></button>
-                  <button class="btn btn-ghost btn-xs btn-square" title="docker compose stop" @click="compose(project, 'stop')"><svg viewBox="0 0 20 20" class="size-3.5" fill="currentColor"><rect x="5" y="5" width="10" height="10" rx="1.5" /></svg></button>
+                  <!-- ▶ while something is down, ■ while something runs: all up shows only ■, all down only ▶ (some up: both) -->
+                  <button v-if="running(byProject.get(project) ?? []) < (byProject.get(project) ?? []).length" class="btn btn-ghost btn-xs btn-square" title="docker compose up" @click="compose(project, 'up')"><svg viewBox="0 0 20 20" class="size-3.5" fill="currentColor"><path d="M6.3 4.2A1 1 0 0 0 5 5.1v9.8a1 1 0 0 0 1.5.86l8.2-4.9a1 1 0 0 0 0-1.72l-8.2-4.9a1 1 0 0 0-.2-.04Z" /></svg></button>
+                  <button v-if="running(byProject.get(project) ?? [])" class="btn btn-ghost btn-xs btn-square" title="docker compose stop" @click="compose(project, 'stop')"><svg viewBox="0 0 20 20" class="size-3.5" fill="currentColor"><rect x="5" y="5" width="10" height="10" rx="1.5" /></svg></button>
                 </div>
               </div>
               <ul v-show="!folded.has(project)" class="mt-0.5 ml-[1.9rem] space-y-0.5 border-l border-base-300/60 pl-2">
@@ -322,8 +352,8 @@ function openCompose() {
                       <div class="truncate text-[11px] opacity-55">{{ imageLine(c) }}<template v-if="portLine(c)"> · {{ portLine(c) }}</template></div>
                     </div>
                     <span v-if="stats[c.id]" class="shrink-0 text-right font-mono text-[10px] leading-tight opacity-55 group-hover:hidden">{{ stats[c.id].cpu.toFixed(0) }}%<br />{{ bytes(stats[c.id].memUsed) }}</span>
-                    <div class="hidden shrink-0 items-center group-hover:flex" @click.stop>
-                      <span v-if="busy[c.id]" class="loading loading-spinner loading-xs" />
+                    <div class="shrink-0 items-center" :class="busy[c.id] ? 'flex' : 'hidden group-hover:flex'" @click.stop>
+                      <span v-if="busy[c.id]" class="loading loading-spinner loading-xs mx-1" :title="`${busy[c.id]}…`" />
                       <template v-else>
                         <button v-if="c.url && c.state === 'running'" class="btn btn-ghost btn-xs btn-square" :title="`Open ${c.url}`" @click="api.openUrl(c.url)"><svg viewBox="0 0 20 20" class="size-3.5" fill="currentColor"><path d="M11 3a1 1 0 1 0 0 2h2.59l-6.3 6.29a1 1 0 1 0 1.42 1.42L15 6.41V9a1 1 0 1 0 2 0V4a1 1 0 0 0-1-1h-5ZM5 5a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2v-3a1 1 0 1 0-2 0v3H5V7h3a1 1 0 0 0 0-2H5Z" /></svg></button>
                         <button v-if="c.state === 'running'" class="btn btn-ghost btn-xs btn-square" title="Stop" @click="act(c, 'stop')"><svg viewBox="0 0 20 20" class="size-3.5" fill="currentColor"><rect x="5" y="5" width="10" height="10" rx="1.5" /></svg></button>
