@@ -9,9 +9,9 @@
   <a href="https://catzoid.com/community">Community</a>
 </p>
 
-A fast, light Docker engine and container manager for macOS (Windows coming): a small Linux VM runs Docker, your
-containers are grouped by compose project with their logs, a terminal and their files, and every container that
-publishes a port gets its own domain — `https://web.shop.docatz.localhost`.
+A fast, light Docker engine and container manager for macOS and Windows: a small Linux VM (WSL 2 on Windows) runs Docker, your
+containers are grouped by compose project with their logs, a terminal and their files, and every container gets its
+own domain without publishing a port — `https://web.shop.docatz.localhost`.
 
 Part of [Catzoid](https://catzoid.com) — free, open-source developer tools with nine lives. All cats, no catch: no
 account, no Pro tier, nothing locked behind a payment.
