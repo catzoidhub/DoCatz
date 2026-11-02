@@ -131,12 +131,12 @@ const memPct = computed(() => (props.stats && props.stats.memLimit ? (props.stat
         </template>
       </div>
     </header>
-    <div class="@container flex shrink-0 items-center gap-2 border-b border-base-300/60 px-4 py-1.5">
+    <div class="flex shrink-0 items-center gap-2 border-b border-base-300/60 px-4 py-1.5">
       <div role="tablist" class="seg min-w-0 overflow-x-auto [scrollbar-width:none]">
         <a v-for="t in TABS" :key="t.id" role="tab" class="seg-item" :class="{ 'is-active': containerTab === t.id }" @click="containerTab = t.id">{{ t.label }}</a>
       </div>
       <span class="flex-1" />
-      <button v-if="db" class="btn btn-sm shrink-0 gap-2 @max-xl:btn-square" aria-label="Open in DBCatz" :title="`Open in DBCatz: ${db.engine} on ${db.host}:${db.port}${db.user ? ` as ${db.user}` : ''}, with the password the container was started with`" @click="dbcatzLink(db.id)"><img :src="dbcatzLogo" alt="" class="size-5 drop-shadow-sm" draggable="false" /><span class="@max-xl:hidden">Open in DBCatz</span></button>
+      <button v-if="db" class="btn btn-sm shrink-0 gap-2" :title="`Open in DBCatz: ${db.engine} on ${db.host}:${db.port}${db.user ? ` as ${db.user}` : ''}, with the password the container was started with`" @click="dbcatzLink(db.id)"><img :src="dbcatzLogo" alt="" class="size-5 drop-shadow-sm" draggable="false" />Open in DBCatz</button>
     </div>
 
     <div class="min-h-0 flex-1">
