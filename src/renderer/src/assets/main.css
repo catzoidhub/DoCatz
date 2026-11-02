@@ -291,6 +291,8 @@ pre,
     box-shadow 120ms ease;
   text-transform: capitalize;
   white-space: nowrap;
+  /* a bar too wide for its row scrolls sideways (the row's buttons stay in view) instead of squeezing its tabs */
+  flex-shrink: 0;
 }
 /* Labels that keep their own case (php.ini, WebSocket). */
 .seg-xs {

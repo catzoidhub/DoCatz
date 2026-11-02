@@ -162,12 +162,12 @@ const rateText = (v: number) => `${bytes(v)}/s`;
         <button class="btn btn-ghost btn-sm btn-square" title="Close" @click="openProject = null">✕</button>
       </div>
     </header>
-    <div class="flex shrink-0 items-center gap-1 border-b border-base-300/60 px-4 py-1.5">
-      <div role="tablist" class="seg">
+    <div class="@container flex shrink-0 items-center gap-2 border-b border-base-300/60 px-4 py-1.5">
+      <div role="tablist" class="seg min-w-0 overflow-x-auto [scrollbar-width:none]">
         <a v-for="t in TABS" :key="t.id" role="tab" class="seg-item" :class="{ 'is-active': projectTab === t.id }" @click="projectTab = t.id">{{ t.label }}</a>
       </div>
       <span class="flex-1" />
-      <button v-if="httpServices.length" class="btn btn-sm gap-2" :title="`Open in DialCatz: an environment with ${httpServices.join(', ')}’s address${httpServices.length > 1 ? 'es' : ''}, and their routes as requests`" @click="dialcatzLink(project)"><img :src="dialcatzLogo" alt="" class="size-5 drop-shadow-sm" draggable="false" />Open in DialCatz</button>
+      <button v-if="httpServices.length" class="btn btn-sm shrink-0 gap-2 @max-2xl:btn-square" aria-label="Open in DialCatz" :title="`Open in DialCatz: an environment with ${httpServices.join(', ')}’s address${httpServices.length > 1 ? 'es' : ''}, and their routes as requests`" @click="dialcatzLink(project)"><img :src="dialcatzLogo" alt="" class="size-5 drop-shadow-sm" draggable="false" /><span class="@max-2xl:hidden">Open in DialCatz</span></button>
     </div>
 
     <div class="min-h-0 flex-1">
