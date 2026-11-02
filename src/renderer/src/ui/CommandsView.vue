@@ -75,8 +75,8 @@ const groups = computed<{ title: string; hint: string; icon: string; items: Cmd[
     icon: 'M11.98 1.8a1 1 0 0 1 .87 1.16L12.2 7H16a1 1 0 0 1 .78 1.63l-7 8.6a1 1 0 0 1-1.76-.8L8.67 12.6H5a1 1 0 0 1-.78-1.63l7-8.82a1 1 0 0 1 .76-.35Z',
     items: [
       { title: 'Build an image', cmd: 'docker build -t my-app .' },
-      { title: 'For Intel and Apple silicon', cmd: 'docker buildx build --platform linux/amd64,linux/arm64 -t my-app .' },
-      { title: 'Run an Intel image', cmd: 'docker run --rm --platform linux/amd64 alpine uname -m', note: engine.value?.host.rosetta ? 'Fast through Rosetta (Engine → Rosetta for Intel images).' : undefined },
+      { title: isWin ? 'For x64 and ARM PCs' : 'For Intel and Apple silicon', cmd: 'docker buildx build --platform linux/amd64,linux/arm64 -t my-app .' },
+      { title: isWin ? 'Run an x64 (amd64) image' : 'Run an Intel image', cmd: 'docker run --rm --platform linux/amd64 alpine uname -m', note: engine.value?.host.rosetta ? 'Fast through Rosetta (Engine → Rosetta for Intel images).' : undefined },
     ],
   },
   {
