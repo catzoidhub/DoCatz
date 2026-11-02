@@ -20,7 +20,8 @@ const logLoading = ref(false);
 
 async function load() {
   if (!engineUp.value) return;
-  loading.value = true;
+  // A background reload (an engine event) keeps the list on screen: the spinner is for a first load only.
+  loading.value = !list.value.length;
   try {
     list.value = await api.builds();
   } catch (e) {

@@ -90,13 +90,22 @@ async function refresh(): Promise<void> {
   }
 }
 
+/** Engine events that change what the window lists (containers, images, volumes, networks). */
+const LIST_EVENTS = new Set([
+  ...['create', 'start', 'stop', 'die', 'destroy', 'kill', 'pause', 'unpause', 'restart', 'rename', 'update', 'oom', 'health_status'].map((a) => `container:${a}`),
+  ...['pull', 'delete', 'tag', 'untag', 'import', 'load', 'prune'].map((a) => `image:${a}`),
+  ...['create', 'destroy', 'prune'].map((a) => `volume:${a}`),
+  ...['create', 'destroy', 'connect', 'disconnect', 'prune'].map((a) => `network:${a}`),
+]);
 let stopEvents: (() => void) | null = null;
 let eventTimer: ReturnType<typeof setTimeout> | null = null;
 async function watchEvents(): Promise<void> {
   if (stopEvents) return;
   try {
     stopEvents = await ops.watchEvents(
-      () => {
+      (type, action) => {
+        // Only what changes a list: healthchecks and DoCatz's own reads run `exec` many times a minute.
+        if (!LIST_EVENTS.has(`${type}:${action.split(':')[0].trim()}`)) return;
         if (eventTimer) return;
         eventTimer = setTimeout(() => {
           eventTimer = null;
