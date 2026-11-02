@@ -1,5 +1,5 @@
 import { computed, ref, watch } from 'vue';
-import { containerTab, openContainer, section, settingsTab, type ContainerTab, type Section } from '../store';
+import { containerTab, openContainer, openProject, projectTab, section, settingsTab, type ContainerTab, type ProjectTab, type Section } from '../store';
 
 /**
  * Back / forward through the screens seen in this window, like a browser (Catzoid #58): the ‹ › buttons (right-click
@@ -10,6 +10,8 @@ import { containerTab, openContainer, section, settingsTab, type ContainerTab, t
 interface Place {
   section: Section;
   container: string | null;
+  /** A compose project's page (its tab in `tab`). */
+  project?: string | null;
   tab: ContainerTab | string;
 }
 interface Entry extends Place {
@@ -23,15 +25,16 @@ const forwardStack = ref<Entry[]>([]);
 const here = ref<Entry | null>(null);
 
 const NAMES: Record<Section, string> = { containers: 'Containers', images: 'Images', volumes: 'Volumes', networks: 'Networks', builds: 'Builds', engine: 'Engine', settings: 'Settings' };
-const TAB_NAMES: Record<string, string> = { info: 'Info', logs: 'Logs', terminal: 'Terminal', files: 'Files', stats: 'Stats', general: 'General', domains: 'Domains', ai: 'AI', updates: 'Updates', about: 'About' };
+const TAB_NAMES: Record<string, string> = { env: 'Environment', containers: 'Containers', monitoring: 'Monitoring', info: 'Info', logs: 'Logs', terminal: 'Terminal', files: 'Files', stats: 'Stats', general: 'General', domains: 'Domains', ai: 'AI', updates: 'Updates', about: 'About' };
 
 function current(): Place {
   if (section.value === 'settings') return { section: 'settings', container: null, tab: settingsTab.value };
+  if (section.value === 'containers' && openProject.value) return { section: 'containers', container: null, project: openProject.value, tab: projectTab.value };
   if (section.value === 'containers') return { section: 'containers', container: openContainer.value, tab: openContainer.value ? containerTab.value : '' };
   return { section: section.value, container: null, tab: '' };
 }
-const labelOf = (p: Place) => [NAMES[p.section], p.container, p.tab ? TAB_NAMES[p.tab] ?? p.tab : ''].filter(Boolean).join(' › ');
-const same = (a: Place | null, b: Place) => !!a && a.section === b.section && a.container === b.container && a.tab === b.tab;
+const labelOf = (p: Place) => [NAMES[p.section], p.project, p.container, p.tab ? TAB_NAMES[p.tab] ?? p.tab : ''].filter(Boolean).join(' › ');
+const same = (a: Place | null, b: Place) => !!a && a.section === b.section && a.container === b.container && (a.project ?? null) === (b.project ?? null) && a.tab === b.tab;
 
 export const canBack = computed(() => backStack.value.length > 0);
 export const canForward = computed(() => forwardStack.value.length > 0);
@@ -39,7 +42,7 @@ export const backList = computed(() => [...backStack.value].reverse());
 export const forwardList = computed(() => [...forwardStack.value].reverse());
 
 let moving = false;
-watch([section, openContainer, containerTab, settingsTab], () => {
+watch([section, openContainer, containerTab, openProject, projectTab, settingsTab], () => {
   if (moving) return;
   const p = current();
   if (same(here.value, p)) return;
@@ -53,6 +56,8 @@ function show(p: Place): void {
   section.value = p.section;
   if (p.section === 'settings') settingsTab.value = p.tab as typeof settingsTab.value;
   if (p.section === 'containers') {
+    openProject.value = p.project ?? null;
+    if (p.project && p.tab) projectTab.value = p.tab as ProjectTab;
     openContainer.value = p.container;
     if (p.container && p.tab) containerTab.value = p.tab as ContainerTab;
   }

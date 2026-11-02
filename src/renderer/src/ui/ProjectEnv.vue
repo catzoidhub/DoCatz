@@ -12,7 +12,8 @@ import RunPanel from './RunPanel.vue';
  * create it from the project's .env or .env.example, edit, lock (values hidden, read-only). Its values go to the
  * containers whenever DoCatz runs the project — the project's own .env stays as DevCatz uses it on this computer.
  */
-const props = defineProps<{ project: string; dir: string | null }>();
+/** `embedded`: a tab of the project page (a toolbar instead of a page header, no Close). */
+const props = defineProps<{ project: string; dir: string | null; embedded?: boolean }>();
 const emit = defineEmits<{ close: [] }>();
 
 const state = ref<DcProjectEnv | null>(null);
@@ -103,9 +104,9 @@ async function recreate() {
 
 <template>
   <section class="flex h-full min-w-0 flex-col">
-    <header class="drag win-top flex h-14 shrink-0 items-end gap-3 border-b border-base-300/60 px-4 pb-2">
+    <header class="flex shrink-0 items-end gap-3 px-4 pb-2" :class="embedded ? 'pt-4' : 'drag win-top h-14 border-b border-base-300/60'">
       <div class="min-w-0 flex-1 pb-0.5">
-        <h1 class="truncate text-base font-semibold tracking-tight">{{ project }} · .env</h1>
+        <h1 v-if="!embedded" class="truncate text-base font-semibold tracking-tight">{{ project }} · .env</h1>
         <p class="truncate text-xs opacity-55">What its containers get when DoCatz runs them. The project’s own .env stays as it is.</p>
       </div>
       <template v-if="state?.exists">
@@ -119,7 +120,7 @@ async function recreate() {
         </button>
         <button class="no-drag btn btn-sm btn-primary" :disabled="run !== null && !run.done" title="docker compose up through DoCatz: containers whose values changed are recreated" @click="recreate">Recreate</button>
       </template>
-      <button class="no-drag btn btn-ghost btn-sm btn-square" title="Close" @click="emit('close')">✕</button>
+      <button v-if="!embedded" class="no-drag btn btn-ghost btn-sm btn-square" title="Close" @click="emit('close')">✕</button>
     </header>
 
     <div class="flex min-h-0 flex-1 flex-col gap-3 p-5">

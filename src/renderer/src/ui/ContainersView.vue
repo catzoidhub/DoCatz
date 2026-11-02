@@ -2,11 +2,11 @@
 import { keyLabel } from '@shared/platform';
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import type { DcComposeAction, DcContainer, DcStats } from '@shared/types';
-import { api, attempt, bytes, composeFile, composeOpen, containers, engineUp, findFocus, findText, openContainer, runs, token } from '../store';
+import { api, attempt, bytes, composeFile, composeOpen, containers, engineUp, findFocus, findText, openContainer, openProject, PROJECT_ICON, projectTab, runs, token, type ProjectTab } from '../store';
 import ContainerDetail from './ContainerDetail.vue';
 import EngineGate from './EngineGate.vue';
 import RunPanel from './RunPanel.vue';
-import ProjectEnv from './ProjectEnv.vue';
+import ProjectDetail from './ProjectDetail.vue';
 import ConfirmDialog from '../components/ConfirmDialog.vue';
 import { serviceLook } from './logos';
 
@@ -61,10 +61,15 @@ async function act(c: DcContainer, action: 'start' | 'stop' | 'restart') {
   const { [c.id]: _, ...rest } = busy.value;
   busy.value = rest;
 }
-/** A compose project's .env in DoCatz, open on the right instead of a container. */
-const envProject = ref<string | null>(null);
-const envDir = computed(() => containers.value.find((c) => c.project === envProject.value)?.workingDir ?? null);
-watch(openContainer, (c) => c && (envProject.value = null));
+/** A compose project's page on the right (instead of a container's): clicking its name opens it. */
+watch(openContainer, (c) => c && (openProject.value = null));
+watch(openProject, (p) => p && (openContainer.value = null));
+const projectContainers = computed(() => containers.value.filter((c) => c.project === openProject.value));
+function showProject(project: string, tab: ProjectTab = 'general') {
+  if (!project) return toggle(project);
+  openProject.value = project;
+  projectTab.value = tab;
+}
 const runToken = ref<string | null>(null);
 const confirmDown = ref<string | null>(null);
 async function compose(project: string, action: DcComposeAction) {
@@ -110,17 +115,19 @@ function openCompose() {
         <section v-for="[project, list] in groups" :key="project" class="mb-3">
           <!-- the compose project: its name, how many run, and compose actions on hover -->
           <div class="group flex items-center gap-2 rounded-lg px-2 py-1.5">
-            <button class="flex min-w-0 flex-1 items-center gap-2 text-left" @click="toggle(project)">
+            <button class="flex min-w-0 flex-1 items-center gap-2 rounded-lg text-left" :class="{ 'text-primary': project && openProject === project }" :title="project ? `${project}: General, Environment, Domains, Containers, Monitoring` : ''" @click="showProject(project)">
               <span class="grid size-6 shrink-0 place-items-center rounded-md" :class="project ? 'bg-primary/15 text-primary' : 'bg-base-300/60 opacity-70'">
-                <svg v-if="project" viewBox="0 0 20 20" class="size-3.5" fill="currentColor"><path d="M2 5.5A2.5 2.5 0 0 1 4.5 3h3.38a2 2 0 0 1 1.41.59L10.7 5H15.5A2.5 2.5 0 0 1 18 7.5v7A2.5 2.5 0 0 1 15.5 17h-11A2.5 2.5 0 0 1 2 14.5v-9Z" /></svg>
+                <svg v-if="project" viewBox="0 0 20 20" class="size-3.5" fill="currentColor"><path :d="PROJECT_ICON" /></svg>
                 <svg v-else viewBox="0 0 20 20" class="size-3.5" fill="currentColor"><path fill-rule="evenodd" clip-rule="evenodd" d="M3 6.5A2.5 2.5 0 0 1 5.5 4h9A2.5 2.5 0 0 1 17 6.5v7a2.5 2.5 0 0 1-2.5 2.5h-9A2.5 2.5 0 0 1 3 13.5v-7Z" /></svg>
               </span>
               <span class="truncate text-[13px] font-semibold tracking-tight" :class="{ 'opacity-70': !project }">{{ project || 'Other containers' }}</span>
               <span class="sec-count shrink-0" :class="{ 'is-live': list.some((c) => c.state === 'running') }">{{ list.filter((c) => c.state === 'running').length }}/{{ list.length }}</span>
-              <svg viewBox="0 0 20 20" class="size-3 shrink-0 opacity-40 transition-transform" :class="{ '-rotate-90': collapsed.has(project) }" fill="currentColor"><path d="M5.5 7.5 10 12l4.5-4.5h-9Z" /></svg>
+            </button>
+            <button class="btn btn-ghost btn-xs btn-square shrink-0" :title="collapsed.has(project) ? 'Show its services' : 'Hide its services'" @click="toggle(project)">
+              <svg viewBox="0 0 20 20" class="size-3 opacity-50 transition-transform" :class="{ '-rotate-90': collapsed.has(project) }" fill="currentColor"><path d="M5.5 7.5 10 12l4.5-4.5h-9Z" /></svg>
             </button>
             <div v-if="project" class="flex shrink-0 items-center opacity-0 transition-opacity group-hover:opacity-100">
-              <button class="btn btn-ghost btn-xs btn-square" title=".env in DoCatz: the values its containers get" @click="envProject = project; openContainer = null"><svg viewBox="0 0 20 20" class="size-3.5" fill="currentColor"><path fill-rule="evenodd" d="M8 7a5 5 0 1 1 3.61 4.804l-1.903 1.903A1 1 0 0 1 9 14H8v1a1 1 0 0 1-1 1H6v1a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1v-2a1 1 0 0 1 .293-.707L8.196 8.39A5.002 5.002 0 0 1 8 7Zm5-3a.75.75 0 0 0 0 1.5A1.5 1.5 0 0 1 14.5 7 .75.75 0 0 0 16 7a3 3 0 0 0-3-3Z" clip-rule="evenodd" /></svg></button>
+              <button class="btn btn-ghost btn-xs btn-square" title=".env in DoCatz: the values its containers get" @click="showProject(project, 'env')"><svg viewBox="0 0 20 20" class="size-3.5" fill="currentColor"><path fill-rule="evenodd" d="M8 7a5 5 0 1 1 3.61 4.804l-1.903 1.903A1 1 0 0 1 9 14H8v1a1 1 0 0 1-1 1H6v1a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1v-2a1 1 0 0 1 .293-.707L8.196 8.39A5.002 5.002 0 0 1 8 7Zm5-3a.75.75 0 0 0 0 1.5A1.5 1.5 0 0 1 14.5 7 .75.75 0 0 0 16 7a3 3 0 0 0-3-3Z" clip-rule="evenodd" /></svg></button>
               <button class="btn btn-ghost btn-xs btn-square" title="docker compose up (recreates what changed)" @click="compose(project, 'up')"><svg viewBox="0 0 20 20" class="size-3.5" fill="currentColor"><path d="M6.3 4.2A1 1 0 0 0 5 5.1v9.8a1 1 0 0 0 1.5.86l8.2-4.9a1 1 0 0 0 0-1.72l-8.2-4.9a1 1 0 0 0-.2-.04Z" /></svg></button>
               <button class="btn btn-ghost btn-xs btn-square" title="docker compose restart" @click="compose(project, 'restart')"><svg viewBox="0 0 20 20" class="size-3.5" fill="currentColor"><path fill-rule="evenodd" d="M15.3 7.3A6 6 0 1 0 16 11a1 1 0 1 1 2 0 8 8 0 1 1-2.3-5.6V4a1 1 0 1 1 2 0v4a1 1 0 0 1-1 1h-4a1 1 0 1 1 0-2h2.6Z" clip-rule="evenodd" /></svg></button>
               <button class="btn btn-ghost btn-xs btn-square" title="docker compose stop" @click="compose(project, 'stop')"><svg viewBox="0 0 20 20" class="size-3.5" fill="currentColor"><rect x="5" y="5" width="10" height="10" rx="1.5" /></svg></button>
@@ -172,7 +179,7 @@ function openCompose() {
     </aside>
 
     <!-- the open container -->
- <ProjectEnv v-if="envProject" :key="envProject" :project="envProject" :dir="envDir" class="min-w-0 flex-1" @close="envProject = null" />
+ <ProjectDetail v-if="openProject && projectContainers.length" :key="openProject" :project="openProject" :containers="projectContainers" :stats="stats" class="min-w-0 flex-1" />
     <ContainerDetail v-else-if="current" :key="current.id" :container="current" :stats="stats[current.id] ?? null" class="min-w-0 flex-1" />
     <div v-else class="drag grid min-w-0 flex-1 place-items-center p-8 text-center">
       <div class="no-drag max-w-sm space-y-3">

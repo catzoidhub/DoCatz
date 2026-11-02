@@ -39,6 +39,12 @@ export const section = ref<Section>('containers');
 export const openContainer = ref<string | null>(null);
 export type ContainerTab = 'info' | 'logs' | 'terminal' | 'files' | 'stats';
 export const containerTab = ref<ContainerTab>('info');
+/** The open compose project's page (as a Dokploy compose service), and its tab. */
+export const openProject = ref<string | null>(null);
+export type ProjectTab = 'general' | 'env' | 'domains' | 'containers' | 'monitoring';
+export const projectTab = ref<ProjectTab>('general');
+/** A compose project's icon: a stack of layers (services together), not a folder. */
+export const PROJECT_ICON = 'M3.196 12.87l-.825.483a.75.75 0 0 0 0 1.294l7.25 4.25a.75.75 0 0 0 .758 0l7.25-4.25a.75.75 0 0 0 0-1.294l-.825-.484-5.666 3.322a2.25 2.25 0 0 1-2.276 0L3.196 12.87ZM3.196 8.87l-.825.483a.75.75 0 0 0 0 1.294l7.25 4.25a.75.75 0 0 0 .758 0l7.25-4.25a.75.75 0 0 0 0-1.294l-.825-.484-5.666 3.322a2.25 2.25 0 0 1-2.276 0L3.196 8.87ZM10.38 1.103a.75.75 0 0 0-.76 0l-7.25 4.25a.75.75 0 0 0 0 1.294l7.25 4.25a.75.75 0 0 0 .76 0l7.25-4.25a.75.75 0 0 0 0-1.294l-7.25-4.25Z';
 /** A compose file open in the compose dialog. */
 export const composeFile = ref<string | null>(null);
 export const composeOpen = ref(false);
