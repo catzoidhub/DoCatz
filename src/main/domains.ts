@@ -642,15 +642,17 @@ export class Domains {
 
   /**
    * Uninstall (DoCatz TODO #33, the rule DevCatz follows too): DoCatz leaves `usedBy`; the forwarding and resolver go
-   * only when no other installed app is listed there.
+   * only when no other installed app is listed there. `removeCa` (the shared settings go too): the local CA DoCatz made
+   * leaves the trusted roots as well, so no trusted certificate is left whose files are gone.
    */
-  async uninstall(): Promise<void> {
+  async uninstall(removeCa = false): Promise<void> {
     const d = shared();
     const others = (d.usedBy ?? []).filter((a) => a !== ME);
     writeShared({ domains: { usedBy: others } });
     // Only apps still installed count (a listed app that is gone keeps nothing alive).
     const installed = await Promise.all(others.map((a) => (a === 'devcatz' ? findCatzoidApp('DevCatz', 'devcatz', 'com.mrcatz.devcatz').catch(() => null) : Promise.resolve('unknown'))));
     if (installed.some(Boolean)) return;
+    if (removeCa && d.ca?.by === ME && this.ca && (await this.isTrusted().catch(() => false))) await this.trust(false).catch((e) => console.warn('uninstall: CA still trusted:', (e as Error).message));
     await uninstallForward('DoCatz wants to remove the port forwarding it installed.').catch(() => undefined);
     await uninstallResolver(this.tld(), DNS_HOST, 'DoCatz wants to remove the resolver it installed.').catch(() => undefined);
   }

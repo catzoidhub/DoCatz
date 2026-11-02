@@ -242,7 +242,7 @@ function api(): DoCatzApi {
     reportConfigure: async (crash) => reporter.configure(crash),
     uninstallPlan: () => uninstallPlan(),
     uninstallRun: (confirm, shared) =>
-      uninstallRun(confirm, shared, async () => {
+      uninstallRun(confirm, shared, async (withShared) => {
         updater.stop();
         reporter.stop();
         for (const t of terms.values()) t.socket.destroy();
@@ -250,7 +250,7 @@ function api(): DoCatzApi {
         await engine.reset('reset').catch((e) => console.warn('uninstall: VM not removed:', (e as Error).message));
         removeContext();
         await setCliPath(false).catch(() => undefined);
-        await domains.uninstall();
+        await domains.uninstall(withShared);
         domains.stop();
       }),
     settings: async () => settings(),

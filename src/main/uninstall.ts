@@ -34,8 +34,8 @@ const SAFE_STORAGE = 'DoCatz Safe Storage';
 const SHARED_KEYS = 'Catzoid AI';
 const OTHERS: { name: string; id: string }[] = [
   { name: 'DevCatz', id: 'com.mrcatz.devcatz' },
+  { name: 'DBCatz', id: 'com.mrcatz.dbcatz' },
   { name: 'DialCatz', id: 'com.mrcatz.dialcatz' },
-  { name: 'DoCatz', id: 'com.mrcatz.docatz' },
 ];
 
 const home = homedir();
@@ -119,19 +119,29 @@ export async function uninstallPlan(): Promise<DcUninstallPlan> {
   return { items, shared, otherApps, homebrew, dryRun: dryRun() };
 }
 
+/** The shared CA is DoCatz's to remove: DoCatz made it and no other app is listed as using the domains. */
+const ownCa = () => readShared().domains?.ca?.by === 'docatz' && !(readShared().domains?.usedBy ?? []).some((a) => a !== 'docatz');
+
 const q = (s: string) => `'${s.replace(/'/g, `'\\''`)}'`;
 
 /** Removes DoCatz after it quits. `shared`: the shared Catzoid settings too. `beforeQuit` deletes the VM, the context and the PATH lines. */
-export async function uninstallRun(confirm: string, shared: boolean, beforeQuit: () => Promise<void>): Promise<DcUninstallPlan> {
+export async function uninstallRun(confirm: string, shared: boolean, beforeQuit: (withShared: boolean) => Promise<void>): Promise<DcUninstallPlan> {
   if (confirm.trim() !== 'DoCatz') throw new Error('Type DoCatz to confirm');
   const plan = await uninstallPlan();
   const withShared = shared;
   if (plan.dryRun) return { ...plan, shared: withShared ? plan.shared : [] };
 
-  await beforeQuit();
+  await beforeQuit(withShared);
   if (isWin) {
-    if (withShared) for (const p of readShared().ai?.keys ?? []) await setSharedKey(p as DcAiProvider, '').catch(() => undefined);
-    const folders = [app.getPath('userData'), DOCATZ_HOME, ...winLeftovers().map((f) => f.path), ...(withShared && existsSync(SHARED_DIR) ? [SHARED_DIR] : [])];
+    // The shared settings as on macOS: shared.json, the AI keys, and the CA only when DoCatz made it and no other app
+    // uses it — never the whole Catzoid folder, which the other apps keep their own things in.
+    const sharedPaths: string[] = [];
+    if (withShared) {
+      for (const p of readShared().ai?.keys ?? []) await setSharedKey(p as DcAiProvider, '').catch(() => undefined);
+      sharedPaths.push(join(SHARED_DIR, 'shared.json'));
+      if (ownCa()) sharedPaths.push(join(SHARED_DIR, 'ca'));
+    }
+    const folders = [app.getPath('userData'), DOCATZ_HOME, ...winLeftovers().map((f) => f.path), ...sharedPaths];
     await afterQuitWin(bundle(), folders);
     setImmediate(() => app.exit(0));
     return plan;
@@ -143,7 +153,7 @@ export async function uninstallRun(confirm: string, shared: boolean, beforeQuit:
   }
   if (withShared) {
     lines.push(`rm -f ${q(join(SHARED_DIR, 'shared.json'))}`);
-    if (readShared().domains?.ca?.by === 'docatz' && !(readShared().domains?.usedBy ?? []).some((a) => a !== 'docatz')) lines.push(`rm -rf ${q(join(SHARED_DIR, 'ca'))}`);
+    if (ownCa()) lines.push(`rm -rf ${q(join(SHARED_DIR, 'ca'))}`);
     lines.push(`rmdir ${q(SHARED_DIR)} 2>/dev/null`);
     for (const p of readShared().ai?.keys ?? []) lines.push(`/usr/bin/security delete-generic-password -s ${q(SHARED_KEYS)} -a ${q(p)} >/dev/null 2>&1`);
   }
@@ -197,7 +207,7 @@ Wait { Test-Path $exe }` : ''}
 # The docatz:// link Electron registered for this user (the uninstaller leaves it), when it still points here.
 $link = 'HKCU:\Software\Classes\docatz'; if ((Get-ItemProperty "$link\shell\open\command").'(default)' -like "*$exe*") { Remove-Item -Recurse -Force $link }
 Step 2
-foreach ($p in @(${folders.map(pq).join(', ')})) { if (Test-Path $p) { try { [Microsoft.VisualBasic.FileIO.FileSystem]::DeleteDirectory($p, 'OnlyErrorDialogs', 'SendToRecycleBin') } catch { Remove-Item -Recurse -Force $p } }; [Windows.Forms.Application]::DoEvents() }
+foreach ($p in @(${folders.map(pq).join(', ')})) { if (Test-Path $p) { try { if (Test-Path $p -PathType Container) { [Microsoft.VisualBasic.FileIO.FileSystem]::DeleteDirectory($p, 'OnlyErrorDialogs', 'SendToRecycleBin') } else { [Microsoft.VisualBasic.FileIO.FileSystem]::DeleteFile($p, 'OnlyErrorDialogs', 'SendToRecycleBin') } } catch { Remove-Item -Recurse -Force $p } }; [Windows.Forms.Application]::DoEvents() }
 Step 3
 $title.Text = 'DoCatz has been removed'
 $note.Text = 'Project folders your containers used are not touched. Its data is in the Recycle Bin until you empty it.'

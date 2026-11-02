@@ -32,6 +32,8 @@ export function wordsFor(os: OS) {
     home: win ? '%USERPROFILE%\\' : '~/',
     /** The path separator as written on this OS. */
     sep: win ? '\\' : '/',
+    /** How the OS asks before a change outside the user's folders ("…: macOS asks for your password"). */
+    adminAsk: mac ? 'macOS asks for your password' : win ? 'Windows asks for permission' : 'the system asks for your password',
     fileManager: mac ? 'Finder' : win ? 'File Explorer' : 'the file manager',
     tray: mac ? 'menu bar' : 'system tray',
     revealIn: mac ? 'Reveal in Finder' : win ? 'Show in File Explorer' : 'Show in folder',
