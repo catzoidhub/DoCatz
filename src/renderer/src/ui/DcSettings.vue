@@ -1,0 +1,293 @@
+<script setup lang="ts">
+import { keyLabel, words } from '@shared/platform';
+import { computed, onMounted, ref, watch } from 'vue';
+import { aiProvider, DC_AI_FEATURES, DC_AI_PROVIDERS, type DcAiFeature, type DcAiProvider, type DcReportSettings, type Theme } from '@shared/types';
+import { api, attempt, notify, saveSettings, settings, settingsTab } from '../store';
+import DcNavButtons from './DcNavButtons.vue';
+import DcModelPicker from './DcModelPicker.vue';
+import AboutCard from './AboutCard.vue';
+import DomainsCard from './DomainsCard.vue';
+import DcUpdates from './DcUpdates.vue';
+
+/**
+ * Settings (the rail's last item, ⌘,): General (the theme; Privacy: crash reports), Domains (shared with DevCatz,
+ * TODO #61), AI (provider, its API key, model, a switch per feature), Updates and About — the same tabs as DialCatz,
+ * plus Domains.
+ */
+const tab = settingsTab;
+const TABS = [
+  { id: 'general', label: 'General' },
+  { id: 'domains', label: 'Domains' },
+  { id: 'ai', label: 'AI' },
+  { id: 'updates', label: 'Updates' },
+  { id: 'about', label: 'About' },
+] as const;
+const THEMES: { value: Theme; label: string; hint: string }[] = [
+  { value: 'system', label: 'Auto', hint: `Follows ${words.os}` },
+  { value: 'light', label: 'Light', hint: 'Always light' },
+  { value: 'dark', label: 'Dark', hint: 'Always dark' },
+];
+
+const s = computed(() => settings.value!);
+const ai = computed(() => s.value.ai);
+const info = computed(() => aiProvider(ai.value.provider));
+const hasKey = computed(() => ai.value.keys.includes(ai.value.provider));
+const needsKey = computed(() => !!info.value.keyUrl);
+const editableUrl = computed(() => ai.value.provider === 'zai' || ai.value.provider === 'ollama' || ai.value.provider === 'openai-compatible');
+
+const keyInput = ref('');
+const replacing = ref(false);
+const modelInput = ref('');
+const urlInput = ref('');
+const loaded = ref<Partial<Record<DcAiProvider, string[]>>>({});
+const loadingModels = ref(false);
+const testing = ref(false);
+const tested = ref<{ ok: boolean; text: string } | null>(null);
+
+// The fields follow the chosen provider.
+watch(
+  () => ai.value.provider,
+  () => {
+    modelInput.value = ai.value.models[ai.value.provider] ?? info.value.models[0] ?? '';
+    urlInput.value = ai.value.baseUrls[ai.value.provider] ?? info.value.baseUrl;
+    keyInput.value = '';
+    replacing.value = false;
+    tested.value = null;
+  },
+  { immediate: true },
+);
+// The model / address changed in another Catzoid app (they share them): show the new value.
+watch(
+  () => ai.value.models[ai.value.provider],
+  (m) => {
+    if (m !== undefined && m !== modelInput.value) modelInput.value = m;
+  },
+);
+watch(
+  () => ai.value.baseUrls[ai.value.provider],
+  (u) => (urlInput.value = u ?? info.value.baseUrl),
+);
+const modelList = computed(() => [...new Set([...(loaded.value[ai.value.provider] ?? []), ...info.value.models])]);
+/** Per provider: model → null (works with the key) or why not; checks add up. */
+const probed = ref<Partial<Record<DcAiProvider, Record<string, string | null>>>>({});
+const probing = ref(false);
+async function probe(list: string[]) {
+  probing.value = true;
+  const r = await attempt(() => api.aiProbe(ai.value.provider, list));
+  probing.value = false;
+  if (!r) return;
+  probed.value = { ...probed.value, [ai.value.provider]: { ...(probed.value[ai.value.provider] ?? {}), ...r } };
+  const ok = list.filter((m) => r[m] === null);
+  notify(ok.length ? 'success' : 'error', ok.length ? `${ok.length} of ${list.length} models work with this key` : `None of ${list.length} models answered with this key: ${Object.values(r).find((x) => x) ?? ''}`);
+  // The chosen model does not work but another does: pick the first that works.
+  if (ok.length && typeof r[modelInput.value] === 'string') await chooseModel(ok[0]);
+}
+async function chooseModel(m: string) {
+  modelInput.value = m;
+  await saveModel();
+}
+
+const toggleFeature = (f: DcAiFeature, on: boolean) => saveSettings({ ai: { off: on ? ai.value.off.filter((x) => x !== f) : [...ai.value.off, f] } });
+
+async function saveKey() {
+  const k = keyInput.value.trim();
+  if (!k) return;
+  const r = await attempt(() => api.setAiKey(ai.value.provider, k), `${info.value.name} key saved`);
+  if (r) {
+    settings.value = r;
+    keyInput.value = '';
+    replacing.value = false;
+    tested.value = null;
+  }
+}
+async function removeKey() {
+  const r = await attempt(() => api.setAiKey(ai.value.provider, ''), 'Key removed');
+  if (r) settings.value = r;
+}
+async function saveModel() {
+  const m = modelInput.value.trim();
+  if (m === (ai.value.models[ai.value.provider] ?? '')) return;
+  await saveSettings({ ai: { models: { [ai.value.provider]: m } } });
+  tested.value = null;
+}
+async function saveUrl() {
+  const u = urlInput.value.trim();
+  await saveSettings({ ai: { baseUrls: { [ai.value.provider]: u === info.value.baseUrl ? '' : u } } });
+  tested.value = null;
+}
+async function loadModels() {
+  loadingModels.value = true;
+  const list = await attempt(() => api.aiModels(ai.value.provider));
+  loadingModels.value = false;
+  if (!list) return;
+  loaded.value = { ...loaded.value, [ai.value.provider]: list };
+  notify('info', list.length ? `${list.length} models from ${info.value.name}` : `${info.value.name} listed no models`);
+}
+async function test() {
+  testing.value = true;
+  tested.value = null;
+  try {
+    tested.value = { ok: true, text: `${await api.aiTest()} answered` };
+  } catch (e) {
+    tested.value = { ok: false, text: String((e as Error).message ?? e).replace(/^Error invoking remote method '[^']+': (Error: )?/, '') };
+  }
+  testing.value = false;
+}
+
+// General → Privacy: Send crash reports (Catzoid #65), off until the user turns it on.
+const reports = ref<DcReportSettings | null>(null);
+onMounted(async () => (reports.value = await api.reportSettings().catch(() => null)));
+async function setCrash(on: boolean) {
+  reports.value = (await attempt(() => api.reportConfigure(on))) ?? reports.value;
+}
+const site = ref('');
+onMounted(async () => (site.value = (await api.appInfo().catch(() => null))?.site ?? ''));
+
+</script>
+
+<template>
+  <div class="flex h-full flex-col overflow-hidden bg-base-100">
+    <!-- Laid out like DialCatz's Settings: ‹ › on top, then the title with the tabs beside it. -->
+    <header class="drag win-top border-b border-base-300/60 px-6 pt-3 pb-4">
+      <div class="no-drag mb-2 w-fit"><DcNavButtons /></div>
+      <div class="flex items-center gap-3">
+        <h1 class="text-lg font-semibold tracking-tight">Settings</h1>
+        <div role="tablist" class="no-drag seg ml-3">
+          <button v-for="t in TABS" :key="t.id" role="tab" class="seg-item normal-case" :class="{ 'is-active': tab === t.id }" :aria-selected="tab === t.id" @click="tab = t.id">{{ t.label }}</button>
+        </div>
+      </div>
+    </header>
+
+    <div class="min-h-0 flex-1 overflow-y-auto px-7 pt-6 pb-9">
+      <div class="mx-auto flex w-full max-w-3xl flex-col gap-6">
+        <!-- Appearance -->
+        <div v-if="tab === 'general'" class="card">
+          <div class="card-body">
+            <div class="flex items-center gap-2"><h2>Appearance</h2><span class="badge badge-ghost badge-sm" title="Change it here and every Catzoid app follows">Shared with Catzoid apps</span></div>
+            <div class="flex items-center gap-3">
+              <span class="w-28">Theme</span>
+              <div class="join">
+                <button v-for="m in THEMES" :key="m.value" class="btn btn-sm join-item" :class="{ 'btn-active btn-primary': s.theme === m.value }" :title="m.hint" @click="saveSettings({ theme: m.value })">{{ m.label }}</button>
+              </div>
+            </div>
+            <p class="text-xs opacity-60">Auto follows {{ words.os }} ({{ words.appearanceSettings }}). All Catzoid apps use the same theme.</p>
+          </div>
+        </div>
+        <div v-if="tab === 'general'" class="card">
+          <div class="card-body">
+            <h2>Privacy</h2>
+            <div class="opt-row">
+              <span class="flex flex-col">
+                <span class="label-caps">Send crash reports</span>
+                <span class="text-xs opacity-50">When DoCatz crashes or hits an error, send the error to Catzoid so it gets fixed. Never environment values, log lines or file paths.<template v-if="reports?.queued"> {{ reports.queued }} waiting to be sent.</template> <a v-if="site" class="link" @click="api.openUrl(`${site}/docs/privacy-and-data`)">What is sent</a></span>
+              </span>
+              <input type="checkbox" class="toggle toggle-sm toggle-primary" :checked="reports?.crash === true" @change="setCrash(($event.target as HTMLInputElement).checked)" />
+            </div>
+          </div>
+        </div>
+
+        <!-- AI -->
+        <template v-if="tab === 'ai'">
+          <div class="card">
+            <div class="card-body">
+              <h2>AI</h2>
+              <label class="flex cursor-pointer items-start gap-3">
+                <input type="checkbox" class="toggle toggle-primary toggle-sm mt-0.5" :checked="ai.enabled" @change="saveSettings({ ai: { enabled: ($event.target as HTMLInputElement).checked } })" />
+                <span>
+                  Use AI in DoCatz
+                  <span class="block text-xs opacity-60">Takes plain-word commands ({{ keyLabel('mod+K') }}), explains why a container fails from its logs, and writes or fixes compose files and Dockerfiles. Nothing is sent until you press an AI button; every one has <b>Preview what is sent</b>, and nothing it suggests runs without your click. This switch is for DoCatz only; the provider below is shared with all Catzoid apps.</span>
+                </span>
+              </label>
+            </div>
+          </div>
+
+          <div class="card" :class="{ 'opacity-60': !ai.enabled }">
+            <div class="card-body">
+              <div class="flex items-center gap-2"><h2>Provider</h2><span class="badge badge-ghost badge-sm" title="Change the provider, model or key in any Catzoid app and the others follow">Shared with Catzoid apps</span></div>
+              <div class="flex items-center gap-3">
+                <span class="w-28 shrink-0">Provider</span>
+                <select class="select select-sm min-w-0 flex-1" :value="ai.provider" @change="saveSettings({ ai: { provider: ($event.target as HTMLSelectElement).value as DcAiProvider } })">
+                  <option v-for="p in DC_AI_PROVIDERS" :key="p.id" :value="p.id">{{ p.name }}{{ ai.keys.includes(p.id) ? ' · key saved' : '' }}</option>
+                </select>
+              </div>
+
+              <!-- API key -->
+              <div v-if="needsKey || ai.provider === 'openai-compatible'" class="flex items-start gap-3">
+                <span class="w-28 shrink-0 pt-1.5">API key</span>
+                <div class="min-w-0 flex-1 space-y-1.5">
+                  <div v-if="hasKey && !replacing" class="flex items-center gap-2">
+                    <span class="input input-sm flex min-w-0 flex-1 items-center gap-2 text-xs opacity-80"><span class="status status-success status-xs shrink-0" /><span class="truncate">Saved in the {{ words.secretStoreFull }} (Catzoid AI)</span></span>
+                    <button class="btn btn-sm" @click="replacing = true">Replace</button>
+                    <button class="btn btn-ghost btn-sm text-error" @click="removeKey">Remove</button>
+                  </div>
+                  <form v-else class="flex items-center gap-2" @submit.prevent="saveKey">
+                    <input v-model="keyInput" type="password" class="input input-sm min-w-0 flex-1 font-mono text-xs" :placeholder="ai.provider === 'openai-compatible' ? 'Optional: the server’s token' : `Paste your ${info.name} API key`" autocomplete="off" spellcheck="false" />
+                    <button class="btn btn-primary btn-sm" :disabled="!keyInput.trim()">Save</button>
+                    <button v-if="replacing" type="button" class="btn btn-ghost btn-sm" @click="replacing = false; keyInput = ''">Cancel</button>
+                  </form>
+                  <p class="text-xs opacity-60">
+                    Kept only on {{ words.thisComputer }} in the {{ words.secretStore }}, shared with Catzoid apps, never shown again or sent anywhere but {{ info.name }}.
+                    <a v-if="info.keyUrl" class="link" @click="api.openUrl(info.keyUrl)">Get a key</a>
+                  </p>
+                </div>
+              </div>
+
+              <!-- Server address -->
+              <div class="flex items-start gap-3">
+                <span class="w-28 shrink-0 pt-1.5">Address</span>
+                <div class="min-w-0 flex-1 space-y-1.5">
+                  <input v-if="editableUrl" v-model="urlInput" class="input input-sm w-full font-mono text-xs" :placeholder="info.baseUrl" spellcheck="false" @change="saveUrl" @keydown.enter="saveUrl" />
+                  <span v-else class="input input-sm flex w-full items-center font-mono text-xs opacity-60">{{ info.baseUrl }}</span>
+                  <p v-if="ai.provider === 'zai'" class="text-xs opacity-60">Use a <b>Standard API key</b> (pay-as-you-go balance). GLM Coding Plan keys (ZCode and other coding tools) are only for Z.ai’s supported tools and answer “insufficient balance” here. Keys from bigmodel.cn (mainland China) use <code>https://open.bigmodel.cn/api/paas/v4</code>.</p>
+                  <p v-else-if="ai.provider === 'ollama'" class="text-xs opacity-60">Runs on {{ words.thisComputer }}, nothing leaves it. Install from ollama.com, then e.g. <code>ollama pull qwen2.5-coder</code>.</p>
+                  <p v-else-if="ai.provider === 'openai-compatible'" class="text-xs opacity-60">Any server with an OpenAI-style <code>/chat/completions</code>: LM Studio, vLLM, LiteLLM, a company gateway.</p>
+                </div>
+              </div>
+
+              <!-- Model -->
+              <div class="flex items-start gap-3">
+                <span class="w-28 shrink-0 pt-1.5">Model</span>
+                <div class="min-w-0 flex-1 space-y-1.5">
+                  <div class="flex items-center gap-2">
+                    <DcModelPicker :model-value="modelInput" :models="modelList" :status="probed[ai.provider]" :checking="probing" :can-check="!needsKey || hasKey" :placeholder="info.models[0] ?? 'model id'" @update:model-value="chooseModel" @check="probe" />
+                    <button class="btn btn-sm" :disabled="loadingModels || (needsKey && !hasKey)" :title="needsKey && !hasKey ? 'Save the API key first' : `Ask ${info.name} for its models`" @click="loadModels"><span v-if="loadingModels" class="loading loading-spinner loading-xs" />Load models</button>
+                  </div>
+                  <p class="text-xs opacity-60">Click the field to search the list ({{ modelList.length }} models), or type any id the provider knows. Some providers and routers list every model, not only the ones your key or plan may use: search, then <b>Check … with the key</b> marks them ✓ / ✗.</p>
+                </div>
+              </div>
+
+              <div class="flex items-center gap-3 pt-1">
+                <span class="w-28 shrink-0" />
+                <button class="btn btn-sm" :disabled="testing || !ai.enabled" :title="ai.enabled ? 'Sends one tiny request' : 'Turn AI on first'" @click="test"><span v-if="testing" class="loading loading-spinner loading-xs" />Test</button>
+                <span v-if="tested" class="min-w-0 text-xs" :class="tested.ok ? 'text-success' : 'text-error'">{{ tested.text }}</span>
+              </div>
+            </div>
+          </div>
+          <div class="card" :class="{ 'opacity-60': !ai.enabled }">
+            <div class="card-body">
+              <h2>Features</h2>
+              <p class="text-xs opacity-60">Each one sends only what it needs: never environment values, mounts or secrets. The AI buttons hide for a feature that is off.</p>
+              <label v-for="f in DC_AI_FEATURES" :key="f.id" class="flex cursor-pointer items-start gap-3 border-t border-base-300/50 pt-3">
+                <input type="checkbox" class="toggle toggle-sm mt-0.5" :checked="!ai.off.includes(f.id)" :disabled="!ai.enabled" @change="toggleFeature(f.id, ($event.target as HTMLInputElement).checked)" />
+                <span class="min-w-0">
+                  <span class="font-medium">{{ f.label }}</span>
+                  <span class="block text-xs opacity-70">{{ f.hint }}</span>
+                  <span class="block text-xs opacity-50">Sends: {{ f.sends }}.</span>
+                </span>
+              </label>
+            </div>
+          </div>
+        </template>
+
+        <!-- Updates -->
+        <DcUpdates v-if="tab === 'updates'" />
+
+        <!-- Domains -->
+        <DomainsCard v-if="tab === 'domains'" />
+
+        <!-- About -->
+        <AboutCard v-if="tab === 'about'" />
+      </div>
+    </div>
+  </div>
+</template>

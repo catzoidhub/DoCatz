@@ -1,0 +1,233 @@
+import { app } from 'electron';
+import { execFile, spawn } from 'node:child_process';
+import { chmodSync, existsSync, mkdirSync, readFileSync, renameSync, rmSync, watch, writeFileSync, type FSWatcher } from 'node:fs';
+import { homedir } from 'node:os';
+import { join } from 'node:path';
+import type { DcAiProvider, Theme } from '@shared/types';
+import { isWin } from './platform';
+
+/**
+ * Settings shared by the Catzoid apps (DevCatz, DBCatz, DialCatz, DoCatz): the theme, the AI connection
+ * (provider, models, addresses), the site address and — between DevCatz and DoCatz — the domains. One owner-only JSON file every app reads, writes and watches, so a change in
+ * one app shows up in the others; API keys sit in one Keychain item ("Catzoid AI", an account per provider)
+ * read through macOS's `security` tool — the way git's and gh's credential helpers keep tokens.
+ * Kept in step with DevCatz's src/main/shared.ts by hand.
+ *
+ * Contract (keep it the same in every app):
+ *   ~/Library/Application Support/Catzoid/shared.json  (folder 0700, file 0600)
+ *   { "version": 1, "theme": "system" | "light" | "dark",
+ *     "ai": { "provider": "anthropic", "models": { "<provider>": "<model>" }, "baseUrls": { … }, "keys": ["<provider>", …] },
+ *     "domains": { "tld", "ca": { "cert", "key", "trusted", "by" }, "cleanUrls": { "on", "httpsPort", "httpPort", "by" }, "usedBy": [] },
+ *     "updatedBy": "devcatz" | "dbcatz" | "dialcatz" | "docatz", "updatedAt": "<ISO time>" }
+ *   Keychain: generic password, service "Catzoid AI", account = provider id, password = the API key.
+ *   Windows: %APPDATA%\Catzoid\shared.json; the keys DPAPI-encrypted for the user in Catzoid\keys\<provider>.dpapi
+ *   (PowerShell's ConvertFrom-SecureString), as DevCatz does.
+ *   On / off switches (AI enabled, features) stay in each app.
+ *
+ * CATZOID_SHARED_DIR and CATZOID_KEYCHAIN (a keychain file) point both elsewhere, for tests.
+ */
+
+export const SHARED_DIR =
+  process.env.CATZOID_SHARED_DIR || (isWin ? join(process.env.APPDATA ?? join(homedir(), 'AppData', 'Roaming'), 'Catzoid') : join(homedir(), 'Library', 'Application Support', 'Catzoid'));
+const FILE = join(SHARED_DIR, 'shared.json');
+const SERVICE = 'Catzoid AI';
+const ME = 'docatz';
+/** A keychain file instead of the login keychain (tests only). */
+const KEYCHAIN = process.env.CATZOID_KEYCHAIN ? [process.env.CATZOID_KEYCHAIN] : [];
+
+export interface SharedAi {
+  provider?: DcAiProvider;
+  models?: Partial<Record<DcAiProvider, string>>;
+  baseUrls?: Partial<Record<DcAiProvider, string>>;
+  /** Providers with a key in the Keychain (names only). */
+  keys?: DcAiProvider[];
+}
+/**
+ * Domain settings shared with DevCatz (DoCatz TODO #61; the same contract as DevCatz's shared.ts): the default domain,
+ * the local certificate authority and names without a port. Either app may set them up; the other recognises and reuses
+ * them. `usedBy` lists the apps that rely on them: an app's uninstaller removes the resolver, port forwarding and CA
+ * trust only when no other app is listed.
+ */
+export interface SharedDomains {
+  /** The suffix of local names (`localhost`, `test` …). */
+  tld?: string;
+  /** The local CA: certificate and key files (readable by the user only), and whether the system trusts it. */
+  ca?: { cert: string; key: string; trusted: boolean; by: string };
+  /** :443 / :80 forwarded to the proxy of `by` on these ports (names without a port). */
+  cleanUrls?: { on: boolean; httpsPort: number; httpPort: number; by: string };
+  usedBy?: string[];
+}
+export interface Shared {
+  version: 1;
+  theme?: Theme;
+  ai?: SharedAi;
+  /** The Catzoid site address the apps build their links from (Catzoid TODO #50); catzoid.com when unset. */
+  site?: string;
+  /** Default domain, local CA, names without a port (DoCatz TODO #61); merged one level deep like `ai`. */
+  domains?: SharedDomains;
+  updatedBy?: string;
+  updatedAt?: string;
+}
+
+let cache: Shared | null = null;
+
+export function readShared(): Shared {
+  if (cache) return cache;
+  try {
+    const v = JSON.parse(readFileSync(FILE, 'utf8').replace(/^\uFEFF/, '')) as Shared;
+    cache = v && typeof v === 'object' ? { ...v, version: 1 } : { version: 1 };
+  } catch {
+    cache = { version: 1 };
+  }
+  return cache;
+}
+
+/** For testing, shared.json's `site` points at https://dev.catzoid.tech (Catzoid TODO #64); unset means production. */
+export const DEFAULT_SITE = 'https://catzoid.com';
+
+/** The shared site address: https on catzoid.com or *.catzoid.tech only (anything else falls back to the default). */
+export function siteBase(): string {
+  // a development build may point at a local Catzoid site (CATZOID_SITE=http://127.0.0.1:8099), as DevCatz does
+  const dev = !app.isPackaged && process.env.CATZOID_SITE;
+  try {
+    const u = new URL(dev || readShared().site || DEFAULT_SITE);
+    if (dev && /^https?:$/.test(u.protocol)) return u.origin;
+    if (u.protocol === 'https:' && /^(catzoid\.com|([\w-]+\.)*catzoid\.tech)$/.test(u.hostname)) return u.origin;
+  } catch {
+    /* not a URL */
+  }
+  return DEFAULT_SITE;
+}
+
+/** Merges `patch` (ai merged one level deep) and writes the file atomically. */
+export function writeShared(patch: Partial<Omit<Shared, 'version' | 'ai' | 'domains'>> & { ai?: SharedAi; domains?: SharedDomains }): Shared {
+  const cur = readShared();
+  const next: Shared = { ...cur, ...patch, ai: patch.ai ? { ...(cur.ai ?? {}), ...patch.ai } : cur.ai, domains: patch.domains ? { ...(cur.domains ?? {}), ...patch.domains } : cur.domains, version: 1, updatedBy: ME, updatedAt: new Date().toISOString() };
+  mkdirSync(SHARED_DIR, { recursive: true, mode: 0o700 });
+  chmodSync(SHARED_DIR, 0o700);
+  const tmp = `${FILE}.${process.pid}.tmp`;
+  writeFileSync(tmp, `${JSON.stringify(next, null, 2)}\n`, { mode: 0o600 });
+  renameSync(tmp, FILE);
+  cache = next;
+  lastOwnWrite = next.updatedAt!;
+  return next;
+}
+
+let lastOwnWrite = '';
+let watcher: FSWatcher | null = null;
+
+/** Calls `onChange` when another app changed the file (own writes are ignored). */
+export function watchShared(onChange: (s: Shared) => void): void {
+  watcher?.close();
+  mkdirSync(SHARED_DIR, { recursive: true, mode: 0o700 });
+  let timer: NodeJS.Timeout | null = null;
+  try {
+    watcher = watch(SHARED_DIR, (_e, name) => {
+      if (name && name !== 'shared.json') return;
+      if (timer) clearTimeout(timer);
+      timer = setTimeout(() => {
+        cache = null;
+        keyCache.clear();
+        const s = readShared();
+        if (s.updatedAt && s.updatedAt === lastOwnWrite) return;
+        onChange(s);
+      }, 250);
+    });
+  } catch {
+    /* folder vanished: no live updates, the next read still sees changes */
+  }
+}
+
+export const sharedExists = () => existsSync(FILE);
+
+// ---------------------------------------------------------------- Keychain
+
+function security(args: string[]): Promise<{ code: number; stdout: string }> {
+  return new Promise((resolve) =>
+    execFile('/usr/bin/security', args, { timeout: 15_000 }, (err, stdout) => resolve({ code: err ? 1 : 0, stdout: String(stdout ?? '') })),
+  );
+}
+
+const keyCache = new Map<DcAiProvider, { at: number; key: string }>();
+
+/**
+ * Windows: the key encrypted with DPAPI for the current user in Catzoid\keys\<provider>.dpapi, so every Catzoid app
+ * of the same user reads it, as the Keychain item on macOS (the same files as DevCatz). The key goes in through stdin,
+ * never the command line.
+ */
+const keyFile = (provider: DcAiProvider) => join(SHARED_DIR, 'keys', `${provider}.dpapi`);
+const psQuote = (s: string) => `'${s.replace(/'/g, "''")}'`;
+function powershell(script: string, input = ''): Promise<{ code: number; out: string }> {
+  return new Promise((resolve) => {
+    const p = spawn('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', script], { stdio: ['pipe', 'pipe', 'pipe'], windowsHide: true });
+    let out = '';
+    p.stdout.on('data', (d) => (out += d));
+    p.on('error', () => resolve({ code: 1, out: '' }));
+    p.on('close', (c) => resolve({ code: c ?? 1, out }));
+    p.stdin.end(input);
+  });
+}
+async function winKey(provider: DcAiProvider): Promise<string> {
+  const file = keyFile(provider);
+  if (!existsSync(file)) return '';
+  const r = await powershell(
+    `$s = ConvertTo-SecureString (Get-Content -Raw -Path ${psQuote(file)}).Trim(); ` +
+      '[Runtime.InteropServices.Marshal]::PtrToStringBSTR([Runtime.InteropServices.Marshal]::SecureStringToBSTR($s))',
+  );
+  return r.code === 0 ? r.out.trim() : '';
+}
+async function setWinKey(provider: DcAiProvider, key: string): Promise<void> {
+  const file = keyFile(provider);
+  if (!key) {
+    rmSync(file, { force: true });
+    return;
+  }
+  mkdirSync(join(file, '..'), { recursive: true });
+  const r = await powershell(
+    `$k = [Console]::In.ReadToEnd().Trim(); ConvertTo-SecureString $k -AsPlainText -Force | ConvertFrom-SecureString | Set-Content -NoNewline -Path ${psQuote(file)}`,
+    key,
+  );
+  if (r.code !== 0) throw new Error('Windows could not store the key');
+}
+
+/** The provider's API key from the shared Keychain item ('' when there is none). Cached for a minute. */
+export async function sharedKey(provider: DcAiProvider): Promise<string> {
+  const hit = keyCache.get(provider);
+  if (hit && Date.now() - hit.at < 60_000) return hit.key;
+  if (isWin) {
+    const key = await winKey(provider);
+    keyCache.set(provider, { at: Date.now(), key });
+    return key;
+  }
+  const r = await security(['find-generic-password', '-s', SERVICE, '-a', provider, '-w', ...KEYCHAIN]);
+  const key = r.code === 0 ? r.stdout.replace(/\n$/, '') : '';
+  keyCache.set(provider, { at: Date.now(), key });
+  return key;
+}
+
+/** Saves (or with '' removes) a provider's key in the shared Keychain item and lists it in shared.json. */
+export async function setSharedKey(provider: DcAiProvider, key: string): Promise<void> {
+  const k = key.trim();
+  if (isWin) {
+    if (/["\\\n\r]/.test(k)) throw new Error('That key has characters an API key does not have');
+    await setWinKey(provider, k);
+  } else if (!k) {
+    await security(['delete-generic-password', '-s', SERVICE, '-a', provider, ...KEYCHAIN]);
+  } else {
+    if (/["\\\n\r]/.test(k)) throw new Error('That key has characters an API key does not have');
+    // Through `security -i` (commands on stdin), so the key never appears in a process list.
+    await new Promise<void>((resolve, reject) => {
+      const p = spawn('/usr/bin/security', ['-i'], { stdio: ['pipe', 'ignore', 'pipe'] });
+      let err = '';
+      p.stderr.on('data', (d) => (err += d));
+      p.on('error', reject);
+      p.on('close', (c) => (c === 0 && !err.trim() ? resolve() : reject(new Error(`Keychain: ${err.trim() || `exit ${c}`}`))));
+      p.stdin.end(`add-generic-password -U -s "${SERVICE}" -a "${provider}" -l "${SERVICE} (${provider})" -w "${k}"${KEYCHAIN.length ? ` "${KEYCHAIN[0]}"` : ''}\n`);
+    });
+  }
+  keyCache.delete(provider);
+  const keys = new Set(readShared().ai?.keys ?? []);
+  if (k) keys.add(provider);
+  else keys.delete(provider);
+  writeShared({ ai: { keys: [...keys] } });
+}
