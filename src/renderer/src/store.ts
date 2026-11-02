@@ -1,5 +1,5 @@
 import { computed, ref, watch } from 'vue';
-import type { DcAiFeature, DcContainer, DcStats, DcReportKind, DcRun, DcUpdateState, DoCatzSettings, DoCatzSettingsPatch, EngineState, Theme } from '@shared/types';
+import type { DcAiFeature, DcContainer, DcProjectPrefs, DcStats, DcReportKind, DcRun, DcUpdateState, DoCatzSettings, DoCatzSettingsPatch, EngineState, Theme } from '@shared/types';
 
 /** The preload bridge (see src/preload/index.ts). */
 export const api = window.docatz;
@@ -103,6 +103,35 @@ export async function refreshContainers(): Promise<void> {
   }
 }
 
+// ---------------------------------------------------------------- the project list's arrangement (favorites, groups, order)
+
+export const projectPrefs = ref<DcProjectPrefs>({ favorites: [], groups: [], order: [] });
+export async function loadProjectPrefs(): Promise<void> {
+  projectPrefs.value = await api.projectPrefs().catch(() => projectPrefs.value);
+}
+/** Changes a copy of the arrangement and saves it (the main process checks it). */
+export async function editProjectPrefs(change: (p: DcProjectPrefs) => void): Promise<void> {
+  const next = JSON.parse(JSON.stringify(projectPrefs.value)) as DcProjectPrefs;
+  change(next);
+  projectPrefs.value = next;
+  const saved = await attempt(() => api.setProjectPrefs(next));
+  if (saved) projectPrefs.value = saved;
+}
+export const isFavorite = (project: string) => projectPrefs.value.favorites.includes(project);
+export const toggleFavorite = (project: string) =>
+  editProjectPrefs((p) => {
+    p.favorites = p.favorites.includes(project) ? p.favorites.filter((x) => x !== project) : [...p.favorites, project];
+  });
+/** Puts a project into a group (made when new), or out of every group with null. */
+export const moveToGroup = (project: string, group: string | null) =>
+  editProjectPrefs((p) => {
+    for (const g of p.groups) g.projects = g.projects.filter((x) => x !== project);
+    if (!group) return;
+    const g = p.groups.find((x) => x.name.toLowerCase() === group.toLowerCase());
+    if (g) g.projects.push(project);
+    else p.groups.push({ name: group.trim(), projects: [project], collapsed: false });
+  });
+
 // ---------------------------------------------------------------- settings, updates, reports
 
 export const settings = ref<DoCatzSettings | null>(null);
@@ -144,6 +173,7 @@ export async function init(): Promise<void> {
   api.onUpdateOpen(() => (updateOpen.value = true));
   api.onReportsAsk(() => (reportsAsk.value = true));
   engine.value = await api.engineState();
+  await loadProjectPrefs();
   api.onEngine((s) => {
     const wasUp = engineUp.value;
     engine.value = s;

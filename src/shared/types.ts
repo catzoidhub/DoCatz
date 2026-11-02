@@ -303,6 +303,13 @@ export interface DcComposeProject {
   running: number;
 }
 
+/** How the user arranges the project list (as DevCatz's sites): favorites, their groups, the drag-and-drop order. */
+export interface DcProjectPrefs {
+  favorites: string[];
+  groups: { name: string; projects: string[]; collapsed: boolean }[];
+  order: string[];
+}
+
 /** A compose project's own .env in DoCatz (like a Dokploy app's environment). */
 export interface DcProjectEnv {
   project: string;
@@ -596,6 +603,10 @@ export interface DoCatzApi {
   prunePreview(kind: DcPruneKind): Promise<DcPrunePreview>;
   prune(kind: DcPruneKind): Promise<{ removed: number; freed: number }>;
 
+  // the project list's arrangement
+  projectPrefs(): Promise<DcProjectPrefs>;
+  setProjectPrefs(prefs: DcProjectPrefs): Promise<DcProjectPrefs>;
+
   // a compose project's own .env in DoCatz
   envState(project: string, dir: string | null): Promise<DcProjectEnv>;
   envRead(project: string): Promise<{ content: string; mtime: number }>;
@@ -637,6 +648,7 @@ export const API_METHODS: (keyof DoCatzApi)[] = [
   'engineState', 'engineStart', 'engineStop', 'engineRestart', 'engineReset', 'engineConfigure', 'engineCancel', 'engineLog', 'contextSet', 'cliInstall', 'cliPath', 'diskUsage',
   'containers', 'container', 'containerEnv', 'containerAction', 'containerRemove', 'stats', 'logsFollow', 'logsStop', 'termOpen', 'termInput', 'termResize', 'termClose', 'files', 'fileSave', 'projects', 'composePick', 'composeRun', 'composeProject', 'runCancel', 'readText', 'writeText',
   'images', 'imageRemove', 'imagePull', 'volumes', 'volumeRemove', 'networks', 'networkRemove', 'prunePreview', 'prune',
+  'projectPrefs', 'setProjectPrefs',
   'envState', 'envRead', 'envWrite', 'envCreate', 'envLock', 'envRemove', 'envDrift', 'setDomainName',
   'builds', 'build', 'buildLogs', 'buildRemove',
   'domains', 'setDomains', 'caTrust', 'cleanUrls', 'resolver',

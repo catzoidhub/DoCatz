@@ -20,6 +20,7 @@ import { Engine } from './engine';
 import { Reporter } from './reporter';
 import { projects, Runs } from './runs';
 import { learnProject } from './frameworks';
+import { projectPrefs, setProjectPrefs } from './prefs';
 import { applySettings, migrateToShared, setAiKey, setSettings, settings } from './settings';
 import { siteBase } from './shared';
 import { DocatzTray } from './tray';
@@ -370,6 +371,8 @@ function api(): DoCatzApi {
     prunePreview: (kind) => needEngine(() => ops.prunePreview(kind)),
     prune: (kind) => needEngine(() => ops.prune(kind)),
 
+    projectPrefs: async () => projectPrefs(),
+    setProjectPrefs: async (p) => setProjectPrefs(p),
     envState: async (project, dir) => envState(project, dir),
     envRead: async (project) => envRead(project),
     envWrite: async (project, content, mtime) => envWrite(project, content, mtime),
