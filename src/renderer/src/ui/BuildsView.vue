@@ -46,6 +46,10 @@ const STATUS: Record<DcBuild['status'], string> = { completed: 'status-success',
 const lines = computed(() =>
   log.value.split('\n').map((t) => ({ t, kind: /ERROR|error:|failed to/i.test(t) ? 'err' : /^#\d+ \[/.test(t) ? 'step' : /^#\d+ (DONE|CACHED)/.test(t) ? 'done' : '' })),
 );
+function copyLog() {
+  void navigator.clipboard.writeText(log.value);
+  notify('success', 'Build log copied');
+}
 const removing = ref(false);
 async function remove() {
   const r = open.value!;
@@ -114,7 +118,7 @@ async function remove() {
           </div>
           <div class="card">
             <div class="card-body gap-2">
-              <div class="flex items-center gap-2"><h2 class="flex-1">Log</h2><span v-if="logLoading" class="loading loading-spinner loading-xs" /></div>
+              <div class="flex items-center gap-2"><h2 class="flex-1">Log</h2><span v-if="logLoading" class="loading loading-spinner loading-xs" /><button class="btn btn-ghost btn-xs" :disabled="!log" title="Copy the whole build log" @click="copyLog">Copy</button></div>
               <div class="selectable max-h-[60vh] overflow-auto rounded-lg bg-base-200/60 p-3 font-mono text-[11px] leading-snug">
                 <div v-for="(l, i) in lines" :key="i" class="whitespace-pre-wrap break-all" :class="{ 'text-error': l.kind === 'err', 'font-semibold text-primary': l.kind === 'step', 'opacity-50': l.kind === 'done' }">{{ l.t || ' ' }}</div>
               </div>
