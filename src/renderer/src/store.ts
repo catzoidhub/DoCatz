@@ -1,5 +1,5 @@
 import { computed, ref, watch } from 'vue';
-import type { DcAiFeature, DcContainer, DcGateway, DcProjectPrefs, DcStats, DcReportKind, DcRun, DcUpdateState, DoCatzSettings, DoCatzSettingsPatch, EngineState, TaskProgress, Theme } from '@shared/types';
+import type { DcAiFeature, DcContainer, DcGateway, DcProjectPrefs, DcStats, DcReportKind, DcRun, DcUpdateState, DoCatzSettings, DoCatzSettingsPatch, EngineState, SiblingApp, TaskProgress, Theme } from '@shared/types';
 import { currentOS } from '@shared/platform';
 
 /** The preload bridge (see src/preload/index.ts). */
@@ -90,12 +90,22 @@ export const gatewayKindOf = (project: string | null | undefined): string | null
 export async function gatewayLink(kind: string): Promise<boolean> {
   const link = `devcatz://gateways/${encodeURIComponent(kind)}`;
   const ok = await attempt(() => api.openSibling('devcatz', link));
-  // Not installed: DoCatz offers Download & Install (DevCatzInstall.vue), then opens the gateway there.
-  if (ok === false) devcatzAsk.value = { link };
+  // Not installed: DoCatz offers Download & Install (SiblingInstall.vue), then opens the gateway there.
+  if (ok === false) siblingAsk.value = { which: 'devcatz', link };
   return ok === true;
 }
-/** DevCatz is not installed and a link wants it: the Download & Install dialog, and that install's steps. */
-export const devcatzAsk = ref<{ link: string } | null>(null);
+/**
+ * A compose project in DialCatz (#25): dialcatz://open?docatz=<project> shows DialCatz's Import from DoCatz for it —
+ * an environment with the project's HTTP services, and their routes. Nothing is imported without the user's click there.
+ */
+export async function dialcatzLink(project: string): Promise<boolean> {
+  const link = `dialcatz://open?docatz=${encodeURIComponent(project)}`;
+  const ok = await attempt(() => api.openSibling('dialcatz', link));
+  if (ok === false) siblingAsk.value = { which: 'dialcatz', link };
+  return ok === true;
+}
+/** Another Catzoid app is not installed and a link wants it: the Download & Install dialog, and that install's steps. */
+export const siblingAsk = ref<{ which: SiblingApp; link: string } | null>(null);
 export const siblingTask = ref<TaskProgress | null>(null);
 
 /** Stats samples per container (the list polls every 5 s), the last 10 minutes — the Monitoring charts read them. */

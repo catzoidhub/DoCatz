@@ -6,7 +6,9 @@ import type { DcContainer } from '@shared/types';
 /**
  * DoCatz's bridge.json (Catzoid ecosystem, DoCatz TODO #22): the containers DoCatz runs, so DevCatz, DBCatz and
  * DialCatz can list them and link back with docatz://container/<name>. Names, compose project / service, image,
- * state, published ports and domains only — never environment values, mounts, labels or secrets. Written in DoCatz's
+ * state, published ports and domains, the compose folder and the framework a service is built from (DialCatz makes an
+ * environment of a project's HTTP services and reads their routes, #25) — never environment values, mounts, labels or
+ * secrets. Written in DoCatz's
  * data folder (folder 0700, file 0600, atomically) when the list changes; Uninstall removes it with the folder.
  */
 
@@ -25,6 +27,12 @@ export function writeBridge(containers: DcContainer[], engine: 'running' | 'stop
     state: c.state,
     ports: c.ports.filter((p) => p.public).map((p) => ({ host: p.public, container: p.private, protocol: p.type })),
     url: c.url,
+    /** A database / cache / mail server's address inside its project (postgres:5432): no page, no environment. */
+    inner: c.inner ?? null,
+    /** The compose file's folder and the framework the service is built from (null for a plain image). */
+    dir: c.workingDir,
+    framework: c.framework?.framework ?? null,
+    library: c.framework?.library ?? null,
   }));
   const body = JSON.stringify({ engine, list, proxy });
   if (body === last) return;

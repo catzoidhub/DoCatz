@@ -18,7 +18,7 @@ import ComposeDialog from './ComposeDialog.vue';
 import DcUpdateDialog from './DcUpdateDialog.vue';
 import DcReportDialog from './DcReportDialog.vue';
 import DcWelcome from './DcWelcome.vue';
-import DevCatzInstall from './DevCatzInstall.vue';
+import SiblingInstall from './SiblingInstall.vue';
 import { back, forward } from './nav';
 
 /**
@@ -241,7 +241,7 @@ function openAppMenu(e: MouseEvent) {
     <DcUpdateDialog v-if="ready && updateOpen" @close="updateOpen = false" />
     <DcReportDialog v-if="ready && reportOpen" :kind="reportOpen" @close="reportOpen = null" />
     <DcWelcome v-if="ready" />
-    <DevCatzInstall />
+    <SiblingInstall />
 
     <!-- Asked once, after the first error: send crash reports? (Catzoid #65) -->
     <dialog v-if="reportsAsk" open class="modal modal-open">

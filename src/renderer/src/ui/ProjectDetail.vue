@@ -2,8 +2,9 @@
 import { computed, ref, watch } from 'vue';
 import type { DcComposeAction, DcComposeProject, DcContainer, DcStats } from '@shared/types';
 import { currentOS } from '@shared/platform';
-import { api, attempt, bytes, changes, composeFile, composeOpen, containerTab, gatewayKindOf, gatewayLink, gateways, notify, openContainer, isFavorite, openProject, PROJECT_ICON, projectTab, runs, statsHistory, toggleFavorite, token, type ProjectTab } from '../store';
+import { api, attempt, bytes, changes, composeFile, composeOpen, containerTab, dialcatzLink, gatewayKindOf, gatewayLink, gateways, notify, openContainer, isFavorite, openProject, PROJECT_ICON, projectTab, runs, statsHistory, toggleFavorite, token, type ProjectTab } from '../store';
 import devcatzLogo from '../assets/logos/devcatz.png';
+import dialcatzLogo from '../assets/logos/dialcatz.png';
 import ConfirmDialog from '../components/ConfirmDialog.vue';
 import DcNavButtons from './DcNavButtons.vue';
 import ProjectEnv from './ProjectEnv.vue';
@@ -44,6 +45,8 @@ const dir = computed(() => info.value?.dir ?? props.containers.find((c) => c.wor
 /** Windows: the project sits on a drive (C:\, D:\ …) the engine reaches through WSL's mount, where file watchers stay quiet. */
 const onWindowsDrive = computed(() => currentOS === 'windows' && /^[A-Za-z]:[\\/]/.test(dir.value ?? ''));
 const running = computed(() => props.containers.filter((c) => c.state === 'running').length);
+/** The services with a page (an HTTP domain, not a database's inner address): what DialCatz makes an environment of (#25). */
+const httpServices = computed(() => [...new Set(props.containers.filter((c) => c.url && !c.inner).map((c) => c.service ?? c.name))]);
 /** Every service up: Up has nothing to start (Build & Up still rebuilds); none up: Restart and Stop have nothing to do. */
 const allUp = computed(() => props.containers.length > 0 && running.value === props.containers.length);
 
@@ -150,6 +153,7 @@ const rateText = (v: number) => `${bytes(v)}/s`;
         <button class="btn btn-ghost btn-sm btn-square" title="Close" @click="openProject = null">✕</button>
       </div>
       <div v-else class="no-drag flex shrink-0 items-center gap-1">
+        <button v-if="httpServices.length" class="btn btn-ghost btn-sm gap-1.5" :title="`Open in DialCatz: an environment with ${httpServices.join(', ')}’s address${httpServices.length > 1 ? 'es' : ''}, and their routes as requests`" @click="dialcatzLink(project)"><img :src="dialcatzLogo" alt="" class="size-4" draggable="false" />DialCatz</button>
         <button class="btn btn-sm btn-primary" :disabled="busy" title="docker compose up --build: rebuild the images, then recreate what changed (a changed .env included)" @click="compose('build-up')"><span v-if="doing === 'build-up'" class="loading loading-spinner loading-xs" /><template v-else>Build &amp; Up</template></button>
         <button v-if="!allUp || doing === 'up'" class="btn btn-sm" :disabled="busy" title="docker compose up: recreates what changed, without building" @click="compose('up')"><span v-if="doing === 'up'" class="loading loading-spinner loading-xs" /><template v-else>Up</template></button>
         <button v-if="running || doing === 'restart'" class="btn btn-sm" :disabled="busy" @click="compose('restart')"><span v-if="doing === 'restart'" class="loading loading-spinner loading-xs" /><template v-else>Restart</template></button>
