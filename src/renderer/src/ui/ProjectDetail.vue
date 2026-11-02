@@ -154,7 +154,7 @@ const rateText = (v: number) => `${bytes(v)}/s`;
         <button class="btn btn-ghost btn-sm btn-square" title="Close" @click="openProject = null">✕</button>
       </div>
       <div v-else class="no-drag flex shrink-0 items-center gap-1">
-        <button v-if="httpServices.length" class="btn btn-ghost btn-sm gap-1.5" :title="`An environment with ${httpServices.join(', ')}’s address${httpServices.length > 1 ? 'es' : ''}, and their routes as requests`" @click="dialcatzLink(project)"><img :src="dialcatzLogo" alt="" class="size-4" draggable="false" />Open in DialCatz</button>
+        <button v-if="httpServices.length" class="btn btn-sm gap-2" :title="`An environment with ${httpServices.join(', ')}’s address${httpServices.length > 1 ? 'es' : ''}, and their routes as requests`" @click="dialcatzLink(project)"><img :src="dialcatzLogo" alt="" class="size-5 drop-shadow-sm" draggable="false" />Open in DialCatz</button>
         <button class="btn btn-sm btn-primary" :disabled="busy" title="docker compose up --build: rebuild the images, then recreate what changed (a changed .env included)" @click="compose('build-up')"><span v-if="doing === 'build-up'" class="loading loading-spinner loading-xs" /><template v-else>Build &amp; Up</template></button>
         <button v-if="!allUp || doing === 'up'" class="btn btn-sm" :disabled="busy" title="docker compose up: recreates what changed, without building" @click="compose('up')"><span v-if="doing === 'up'" class="loading loading-spinner loading-xs" /><template v-else>Up</template></button>
         <button v-if="running || doing === 'restart'" class="btn btn-sm" :disabled="busy" @click="compose('restart')"><span v-if="doing === 'restart'" class="loading loading-spinner loading-xs" /><template v-else>Restart</template></button>
@@ -279,7 +279,7 @@ const rateText = (v: number) => `${bytes(v)}/s`;
                   <template v-if="!c.url && c.inner"
                     ><span class="text-xs opacity-60"
                       >not a web page — the other services reach it at <code class="font-mono">{{ c.inner }}</code><template v-if="databaseOf(c.id)">, this computer at <code class="selectable font-mono">{{ databaseOf(c.id)!.host }}:{{ databaseOf(c.id)!.port }}</code></template></span
-                    ><button v-if="databaseOf(c.id)" class="btn btn-ghost btn-xs gap-1" title="Open in DBCatz, with the user and password the container was started with" @click="dbcatzLink(databaseOf(c.id)!.id)"><img :src="dbcatzLogo" alt="" class="size-3.5" draggable="false" />Open in DBCatz</button></template
+                    ><button v-if="databaseOf(c.id)" class="btn btn-xs gap-1.5" title="Open in DBCatz, with the user and password the container was started with" @click="dbcatzLink(databaseOf(c.id)!.id)"><img :src="dbcatzLogo" alt="" class="size-4 drop-shadow-sm" draggable="false" />Open in DBCatz</button></template
                   >
                   <template v-else-if="!c.url"><span class="text-xs opacity-50">{{ c.state === 'running' ? 'no network address' : 'starts with the service' }}</span></template>
                   <template v-else-if="editing === c.id">
