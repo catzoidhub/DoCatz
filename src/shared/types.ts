@@ -222,6 +222,8 @@ export interface DcDatabase {
   /** DBCatz's id for it: docatz-<project>-<service> (dbcatz://open?docatz=<id>). */
   id: string;
   containerId: string;
+  /** The container's name: docatz://container/<container> opens its page in DoCatz. */
+  container: string;
   name: string;
   engine: DcDbEngine;
   version: string;

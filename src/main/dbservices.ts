@@ -121,6 +121,7 @@ export async function updateDatabases(containers: DcContainer[]): Promise<DbStre
     out.push({
       id: `docatz-${slug(key)}`,
       containerId: c.id,
+      container: c.name,
       name: c.project ? `${c.service ?? c.name} · ${c.project}` : c.name,
       engine: kind.engine,
       version: tag,
@@ -139,9 +140,9 @@ export async function updateDatabases(containers: DcContainer[]): Promise<DbStre
   return streams;
 }
 
-/** dbcatz/services.json in DevCatz's shape (version 1), plus the compose project / service and the database. */
+/** dbcatz/services.json in DevCatz's shape (version 1), plus the compose project / service, the database and the container (docatz://container/<container>). */
 function write(list: DcDatabase[]): void {
-  const services = list.map((d) => ({ id: d.id, name: d.name, engine: d.engine, version: d.version, host: d.host, port: d.port, user: d.user, password: d.password, database: d.database, dataDir: '', socket: '', running: d.running, project: d.project, service: d.service }));
+  const services = list.map((d) => ({ id: d.id, name: d.name, engine: d.engine, version: d.version, host: d.host, port: d.port, user: d.user, password: d.password, database: d.database, dataDir: '', socket: '', running: d.running, project: d.project, service: d.service, container: d.container }));
   const body = JSON.stringify(services);
   if (body === lastBody) return;
   try {
