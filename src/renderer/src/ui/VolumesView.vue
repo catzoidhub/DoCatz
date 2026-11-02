@@ -40,9 +40,9 @@ const pruning = ref(false);
 <template>
   <EngineGate v-if="!engineUp" />
   <section v-else class="flex h-full flex-col">
-    <header class="drag win-top flex h-14 shrink-0 items-end gap-3 border-b border-base-300/60 px-4 pb-2">
+    <header class="drag win-top flex h-20 shrink-0 items-center gap-3 border-b border-base-300/60 px-4">
       <div class="no-drag"><DcNavButtons /></div>
-      <div class="pb-0.5"><h1 class="text-base font-semibold tracking-tight">Volumes</h1><p class="text-xs opacity-55">{{ list.length }} · {{ bytes(total) }}</p></div>
+      <div><h1 class="text-base font-semibold tracking-tight">Volumes</h1><p class="text-xs opacity-55">{{ list.length }} · {{ bytes(total) }}</p></div>
       <span class="flex-1" />
       <button class="no-drag btn btn-sm" @click="pruning = true">Clean up…</button>
     </header>

@@ -271,10 +271,10 @@ function openCompose() {
   <div v-else class="flex h-full">
     <!-- the list -->
     <aside class="flex w-80 shrink-0 flex-col border-r border-base-300/60 bg-base-200/40">
-      <div class="drag win-top flex h-14 shrink-0 items-end gap-1 px-3 pb-2">
-        <span class="label-caps pb-1 pl-1">Containers</span>
-        <button v-if="view.runningOnly" class="no-drag sec-count is-live mb-1" title="Showing running only: click to show all" @click="view.runningOnly = false"><span class="status status-success status-xs" />Running only ✕</button>
-        <span v-else-if="runningCount" class="sec-count is-live mb-1"><span class="status status-success status-xs" />{{ runningCount }} running</span>
+      <div class="drag win-top flex h-20 shrink-0 items-center gap-1 px-3">
+        <span class="label-caps pl-1">Containers</span>
+        <button v-if="view.runningOnly" class="no-drag sec-count is-live" title="Showing running only: click to show all" @click="view.runningOnly = false"><span class="status status-success status-xs" />Running only ✕</button>
+        <span v-else-if="runningCount" class="sec-count is-live"><span class="status status-success status-xs" />{{ runningCount }} running</span>
         <span class="flex-1" />
         <button v-if="containers.length" class="no-drag btn btn-ghost btn-sm btn-square" :title="anyOpen ? 'Collapse all: only the project names' : 'Expand all: every project and section open'" @click="setAll(!anyOpen)">
           <svg v-if="anyOpen" class="size-4" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M5.22 2.22a.75.75 0 0 1 1.06 0L10 5.94l3.72-3.72a.75.75 0 1 1 1.06 1.06l-4.25 4.25a.75.75 0 0 1-1.06 0L5.22 3.28a.75.75 0 0 1 0-1.06Zm0 15.56a.75.75 0 0 0 1.06 0L10 14.06l3.72 3.72a.75.75 0 1 0 1.06-1.06l-4.25-4.25a.75.75 0 0 0-1.06 0l-4.25 4.25a.75.75 0 0 0 0 1.06Z" clip-rule="evenodd" /></svg>

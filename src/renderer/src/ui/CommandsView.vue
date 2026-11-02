@@ -100,10 +100,10 @@ const run = (cmd: string) => attempt(() => api.runInTerminal(cmd));
 
 <template>
   <section class="flex h-full flex-col">
-    <header class="drag win-top flex h-14 shrink-0 items-end gap-3 border-b border-base-300/60 px-4 pb-2">
+    <header class="drag win-top flex h-20 shrink-0 items-center gap-3 border-b border-base-300/60 px-4">
       <div class="no-drag"><DcNavButtons /></div>
-      <div class="min-w-0 flex-1 pb-0.5"><h1 class="text-base font-semibold tracking-tight">Commands</h1><p class="truncate text-xs opacity-55">Copy one, or run it in {{ terminalName }} — always on the DoCatz engine.</p></div>
-      <label v-if="running.length" class="no-drag flex items-center gap-2 pb-0.5 text-xs" title="The container the “Inside a container” commands are about">
+      <div class="min-w-0 flex-1"><h1 class="text-base font-semibold tracking-tight">Commands</h1><p class="truncate text-xs opacity-55">Copy one, or run it in {{ terminalName }} — always on the DoCatz engine.</p></div>
+      <label v-if="running.length" class="no-drag flex items-center gap-2 text-xs" title="The container the “Inside a container” commands are about">
         <ServiceMark v-if="target" :container="target" size="sm" />
         <select :value="target?.name" class="select select-sm w-56" @change="picked = ($event.target as HTMLSelectElement).value">
           <option v-for="c in running" :key="c.id" :value="c.name">{{ c.project ? `${c.project} / ${c.service}` : c.name }}</option>

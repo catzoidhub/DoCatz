@@ -66,13 +66,13 @@ async function remove() {
   <EngineGate v-if="!engineUp" />
   <div v-else class="flex h-full">
     <aside class="flex w-80 shrink-0 flex-col border-r border-base-300/60 bg-base-200/40">
-      <div class="drag win-top flex h-14 shrink-0 items-end gap-2 px-3 pb-2">
+      <div class="drag win-top flex h-20 shrink-0 items-center gap-2 px-3">
         <div class="no-drag"><DcNavButtons /></div>
-        <span class="label-caps pb-1">Builds</span>
-        <span class="sec-count mb-1">{{ list.length }}</span>
+        <span class="label-caps">Builds</span>
+        <span class="sec-count">{{ list.length }}</span>
         <span class="flex-1" />
         <span v-if="loading" class="loading loading-spinner loading-xs mb-2" />
-        <button class="no-drag btn btn-ghost btn-xs mb-1" @click="load">Refresh</button>
+        <button class="no-drag btn btn-ghost btn-xs" @click="load">Refresh</button>
       </div>
       <div class="px-3 pb-2"><input v-model="query" class="input input-sm w-full" placeholder="Filter" spellcheck="false" /></div>
       <div class="min-h-0 flex-1 overflow-y-auto px-2 pb-3">
@@ -90,8 +90,8 @@ async function remove() {
     </aside>
 
     <section v-if="open" class="flex min-w-0 flex-1 flex-col">
-      <header class="drag win-top flex h-14 shrink-0 items-end gap-3 border-b border-base-300/60 px-4 pb-2">
-        <div class="min-w-0 flex-1 pb-0.5">
+      <header class="drag win-top flex h-20 shrink-0 items-center gap-3 border-b border-base-300/60 px-4">
+        <div class="min-w-0 flex-1">
           <h1 class="truncate text-base font-semibold tracking-tight">{{ detail?.name ?? '…' }}</h1>
           <p v-if="detail" class="truncate text-xs opacity-55">{{ detail.status }} · {{ dur(detail.durationMs) }} · {{ detail.steps.completed }}/{{ detail.steps.total }} steps, {{ detail.steps.cached }} cached</p>
         </div>

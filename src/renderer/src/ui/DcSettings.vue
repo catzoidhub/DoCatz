@@ -148,7 +148,7 @@ onMounted(async () => (site.value = (await api.appInfo().catch(() => null))?.sit
 <template>
   <div class="flex h-full flex-col overflow-hidden bg-base-100">
     <!-- Laid out like DialCatz's Settings: ‹ › on top, then the title with the tabs beside it. -->
-    <header class="drag win-top border-b border-base-300/60 px-6 pt-3 pb-4">
+    <header class="drag win-top border-b border-base-300/60 px-6 pt-5 pb-4">
       <div class="no-drag mb-2 w-fit"><DcNavButtons /></div>
       <div class="flex items-center gap-3">
         <h1 class="text-lg font-semibold tracking-tight">Settings</h1>

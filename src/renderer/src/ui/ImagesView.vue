@@ -49,9 +49,9 @@ const run = computed(() => (pullToken.value ? runs.value[pullToken.value] : null
 <template>
   <EngineGate v-if="!engineUp" />
   <section v-else class="flex h-full flex-col">
-    <header class="drag win-top flex h-14 shrink-0 items-end gap-3 border-b border-base-300/60 px-4 pb-2">
+    <header class="drag win-top flex h-20 shrink-0 items-center gap-3 border-b border-base-300/60 px-4">
       <div class="no-drag"><DcNavButtons /></div>
-      <div class="pb-0.5"><h1 class="text-base font-semibold tracking-tight">Images</h1><p class="text-xs opacity-55">{{ list.length }} · {{ bytes(total) }}</p></div>
+      <div><h1 class="text-base font-semibold tracking-tight">Images</h1><p class="text-xs opacity-55">{{ list.length }} · {{ bytes(total) }}</p></div>
       <span class="flex-1" />
       <form class="no-drag flex items-center gap-1" @submit.prevent="pull">
         <input v-model="pullRef" class="input input-sm w-56 font-mono text-xs" placeholder="postgres:17" spellcheck="false" />

@@ -129,13 +129,13 @@ const rateText = (v: number) => `${bytes(v)}/s`;
 
 <template>
   <section class="flex h-full min-w-0 flex-col">
-    <header class="drag win-top flex h-14 shrink-0 items-end gap-3 border-b border-base-300/60 px-4 pb-2">
+    <header class="drag win-top flex h-20 shrink-0 items-center gap-3 border-b border-base-300/60 px-4">
       <div class="no-drag"><DcNavButtons /></div>
-      <img v-if="gateway" :src="gatewayLogo(gateway.kind) ?? devcatzLogo" class="mb-0.5 size-9 shrink-0 rounded-xl border border-base-300/70 bg-base-100 object-contain p-1" :alt="gateway.name" />
-      <span v-else class="mb-0.5 grid size-9 shrink-0 place-items-center rounded-xl bg-primary/15 text-primary">
+      <img v-if="gateway" :src="gatewayLogo(gateway.kind) ?? devcatzLogo" class="size-9 shrink-0 rounded-xl border border-base-300/70 bg-base-100 object-contain p-1" :alt="gateway.name" />
+      <span v-else class="grid size-9 shrink-0 place-items-center rounded-xl bg-primary/15 text-primary">
         <svg viewBox="0 0 20 20" class="size-5" fill="currentColor"><path :d="PROJECT_ICON" /></svg>
       </span>
-      <div class="min-w-0 flex-1 pb-0.5">
+      <div class="min-w-0 flex-1">
         <div class="flex items-center gap-2">
           <h1 class="truncate text-base font-semibold tracking-tight">{{ project }}</h1>
           <button v-if="!gateway" class="no-drag btn btn-ghost btn-xs btn-square" :class="isFavorite(project) ? 'text-warning' : 'opacity-50 hover:opacity-100'" :title="isFavorite(project) ? 'Remove from Favorites' : 'Add to Favorites'" @click="toggleFavorite(project)">

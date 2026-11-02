@@ -2236,11 +2236,13 @@ html.is-win .dc-top {
 }
 /* Windows (Catzoid #76, the family rule DevCatz follows): the minimize / maximize / close buttons sit over the top-right
    corner (titleBarOverlay, 48 px). Every page's top header carries `win-top`: 48 px of room above it on Windows, nothing
-   on macOS. DoCatz's headers are a fixed h-14 with their content at the bottom, so on Windows they grow by that room
-   instead of squeezing it. */
+   on macOS. DoCatz's headers are a fixed h-20 with their content centred (a list's header and the detail beside it
+   line up), so on Windows they grow by that room instead of squeezing it. */
 html.is-win .win-top {
-  height: auto;
   padding-top: 3rem;
+}
+html.is-win .win-top.h-20 {
+  height: 8rem;
 }
 /* A tall dialog (Welcome) keeps clear of the caption buttons too: centred, it leaves 48 px above it. */
 html.is-win .modal-box.win-fit {

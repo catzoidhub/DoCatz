@@ -115,7 +115,7 @@ const driftKeys = computed(() => [...new Set(drift.value.flatMap((d) => d.keys))
 
 <template>
   <section class="flex h-full min-w-0 flex-col">
-    <header class="flex shrink-0 items-end gap-3 px-4 pb-2" :class="embedded ? 'pt-4' : 'drag win-top h-14 border-b border-base-300/60'">
+    <header class="flex shrink-0 gap-3 px-4" :class="embedded ? 'items-end pt-4 pb-2' : 'drag win-top h-20 items-center border-b border-base-300/60'">
       <div class="min-w-0 flex-1 pb-0.5">
         <h1 v-if="!embedded" class="truncate text-base font-semibold tracking-tight">{{ project }} · .env</h1>
         <p class="truncate text-xs opacity-55">What its containers get when DoCatz runs them. The project’s own .env stays as it is.</p>

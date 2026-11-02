@@ -59,9 +59,9 @@ const copy = (t: string) => {
 
 <template>
   <section class="flex h-full flex-col">
-    <header class="drag win-top flex h-14 shrink-0 items-end gap-3 border-b border-base-300/60 px-4 pb-2">
+    <header class="drag win-top flex h-20 shrink-0 items-center gap-3 border-b border-base-300/60 px-4">
       <div class="no-drag"><DcNavButtons /></div>
-      <h1 class="pb-0.5 text-base font-semibold tracking-tight">Engine</h1>
+      <h1 class="text-base font-semibold tracking-tight">Engine</h1>
     </header>
     <div v-if="s && c" class="min-h-0 flex-1 overflow-y-auto">
       <div class="mx-auto max-w-2xl space-y-4 px-6 py-6">

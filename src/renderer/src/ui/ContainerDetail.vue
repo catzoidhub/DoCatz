@@ -87,10 +87,10 @@ const memPct = computed(() => (props.stats && props.stats.memLimit ? (props.stat
 
 <template>
   <section class="flex h-full flex-col">
-    <header class="drag win-top flex h-14 shrink-0 items-end gap-3 border-b border-base-300/60 px-4 pb-2">
+    <header class="drag win-top flex h-20 shrink-0 items-center gap-3 border-b border-base-300/60 px-4">
       <div class="no-drag"><DcNavButtons /></div>
-      <ServiceMark :container="c" size="lg" class="mb-0.5" />
-      <div class="min-w-[10rem] flex-1 pb-0.5">
+      <ServiceMark :container="c" size="lg" />
+      <div class="min-w-[10rem] flex-1">
         <div class="flex min-w-0 items-center gap-2">
           <h1 class="min-w-0 truncate text-base font-semibold tracking-tight" :title="c.name">{{ c.name }}</h1>
           <span class="badge badge-sm shrink-0" :class="running ? 'badge-success badge-soft' : 'badge-ghost'">{{ c.state }}</span>
