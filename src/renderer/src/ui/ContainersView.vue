@@ -95,6 +95,21 @@ const fold = (p: string) => {
   folded.value = s;
 };
 
+// ---- expand / collapse all: every project's services, and (expanding) every section too
+const allProjects = computed(() => sections.value.flatMap((x) => x.projects));
+const anyOpen = computed(() => allProjects.value.some((p) => !folded.value.has(p)) || (loose.value.length > 0 && !listView.isCollapsed('loose')));
+async function setAll(open: boolean) {
+  if (!open) {
+    folded.value = new Set([...folded.value, ...byProject.value.keys()]);
+    if (!listView.isCollapsed('loose')) listView.toggle('loose');
+    return;
+  }
+  folded.value = new Set();
+  for (const x of sections.value) if (!x.group && listView.isCollapsed(x.key)) listView.toggle(x.key);
+  if (listView.isCollapsed('loose')) listView.toggle('loose');
+  if (projectPrefs.value.groups.some((g) => g.collapsed)) await editProjectPrefs((p) => p.groups.forEach((g) => (g.collapsed = false)));
+}
+
 // ---- drag and drop (as DevCatz's sites)
 const dragId = ref<string | null>(null);
 const dropSection = ref<string | null>(null);
@@ -203,6 +218,10 @@ function openCompose() {
         <button v-if="view.runningOnly" class="no-drag sec-count is-live mb-1" title="Showing running only: click to show all" @click="view.runningOnly = false"><span class="status status-success status-xs" />Running only ✕</button>
         <span v-else-if="runningCount" class="sec-count is-live mb-1"><span class="status status-success status-xs" />{{ runningCount }} running</span>
         <span class="flex-1" />
+        <button v-if="containers.length" class="no-drag btn btn-ghost btn-sm btn-square" :title="anyOpen ? 'Collapse all: only the project names' : 'Expand all: every project and section open'" @click="setAll(!anyOpen)">
+          <svg v-if="anyOpen" class="size-4" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M5.22 2.22a.75.75 0 0 1 1.06 0L10 5.94l3.72-3.72a.75.75 0 1 1 1.06 1.06l-4.25 4.25a.75.75 0 0 1-1.06 0L5.22 3.28a.75.75 0 0 1 0-1.06Zm0 15.56a.75.75 0 0 0 1.06 0L10 14.06l3.72 3.72a.75.75 0 1 0 1.06-1.06l-4.25-4.25a.75.75 0 0 0-1.06 0l-4.25 4.25a.75.75 0 0 0 0 1.06Z" clip-rule="evenodd" /></svg>
+          <svg v-else class="size-4" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M10 2.75a.75.75 0 0 1 .53.22l4.25 4.25a.75.75 0 1 1-1.06 1.06L10 4.56 6.28 8.28a.75.75 0 0 1-1.06-1.06l4.25-4.25a.75.75 0 0 1 .53-.22Zm-4.78 9.97a.75.75 0 0 1 1.06 0L10 16.44l3.72-3.72a.75.75 0 1 1 1.06 1.06l-4.25 4.25a.75.75 0 0 1-1.06 0l-4.25-4.25a.75.75 0 0 1 0-1.06Z" clip-rule="evenodd" /></svg>
+        </button>
         <div class="no-drag">
           <PopMenu :items="listView.items.value" align="end" :width="270">
             <button class="btn btn-ghost btn-sm btn-square" :class="{ 'text-primary': listView.custom.value }" title="Filter, sort and group">
@@ -260,7 +279,11 @@ function openCompose() {
               @drop.prevent.stop="onDropRow(project, s)"
             >
               <!-- the compose project: its name, how many run, compose actions on hover -->
-              <div class="group flex items-center gap-1.5 rounded-lg px-2 py-1.5 transition-colors" :class="openProject === project ? 'bg-primary/15' : 'hover:bg-base-300/40'" @contextmenu.prevent="openMenu($event, { project })">
+              <div class="group flex items-center gap-1 rounded-lg py-1.5 pr-2 pl-0.5 transition-colors" :class="openProject === project ? 'bg-primary/15' : 'hover:bg-base-300/40'" @contextmenu.prevent="openMenu($event, { project })">
+                <!-- fold / unfold its services: a clear chevron on the left, as a tree -->
+                <button class="grid size-5 shrink-0 place-items-center rounded-md opacity-60 transition hover:bg-base-300/70 hover:opacity-100" :title="folded.has(project) ? `Show ${project}’s services` : `Hide ${project}’s services`" :aria-expanded="!folded.has(project)" @click.stop="fold(project)">
+                  <svg viewBox="0 0 20 20" class="size-4 transition-transform duration-150" :class="{ '-rotate-90': folded.has(project) }" fill="currentColor"><path fill-rule="evenodd" d="M5.22 8.22a.75.75 0 0 1 1.06 0L10 11.94l3.72-3.72a.75.75 0 1 1 1.06 1.06l-4.25 4.25a.75.75 0 0 1-1.06 0L5.22 9.28a.75.75 0 0 1 0-1.06Z" clip-rule="evenodd" /></svg>
+                </button>
                 <button class="flex min-w-0 flex-1 items-center gap-2 text-left" :title="`${project}: General, Environment, Domains, Containers, Monitoring`" @click="showProject(project)">
                   <span class="grid size-6 shrink-0 place-items-center rounded-md bg-primary/15 text-primary"><svg viewBox="0 0 20 20" class="size-3.5" fill="currentColor"><path :d="PROJECT_ICON" /></svg></span>
                   <span class="truncate text-[13px] font-semibold tracking-tight" :class="{ 'text-primary': openProject === project }">{{ project }}</span>
@@ -280,11 +303,8 @@ function openCompose() {
                   <button class="btn btn-ghost btn-xs btn-square" title="docker compose up" @click="compose(project, 'up')"><svg viewBox="0 0 20 20" class="size-3.5" fill="currentColor"><path d="M6.3 4.2A1 1 0 0 0 5 5.1v9.8a1 1 0 0 0 1.5.86l8.2-4.9a1 1 0 0 0 0-1.72l-8.2-4.9a1 1 0 0 0-.2-.04Z" /></svg></button>
                   <button class="btn btn-ghost btn-xs btn-square" title="docker compose stop" @click="compose(project, 'stop')"><svg viewBox="0 0 20 20" class="size-3.5" fill="currentColor"><rect x="5" y="5" width="10" height="10" rx="1.5" /></svg></button>
                 </div>
-                <button class="btn btn-ghost btn-xs btn-square shrink-0" :title="folded.has(project) ? 'Show its services' : 'Hide its services'" @click="fold(project)">
-                  <svg viewBox="0 0 20 20" class="size-3 opacity-50 transition-transform" :class="{ '-rotate-90': folded.has(project) }" fill="currentColor"><path d="M5.5 7.5 10 12l4.5-4.5h-9Z" /></svg>
-                </button>
               </div>
-              <ul v-show="!folded.has(project)" class="mt-0.5 ml-[1.15rem] space-y-0.5 border-l border-base-300/60 pl-2">
+              <ul v-show="!folded.has(project)" class="mt-0.5 ml-[1.9rem] space-y-0.5 border-l border-base-300/60 pl-2">
                 <li v-for="c in shownOf(project)" :key="c.id">
                   <div class="group flex cursor-default items-center gap-2.5 rounded-xl px-2 py-1.5 transition-colors" :class="openContainer === c.name ? 'bg-primary/15 ring-1 ring-primary/30' : 'hover:bg-base-300/40'" @click="openContainer = c.name">
                     <span class="relative shrink-0" :title="c.status">
