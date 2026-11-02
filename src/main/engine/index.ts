@@ -11,6 +11,7 @@ import { store } from '../store';
 import type { Backend, BackendStatus } from './backend';
 import { LimaBackend } from './lima';
 import { WslBackend } from './wsl';
+import { machineArch } from '../machine';
 
 /**
  * The engine (DoCatz TODO #5): one backend per platform, its settings, a start with visible steps, and the state
@@ -20,7 +21,7 @@ import { WslBackend } from './wsl';
 
 const KEY = 'engine';
 const GiB = 1024 ** 3;
-const host = { cpus: hostCpus().length, memoryGiB: Math.round(totalmem() / GiB), arch: process.arch, rosetta: process.platform === 'darwin' && process.arch === 'arm64' };
+const host = { cpus: hostCpus().length, memoryGiB: Math.round(totalmem() / GiB), arch: machineArch(), rosetta: process.platform === 'darwin' && process.arch === 'arm64' };
 
 function defaults(): EngineConfig {
   return { cpus: Math.max(2, Math.min(4, Math.floor(host.cpus / 2))), memoryGiB: Math.max(2, Math.min(4, Math.floor(host.memoryGiB / 2))), diskGiB: 64, rosetta: host.rosetta, autoStart: true };

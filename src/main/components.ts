@@ -1,4 +1,5 @@
 import type { Pinned } from './download';
+import { machineArch } from './machine';
 
 /**
  * Everything DoCatz downloads for the engine, pinned by version and SHA-256 (DoCatz TODO #2 / #7 / #34). Every
@@ -37,11 +38,14 @@ const BUILDX: Record<`${Os}-${Arch}`, Pinned | null> = {
   'win-arm64': null,
 };
 
-/** The WSL guest on Windows (DoCatz TODO #2 / #29): Alpine's minimal root file system; dockerd comes from apk. */
-const ALPINE_WSL: Pinned = {
-  name: `alpine-minirootfs-${VERSIONS.alpine}-x86_64.tar.gz`,
-  url: `https://dl-cdn.alpinelinux.org/alpine/v${VERSIONS.alpine.split('.').slice(0, 2).join('.')}/releases/x86_64/alpine-minirootfs-${VERSIONS.alpine}-x86_64.tar.gz`,
-  sha256: 'f8e1cafba9b1b283b5d30d06f9885c8d2bc161ffe9083ade8e2e157813a53407',
+/**
+ * The WSL guest on Windows (DoCatz TODO #2 / #29): Alpine's minimal root file system; dockerd comes from apk. Its arch
+ * is the PC's own (machine.ts): a Windows ARM PC runs WSL on arm64 even when DoCatz itself is the emulated x64 build.
+ */
+const alpineUrl = (a: string) => `https://dl-cdn.alpinelinux.org/alpine/v${VERSIONS.alpine.split('.').slice(0, 2).join('.')}/releases/${a}/alpine-minirootfs-${VERSIONS.alpine}-${a}.tar.gz`;
+const ALPINE_WSL: Record<Arch, Pinned> = {
+  x64: { name: `alpine-minirootfs-${VERSIONS.alpine}-x86_64.tar.gz`, url: alpineUrl('x86_64'), sha256: 'f8e1cafba9b1b283b5d30d06f9885c8d2bc161ffe9083ade8e2e157813a53407' },
+  arm64: { name: `alpine-minirootfs-${VERSIONS.alpine}-aarch64.tar.gz`, url: alpineUrl('aarch64'), sha256: '4d3f80afaebd447c5591a63a73bde380a149fe8b2d85488cafabb2ff97551f50' },
 };
 
 const arch = (): Arch => (process.arch === 'arm64' ? 'arm64' : 'x64');
@@ -55,4 +59,4 @@ export const limaPackage = () => LIMA[arch()];
 export const dockerPackage = () => need(DOCKER[`${os()}-${arch()}`], 'Docker CLI');
 export const composePackage = () => need(COMPOSE[`${os()}-${arch()}`], 'Docker Compose');
 export const buildxPackage = () => need(BUILDX[`${os()}-${arch()}`], 'Docker Buildx');
-export const wslRootfs = () => ALPINE_WSL;
+export const wslRootfs = () => ALPINE_WSL[machineArch()];

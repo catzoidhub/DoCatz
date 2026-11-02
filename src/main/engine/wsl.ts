@@ -28,6 +28,22 @@ const distroDir = () => docatzDir('vm', 'wsl');
 
 /** wsl.exe writes UTF-16LE when its output goes to a pipe. */
 const text = (s: string) => s.replace(/\u0000/g, '');
+
+/** What wsl.exe's own answers mean, in words a user can act on (its last line is only "If this error was unexpected…"). */
+const WSL_ERRORS: [RegExp, string][] = [
+  [/HCS_E_HYPERV_NOT_INSTALLED|virtuali[sz]ation is not enabled/i, 'WSL 2 needs virtualisation: turn on “Virtual Machine Platform” (Windows features) and virtualisation in the PC’s firmware (BIOS / UEFI), then restart. In a virtual machine, its host has to allow nested virtualisation.'],
+  [/WSL_E_WSL_OPTIONAL_COMPONENT_REQUIRED|not installed/i, 'WSL is not installed: run “wsl --install --no-distribution” in an administrator terminal, restart, then start the engine again.'],
+  [/ERROR_FILE_NOT_FOUND|cannot find the file/i, 'WSL could not find the downloaded Linux files: start the engine again to download them anew.'],
+];
+/** The useful part of a failed wsl.exe call: a known error in plain words, else its first line and error code. */
+function wslError(out: string): string {
+  const t = text(out);
+  const known = WSL_ERRORS.find(([re]) => re.test(t));
+  if (known) return known[1];
+  const lines = t.split(/\r?\n/).map((l) => l.trim()).filter((l) => l && !/^(If this error was unexpected|For information|For more information)/i.test(l));
+  const code = lines.find((l) => /^Error code:/i.test(l));
+  return [lines.find((l) => !/^Error code:/i.test(l)), code].filter(Boolean).join(' ') || lastLine(t);
+}
 const wsl = (args: string[], o: Parameters<typeof run>[2] = {}) => run(WSL, args, { timeout: 60_000, ...o, env: { ...process.env, WSL_UTF8: '1' } });
 const inDistro = (script: string, o: Parameters<typeof run>[2] = {}) => wsl(['-d', DISTRO, '-u', 'root', '--', 'sh', '-c', script], o);
 
@@ -59,9 +75,9 @@ export class WslBackend implements Backend {
     r.step(1);
     if (!exists) {
       const i = await wsl(['--import', DISTRO, distroDir(), rootfs, '--version', '2'], { timeout: 300_000, signal: r.signal });
-      if (i.code !== 0) throw new Error(`The WSL distro could not be created: ${lastLine(text(i.stderr || i.stdout))}`);
+      if (i.code !== 0) throw new Error(`The WSL distro could not be created. ${wslError(i.stderr || i.stdout)}`);
       const a = await inDistro('apk add --no-cache docker socat iptables ip6tables', { timeout: 600_000, signal: r.signal, onLine: (l) => r.detail(text(l)) });
-      if (a.code !== 0) throw new Error(`Docker could not be installed in the distro: ${lastLine(text(a.stderr || a.stdout))}`);
+      if (a.code !== 0) throw new Error(`Docker could not be installed in the distro: ${wslError(a.stderr || a.stdout)}`);
     }
     r.step(2);
     if (!this.daemon || this.daemon.exitCode !== null) {
