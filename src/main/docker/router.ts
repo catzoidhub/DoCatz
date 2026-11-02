@@ -1,5 +1,6 @@
 import { docker } from './client';
 import { execRun } from './ops';
+import type { DbStream } from '../dbservices';
 
 /**
  * Domains for containers that publish no port (DoCatz TODO #9, as OrbStack's <service>.<project>.orb.local): a small
@@ -7,7 +8,8 @@ import { execRun } from './ops';
  * computer hands a name to it (Lima / WSL forward its 127.0.0.1 port here), and it forwards by Host to the container's
  * IP on its network and its port: the first exposed port, else the one it listens on, else 80. Its config is written
  * whenever the containers change (Docker's archive API + `nginx -s reload`), so nothing needs publishing and no compose
- * file or Dockerfile changes.
+ * file or Dockerfile changes. Database containers get a TCP stream the same way (#24): 127.0.0.1:<DoCatz's port> to the
+ * container's IP and its database port, for DBCatz.
  */
 
 const NAME = 'docatz-router';
@@ -42,7 +44,7 @@ function tarOne(name: string, body: string): Buffer {
   return Buffer.concat([h, data, pad, Buffer.alloc(1024, 0)]);
 }
 
-function config(targets: RouterTarget[]): string {
+function config(targets: RouterTarget[], streams: DbStream[]): string {
   const servers = targets
     .map(
       (t) => `  server {
@@ -75,7 +77,7 @@ http {
   }
 ${servers}
 }
-`;
+${streams.length ? `stream {\n${streams.map((s) => `  server {\n    listen 127.0.0.1:${s.port};\n    proxy_pass ${s.ip}:${s.to};\n  }`).join('\n')}\n}\n` : ''}`;
 }
 
 export class Router {
@@ -83,7 +85,7 @@ export class Router {
   private last = '';
   private listening = new Map<string, number[]>();
   private busy: Promise<void> | null = null;
-  private pending: RouterTarget[] | null = null;
+  private pending: { targets: RouterTarget[]; streams: DbStream[] } | null = null;
 
   /**
    * The TCP ports a container listens on (from /proc/net/tcp*, any image with `cat`). An empty answer is not kept, so
@@ -149,14 +151,14 @@ export class Router {
   }
 
   /** Writes the routes (only when they changed) and reloads nginx. Calls that come while one runs collapse into one. */
-  async update(targets: RouterTarget[]): Promise<void> {
-    this.pending = targets;
+  async update(targets: RouterTarget[], streams: DbStream[] = []): Promise<void> {
+    this.pending = { targets, streams };
     if (this.busy) return this.busy;
     this.busy = (async () => {
       while (this.pending) {
         const next = this.pending;
         this.pending = null;
-        const body = config(next);
+        const body = config(next.targets, next.streams);
         const id = await this.ensure();
         if (body === this.last) continue;
         const tar = tarOne('nginx.conf', body);

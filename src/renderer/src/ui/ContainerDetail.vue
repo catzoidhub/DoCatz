@@ -1,8 +1,9 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue';
 import type { DcContainer, DcContainerDetail, DcStats } from '@shared/types';
-import { api, attempt, bytes, changes, containerTab, errorText, gatewayKindOf, gatewayLink, gateways, notify, openContainer, statsHistory, type ContainerTab } from '../store';
+import { api, attempt, bytes, changes, containerTab, databaseOf, dbcatzLink, errorText, gatewayKindOf, gatewayLink, gateways, notify, openContainer, statsHistory, type ContainerTab } from '../store';
 import ConfirmDialog from '../components/ConfirmDialog.vue';
+import dbcatzLogo from '../assets/logos/dbcatz.png';
 import DcNavButtons from './DcNavButtons.vue';
 import LogsPane from './LogsPane.vue';
 import TermPane from './TermPane.vue';
@@ -64,6 +65,8 @@ const copy = (text: string, what: string) => {
   notify('success', `${what} copied`);
 };
 const running = computed(() => c.value.state === 'running');
+/** A database container: its address on this computer and Open in DBCatz (#24). */
+const db = computed(() => databaseOf(c.value.id));
 
 // The domain's name (before .docatz.<tld>): editable, the ending stays as Settings → Domains says.
 const editingName = ref(false);
@@ -106,6 +109,10 @@ const memPct = computed(() => (props.stats && props.stats.memLimit ? (props.stat
             <span class="shrink-0 opacity-30">·</span>
             <span class="min-w-0 truncate font-mono opacity-70" title="Not a web page: the other services of its project reach it at this address">{{ c.inner }}</span>
           </template>
+          <template v-if="db">
+            <span class="shrink-0 opacity-30">·</span>
+            <span class="selectable min-w-0 truncate font-mono opacity-70" title="On this computer (DBCatz, a database app, a script): DoCatz forwards it, no port published">{{ db.host }}:{{ db.port }}</span>
+          </template>
         </p>
       </div>
       <div class="no-drag flex shrink-0 items-center gap-1">
@@ -113,6 +120,7 @@ const memPct = computed(() => (props.stats && props.stats.memLimit ? (props.stat
         <!-- a DevCatz gateway's container: read-only here, DevCatz starts, stops and removes it -->
         <button v-else-if="gatewayKind" class="btn btn-sm btn-primary" title="DevCatz installs, starts and stops its gateways" @click="gatewayLink(gatewayKind)">Open in DevCatz</button>
         <template v-else>
+          <button v-if="db" class="btn btn-ghost btn-sm gap-1.5" :title="`Open in DBCatz: ${db.engine} on ${db.host}:${db.port}${db.user ? ` as ${db.user}` : ''}, with the password the container was started with`" @click="dbcatzLink(db.id)"><img :src="dbcatzLogo" alt="" class="size-4" draggable="false" />DBCatz</button>
           <button v-if="running" class="btn btn-sm" @click="act('stop')">Stop</button>
           <button v-else class="btn btn-sm btn-primary" @click="act('start')">Start</button>
           <button class="btn btn-sm" @click="act('restart')">Restart</button>

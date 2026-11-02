@@ -1,5 +1,5 @@
 import { computed, ref, watch } from 'vue';
-import type { DcAiFeature, DcContainer, DcGateway, DcProjectPrefs, DcStats, DcReportKind, DcRun, DcUpdateState, DoCatzSettings, DoCatzSettingsPatch, EngineState, SiblingApp, TaskProgress, Theme } from '@shared/types';
+import type { DcAiFeature, DcContainer, DcDatabase, DcGateway, DcProjectPrefs, DcStats, DcReportKind, DcRun, DcUpdateState, DoCatzSettings, DoCatzSettingsPatch, EngineState, SiblingApp, TaskProgress, Theme } from '@shared/types';
 import { currentOS } from '@shared/platform';
 
 /** The preload bridge (see src/preload/index.ts). */
@@ -104,6 +104,19 @@ export async function dialcatzLink(project: string): Promise<boolean> {
   if (ok === false) siblingAsk.value = { which: 'dialcatz', link };
   return ok === true;
 }
+/** The database containers DBCatz gets (#24): each one's address on this computer, by container id. */
+export const databases = ref<Omit<DcDatabase, 'password'>[]>([]);
+export const databaseOf = (containerId: string) => databases.value.find((d) => d.containerId === containerId) ?? null;
+/**
+ * A database container in DBCatz (#24): dbcatz://open?docatz=<id> opens it there as a connection — the user and
+ * password its image was started with come from DoCatz's dbcatz/services.json, never through the link.
+ */
+export async function dbcatzLink(id: string): Promise<boolean> {
+  const link = `dbcatz://open?docatz=${encodeURIComponent(id)}`;
+  const ok = await attempt(() => api.openSibling('dbcatz', link));
+  if (ok === false) siblingAsk.value = { which: 'dbcatz', link };
+  return ok === true;
+}
 /** Another Catzoid app is not installed and a link wants it: the Download & Install dialog, and that install's steps. */
 export const siblingAsk = ref<{ which: SiblingApp; link: string } | null>(null);
 export const siblingTask = ref<TaskProgress | null>(null);
@@ -150,6 +163,7 @@ export async function refreshContainers(): Promise<void> {
   } catch {
     containers.value = [];
   }
+  databases.value = await api.databases().catch(() => databases.value);
 }
 
 // ---------------------------------------------------------------- the project list's arrangement (favorites, groups, order)

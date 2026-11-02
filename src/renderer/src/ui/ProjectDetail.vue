@@ -2,9 +2,10 @@
 import { computed, ref, watch } from 'vue';
 import type { DcComposeAction, DcComposeProject, DcContainer, DcStats } from '@shared/types';
 import { currentOS } from '@shared/platform';
-import { api, attempt, bytes, changes, composeFile, composeOpen, containerTab, dialcatzLink, gatewayKindOf, gatewayLink, gateways, notify, openContainer, isFavorite, openProject, PROJECT_ICON, projectTab, runs, statsHistory, toggleFavorite, token, type ProjectTab } from '../store';
+import { api, attempt, bytes, changes, composeFile, composeOpen, containerTab, databaseOf, dbcatzLink, dialcatzLink, gatewayKindOf, gatewayLink, gateways, notify, openContainer, isFavorite, openProject, PROJECT_ICON, projectTab, runs, statsHistory, toggleFavorite, token, type ProjectTab } from '../store';
 import devcatzLogo from '../assets/logos/devcatz.png';
 import dialcatzLogo from '../assets/logos/dialcatz.png';
+import dbcatzLogo from '../assets/logos/dbcatz.png';
 import ConfirmDialog from '../components/ConfirmDialog.vue';
 import DcNavButtons from './DcNavButtons.vue';
 import ProjectEnv from './ProjectEnv.vue';
@@ -275,7 +276,11 @@ const rateText = (v: number) => `${bytes(v)}/s`;
                 <li v-for="c in containers" :key="c.id" class="flex flex-wrap items-center gap-2 py-2">
                   <ServiceMark :container="c" size="sm" />
                   <span class="w-28 truncate text-sm font-medium">{{ c.service }}</span>
-                  <template v-if="!c.url && c.inner"><span class="text-xs opacity-60">not a web page — the other services reach it at <code class="font-mono">{{ c.inner }}</code></span></template>
+                  <template v-if="!c.url && c.inner"
+                    ><span class="text-xs opacity-60"
+                      >not a web page — the other services reach it at <code class="font-mono">{{ c.inner }}</code><template v-if="databaseOf(c.id)">, this computer at <code class="selectable font-mono">{{ databaseOf(c.id)!.host }}:{{ databaseOf(c.id)!.port }}</code></template></span
+                    ><button v-if="databaseOf(c.id)" class="btn btn-ghost btn-xs gap-1" title="Open in DBCatz, with the user and password the container was started with" @click="dbcatzLink(databaseOf(c.id)!.id)"><img :src="dbcatzLogo" alt="" class="size-3.5" draggable="false" />DBCatz</button></template
+                  >
                   <template v-else-if="!c.url"><span class="text-xs opacity-50">{{ c.state === 'running' ? 'no network address' : 'starts with the service' }}</span></template>
                   <template v-else-if="editing === c.id">
                     <form class="flex flex-wrap items-center gap-1.5" @submit.prevent="saveName(c, nameInput.trim() || null)">

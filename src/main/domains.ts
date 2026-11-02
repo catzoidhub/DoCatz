@@ -17,6 +17,7 @@ import { isWin } from './platform';
 import { lastLine, run } from './proc';
 import { readShared, SHARED_DIR, writeShared, type SharedDomains } from './shared';
 import { dataDir, store } from './store';
+import type { DbStream } from './dbservices';
 import { cancelled, forwardTarget, installForward, installResolver, resolverStatus, resolverZones, uninstallForward, uninstallResolver } from './system';
 
 /**
@@ -253,7 +254,7 @@ export class Domains {
    * port, else the one it listens on, else 80 — so nothing needs publishing (as OrbStack). A published port on
    * localhost is the fallback when the router cannot run.
    */
-  async setRoutes(containers: DcContainer[]): Promise<void> {
+  async setRoutes(containers: DcContainer[], streams: DbStream[] = []): Promise<void> {
     const next = new Map<string, { router: boolean; port: number }>();
     const targets: RouterTarget[] = [];
     for (const c of containers) {
@@ -277,7 +278,7 @@ export class Domains {
       } else if (fallback) next.set(host, { router: false, port: fallback });
     }
     try {
-      if (targets.length) await this.router.update(targets);
+      if (targets.length || streams.length) await this.router.update(targets, streams);
     } catch (e) {
       console.warn('DoCatz router:', (e as Error).message);
       // Without the router only published ports can be reached.

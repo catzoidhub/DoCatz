@@ -11,6 +11,7 @@ import { AskAi } from './ai';
 import { buildDetail, buildLogs, listBuilds, removeBuild } from './builds';
 import { composeEnvironmentKeys, envCreate, ownServices, envRead, envRemove, envSetLocked, envState, envWrite, expectedEnv } from './envs';
 import { writeBridge } from './bridge';
+import { listDatabases, updateDatabases } from './dbservices';
 import { removeContext, setPath as setCliPath } from './cli';
 import { findCatzoidApp, installCatzoidApp, installSteps, openCatzoidApp, platformId } from './companion';
 import { DockerError } from './docker/client';
@@ -72,7 +73,8 @@ async function refresh(): Promise<void> {
     } catch {
       containers = [];
     }
-    await domains.setRoutes(containers).catch((e) => console.warn('routes:', (e as Error).message));
+    const streams = await updateDatabases(containers).catch((e) => (console.warn('databases:', (e as Error).message), []));
+    await domains.setRoutes(containers, streams).catch((e) => console.warn('routes:', (e as Error).message));
     // Frameworks of services built from source (their marks): learnt per project in the background.
     if (containers.some((c) => c.project && !c.framework))
       void projects()
@@ -293,6 +295,7 @@ function api(): DoCatzApi {
     },
 
     devcatzGateways: async () => devcatzGateways(),
+    databases: async () => listDatabases().map(({ password: _password, ...d }) => d),
     siblingInstall: async (which, link) => {
       const info = siblingInfo[which];
       if (!info || !link.startsWith(`${info[1]}://`)) throw new Error('Unknown app or link');
