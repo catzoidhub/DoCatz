@@ -3,6 +3,7 @@ import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import type { DcAiPreview, DcContainer, DcLogAnswer, DcLogChunk } from '@shared/types';
 import { aiOn, api, errorText, notify, token } from '../store';
 import CatMood from './CatMood.vue';
+import { highlightLog, lineTone } from '../loghighlight';
 
 /**
  * Live logs of one container (DoCatz TODO #13): the last lines, then followed as they come; search, stdout / stderr,
@@ -11,7 +12,7 @@ import CatMood from './CatMood.vue';
  */
 const props = defineProps<{ container: DcContainer }>();
 const MAX = 5000;
-const lines = ref<{ n: number; stream: 'stdout' | 'stderr'; time: string; text: string }[]>([]);
+const lines = ref<{ n: number; stream: 'stdout' | 'stderr'; time: string; text: string; html: string; tone: 'error' | 'warn' | null }[]>([]);
 const ended = ref(false);
 const query = ref('');
 const showTime = ref(false);
@@ -37,7 +38,8 @@ onMounted(() => {
   off = window.docatz.onLogs((c: DcLogChunk) => {
     if (c.token !== current) return;
     if (c.lines.length) {
-      const add = c.lines.map((l) => ({ ...l, n: ++seq }));
+      // coloured once, as they arrive (a code editor's look: times, levels, URLs, strings, keys, numbers)
+      const add = c.lines.map((l) => ({ ...l, n: ++seq, html: highlightLog(l.text), tone: lineTone(l.text) }));
       lines.value = [...lines.value, ...add].slice(-MAX);
       if (follow.value) void nextTick(() => box.value && (box.value.scrollTop = box.value.scrollHeight));
     }
@@ -130,13 +132,16 @@ const copyAll = () => copy(shown.value.map((l) => (showTime.value ? `${l.time} $
     </div>
 
     <div class="flex min-h-0 flex-1">
-      <div ref="box" class="selectable min-w-0 flex-1 overflow-auto bg-base-200/40 py-2 font-mono text-[11.5px] leading-[1.45]" @scroll="onScroll">
-        <p v-if="!lines.length" class="px-4 py-6 font-sans text-sm opacity-50">{{ ended ? 'No log lines.' : 'Waiting for log lines…' }}</p>
-        <div v-for="l in shown" :key="l.n" class="flex cursor-default gap-3 px-4 whitespace-pre-wrap break-all" :class="[picked.has(l.n) ? 'bg-primary/20' : 'hover:bg-base-300/40', l.stream === 'stderr' ? 'text-error' : '']" @click="pick(l.n, $event)">
-          <span v-if="showTime" class="shrink-0 opacity-45">{{ l.time.slice(11, 23) }}</span>
-          <span>{{ l.text }}</span>
+      <!-- a code editor's look: line numbers in a gutter, a red / amber mark for stderr and failures, coloured tokens -->
+      <div ref="box" class="log-editor selectable min-w-0 flex-1 overflow-auto py-2 font-mono text-[11.5px] leading-[1.55]" @scroll="onScroll">
+        <p v-if="!lines.length" class="px-4 py-6 font-sans text-sm opacity-60">{{ ended ? 'No log lines.' : 'Waiting for log lines…' }}</p>
+        <div v-for="l in shown" :key="l.n" class="log-line flex cursor-default" :class="[picked.has(l.n) ? 'is-picked' : '', l.tone ? `is-${l.tone}` : '']" :title="l.stream === 'stderr' ? 'stderr' : undefined" @click="pick(l.n, $event)">
+          <span class="log-gutter">{{ l.n }}</span>
+          <span v-if="showTime" class="lg-time shrink-0 pr-3">{{ l.time.slice(11, 23) }}</span>
+          <!-- eslint-disable-next-line vue/no-v-html -- escaped by highlightLog -->
+          <span class="min-w-0 flex-1 pr-4 whitespace-pre-wrap [overflow-wrap:anywhere]" v-html="l.html || '&nbsp;'" />
         </div>
-        <p v-if="ended && lines.length" class="px-4 pt-2 font-sans text-xs opacity-45">— the container stopped; its log ends here —</p>
+        <p v-if="ended && lines.length" class="px-4 pt-2 font-sans text-xs opacity-55">— the container stopped; its log ends here —</p>
       </div>
 
       <!-- Explain with AI -->

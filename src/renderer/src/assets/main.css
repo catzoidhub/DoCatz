@@ -2382,3 +2382,34 @@ html.is-win .dc-top-btn {
   color: var(--color-primary);
   background: oklch(from var(--color-primary) l c h / 0.12);
 }
+
+/* ---- container logs, as a code editor (LogsPane / loghighlight.ts): dark in both themes */
+.log-editor {
+  background: oklch(19% 0.014 260);
+  color: oklch(88% 0.01 260);
+}
+.log-line { border-left: 2px solid transparent; }
+.log-line:hover { background: oklch(100% 0 0 / 0.045); }
+.log-line.is-picked { background: color-mix(in oklch, var(--color-primary) 22%, transparent); }
+.log-line.is-error { border-left-color: oklch(66% 0.19 25); background: oklch(66% 0.19 25 / 0.07); }
+.log-line.is-warn { border-left-color: oklch(80% 0.15 80); }
+.log-gutter {
+  flex-shrink: 0;
+  width: 3.4rem;
+  padding-right: 0.9rem;
+  text-align: right;
+  color: oklch(60% 0.015 260 / 0.55);
+  user-select: none;
+}
+.lg-time { color: oklch(66% 0.02 260); }
+.lg-prefix { color: oklch(62% 0.03 260); }
+.lg-url, .lg-path { color: oklch(78% 0.11 230); }
+.lg-str { color: oklch(80% 0.12 145); }
+.lg-key { color: oklch(78% 0.12 300); }
+.lg-method { color: oklch(76% 0.14 300); font-weight: 600; }
+.lg-num { color: oklch(80% 0.12 65); }
+.lg-ok { color: oklch(76% 0.15 150); font-weight: 600; }
+.lg-info { color: oklch(76% 0.11 220); font-weight: 600; }
+.lg-debug { color: oklch(64% 0.02 260); }
+.lg-warn { color: oklch(83% 0.15 85); font-weight: 600; }
+.lg-error { color: oklch(70% 0.19 25); font-weight: 600; }

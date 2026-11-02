@@ -208,7 +208,8 @@ const rateText = (v: number) => `${bytes(v)}/s`;
                 <li v-for="c in containers" :key="c.id" class="flex flex-wrap items-center gap-2 py-2">
                   <ServiceMark :container="c" size="sm" />
                   <span class="w-28 truncate text-sm font-medium">{{ c.service }}</span>
-                  <template v-if="!c.url"><span class="text-xs opacity-50">{{ c.state === 'running' ? 'no network address' : 'starts with the service' }}</span></template>
+                  <template v-if="!c.url && c.inner"><span class="text-xs opacity-60">not a web page — the other services reach it at <code class="font-mono">{{ c.inner }}</code></span></template>
+                  <template v-else-if="!c.url"><span class="text-xs opacity-50">{{ c.state === 'running' ? 'no network address' : 'starts with the service' }}</span></template>
                   <template v-else-if="editing === c.id">
                     <form class="flex flex-wrap items-center gap-1.5" @submit.prevent="saveName(c, nameInput.trim() || null)">
                       <input v-model="nameInput" class="input input-sm w-52 font-mono text-xs" spellcheck="false" autofocus @keydown.esc.prevent="editing = null" />

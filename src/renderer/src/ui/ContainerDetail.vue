@@ -100,6 +100,10 @@ const memPct = computed(() => (props.stats && props.stats.memLimit ? (props.stat
             <span class="shrink-0 opacity-30">·</span>
             <a class="no-drag link link-hover min-w-0 truncate font-mono text-primary" :title="`Open ${c.url}`" @click="api.openUrl(c.url)">{{ c.url.replace(/^https?:\/\//, '') }}</a>
           </template>
+          <template v-else-if="c.inner">
+            <span class="shrink-0 opacity-30">·</span>
+            <span class="min-w-0 truncate font-mono opacity-70" title="Not a web page: the other services of its project reach it at this address">{{ c.inner }}</span>
+          </template>
         </p>
       </div>
       <div class="no-drag flex shrink-0 items-center gap-1">

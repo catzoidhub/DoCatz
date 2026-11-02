@@ -192,6 +192,8 @@ export interface DcContainer {
   ports: DcPort[];
   /** https://<service>.<project>.docatz.<tld> or https://<name>.docatz.<tld> — every running container on a network. */
   url: string | null;
+  /** A database / cache / mail server (no page to open): its address for the rest of its project, like postgres:5432. */
+  inner?: string | null;
   networks: string[];
   /** The container's own IP on its first network (DoCatz's router reaches it inside the VM). */
   ip: string | null;

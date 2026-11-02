@@ -12,6 +12,7 @@ import type { DcContainer, DcDomains, DcDomainsPatch, TaskProgress } from '@shar
 import { findCatzoidApp } from './companion';
 import { DNS_HOST, DNS_PORT, DnsServer } from './dns';
 import { Router, ROUTER_PORT, type RouterTarget } from './docker/router';
+import { isWeb, NOT_WEB } from './webports';
 import { isWin } from './platform';
 import { lastLine, run } from './proc';
 import { readShared, SHARED_DIR, writeShared, type SharedDomains } from './shared';
@@ -44,8 +45,6 @@ const DEVCATZ_DATA = isWin ? join(process.env.APPDATA ?? join(homedir(), 'AppDat
 const WEB_PORTS = [80, 8080, 3000, 8000, 5173, 4321, 5000, 4200, 8888, 4000, 9000, 443, 8443];
 /** Ports that are never the app (Caddy / FrankenPHP's admin API, metrics, debuggers). */
 const ADMIN_PORTS = [2019, 9003, 9229];
-/** Ports that speak something other than HTTP (mail, databases, queues): a web UI next to them wins (Mailpit: 8025 over 1025). */
-const NOT_WEB = [25, 465, 587, 1025, 2525, 5432, 3306, 6379, 27017, 5672, 11211, 4222, 1433, 9042];
 /** DoCatz's proxy marks its answers, so a probe through :443 can tell whether it reaches DoCatz. */
 const MARK = 'x-docatz';
 
@@ -235,7 +234,7 @@ export class Domains {
   /** https://<host>[:port] — without the port only when :443 / :80 reach DoCatz's proxy. */
   urlFor = (c: Omit<DcContainer, 'url'>): string | null => {
     const host = this.hostFor(c);
-    if (!host) return null;
+    if (!host || !isWeb(c)) return null;
     const https = this.https() && this.ca !== null;
     const clean = shared().cleanUrls?.on === true && this.probe?.reaches === true;
     return `${https ? 'https' : 'http'}://${host}${clean ? '' : `:${https ? this.httpsPort : this.httpPort}`}`;

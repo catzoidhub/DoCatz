@@ -1,5 +1,6 @@
 import type { IncomingMessage } from 'node:http';
 import type { Duplex } from 'node:stream';
+import { innerAddress } from '../webports';
 import type { DcContainer, DcContainerDetail, DcContainerState, DcDiskUsage, DcImage, DcLogChunk, DcNetwork, DcPort, DcPruneKind, DcPrunePreview, DcStats, DcVolume } from '@shared/types';
 import { demuxer, docker } from './client';
 import { frameworkOf } from '../frameworks';
@@ -75,7 +76,7 @@ function shape(c: ApiContainer, urlFor: UrlFor): DcContainer {
     framework: frameworkOf(c.Labels?.[PROJECT] ?? null, c.Labels?.[SERVICE] ?? null),
   };
   base.domainName = domainNameOf(base.domainKey);
-  return { ...base, url: urlFor(base) };
+  return { ...base, url: urlFor(base), inner: innerAddress(base) };
 }
 
 export async function listContainers(urlFor: UrlFor): Promise<DcContainer[]> {
