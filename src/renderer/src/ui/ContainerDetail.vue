@@ -96,8 +96,8 @@ const memPct = computed(() => (props.stats && props.stats.memLimit ? (props.stat
       <div class="min-w-[8rem] flex-1 overflow-hidden">
         <div class="flex min-w-0 items-center gap-2">
           <h1 class="min-w-0 truncate text-base font-semibold tracking-tight" :title="c.name">{{ c.name }}</h1>
-          <span class="badge badge-sm shrink-0" :class="running ? 'badge-success badge-soft' : 'badge-ghost'">{{ c.state }}</span>
-          <span v-if="c.health" class="badge badge-sm badge-soft shrink-0" :class="c.health === 'healthy' ? 'badge-success' : c.health === 'unhealthy' ? 'badge-error' : 'badge-warning'">{{ c.health }}</span>
+          <span class="badge badge-sm shrink-0 @max-3xl:hidden" :class="running ? 'badge-success badge-soft' : 'badge-ghost'">{{ c.state }}</span>
+          <span v-if="c.health" class="badge badge-sm badge-soft shrink-0 @max-3xl:hidden" :class="c.health === 'healthy' ? 'badge-success' : c.health === 'unhealthy' ? 'badge-error' : 'badge-warning'">{{ c.health }}</span>
         </div>
         <p class="flex min-w-0 items-center gap-1.5 text-xs">
           <span class="truncate opacity-55">{{ c.image }} · {{ c.status }}</span>
