@@ -1,7 +1,7 @@
 <p align="center"><img src="resources/icon.png" width="128" height="128" alt="DoCatz"></p>
 
 <h1 align="center">DoCatz</h1>
-<p align="center"><em>Curiosity won't kill this cat.</em></p>
+<p align="center"><em>If it fits, it ships.</em></p>
 <p align="center">
   <a href="https://catzoid.com/docatz">Website</a> ·
   <a href="https://catzoid.com/docatz/download">Download</a> ·
@@ -9,18 +9,29 @@
   <a href="https://catzoid.com/community">Community</a>
 </p>
 
-A database client for macOS and Windows: MySQL, MariaDB, PostgreSQL, SQLite, Redis, Valkey, MongoDB and Elasticsearch in one window, a tab per connection — local servers, through SSH, on AWS with IAM, or with credentials from Vault. Production mode asks before every write, read-only stays read-only, and an optional AI writes the query while you press Run.
+A fast, light Docker engine and container manager for macOS (Windows coming): a small Linux VM runs Docker, your
+containers are grouped by compose project with their logs, a terminal and their files, and every container that
+publishes a port gets its own domain — `https://web.shop.docatz.localhost`.
 
 Part of [Catzoid](https://catzoid.com) — free, open-source developer tools with nine lives. All cats, no catch: no
 account, no Pro tier, nothing locked behind a payment.
 
+> **Early days.** DoCatz is in its first builds and not released yet; it ships with the next DevCatz update.
+
 ## What it does
 
-- **Connect** by hand, over SSH, with AWS IAM or Vault — or paste a URL (`postgres://…`, a whole `DATABASE_URL=` line works too). Passwords stay in the macOS Keychain, or on Windows encrypted for your account.
-- **Browse and edit** — data grid with filters, structure, indexes, export and import, a query editor with history.
-- **Production safety** — Production and Read-only modes per connection, typed confirmations for risky statements.
-- **AI, optional** — Ask in plain words; only structure is sent, never your rows unless you allow samples.
-- **The family** — databases [DevCatz](https://github.com/catzoidhub/DevCatz) runs show up by themselves; [DialCatz](https://github.com/catzoidhub/DialCatz) opens the table a request touched.
+- **The engine** — a Linux VM on Apple's Virtualization framework (through [Lima](https://lima-vm.io)) with fast
+  file sharing for your home folder and Rosetta for Intel images; WSL 2 on Windows. CPUs, memory and disk are yours to
+  set. Everything it downloads is pinned to a known checksum and kept in `~/.docatz`.
+- **Your docker keeps working** — DoCatz brings docker, compose and buildx and adds a `docatz` context; nothing
+  switches until you choose *Use DoCatz as the default*, so Docker Desktop or OrbStack can stay side by side.
+- **Containers** — grouped by compose project; start, stop, restart, remove; live logs with search, a terminal
+  inside, a file browser, CPU and memory. Compose files open, edit and run (Up, Down, Pull, Build) with their output.
+- **Images, volumes, networks** — sizes, who uses what, and clean-up that lists exactly what goes first.
+- **Domains** — the default domain, HTTPS certificate and URLs without a port are shared with
+  [DevCatz](https://github.com/catzoidhub/DevCatz), and work with DoCatz alone too.
+- **AI, optional** — Ask DoCatz in plain words, Explain with AI on a failing container's logs, write or fix a compose
+  file. Off until you turn it on; container names and states go out, never environment values or secrets.
 
 ## Install
 

@@ -1,6 +1,6 @@
 # Security
 
-DoCatz runs on your Mac with access to things that matter — it holds the passwords, SSH keys and cloud credentials of your databases, and runs queries against them — production ones included. A security problem in it is taken seriously.
+DoCatz runs on your computer with access to things that matter — a Linux VM with your home folder mounted, a Docker engine that can run anything, a local proxy, a certificate authority your browsers trust, and system changes made with your administrator password (port forwarding, a resolver). A security problem in it is taken seriously.
 
 ## Reporting a vulnerability
 
@@ -19,8 +19,8 @@ would rather not be.
 - The DoCatz app and its updater (the update feed and the downloaded update are checked before they install).
 - Anything that would let a web page, another app or a crafted file make DoCatz do something you did not ask for —
   deep links (`docatz://`), imported files, the local services it runs.
-- Secrets leaving your Mac: saved database passwords, SSH keys and passphrases, AWS / Vault credentials, the AI key in the "Catzoid AI" Keychain item.
-- Production safety — anything that lets a write through a Read-only connection, or past the confirmation a Production connection asks for.
+- Secrets leaving your computer: container environment values, the shared CA's private key, the AI key in the "Catzoid AI" Keychain item.
+- The engine and its downloads — anything that gets a download past its pinned checksum, exposes the Docker socket or the proxy beyond this computer, or lets a docatz:// link run a compose file or a container without your click.
 
 Out of scope: problems that need someone who already controls your Mac or your user account, and vulnerabilities in
 third-party software DoCatz installs or talks to (report those upstream — we are happy to help).
