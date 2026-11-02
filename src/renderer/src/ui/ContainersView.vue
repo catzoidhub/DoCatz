@@ -264,8 +264,16 @@ function openCompose() {
                 <button class="flex min-w-0 flex-1 items-center gap-2 text-left" :title="`${project}: General, Environment, Domains, Containers, Monitoring`" @click="showProject(project)">
                   <span class="grid size-6 shrink-0 place-items-center rounded-md bg-primary/15 text-primary"><svg viewBox="0 0 20 20" class="size-3.5" fill="currentColor"><path :d="PROJECT_ICON" /></svg></span>
                   <span class="truncate text-[13px] font-semibold tracking-tight" :class="{ 'text-primary': openProject === project }">{{ project }}</span>
-                  <svg v-if="isFavorite(project) && s.key !== 'fav'" class="size-3 shrink-0 text-warning" viewBox="0 0 20 20" fill="currentColor"><path :d="STAR" /></svg>
                   <span class="sec-count shrink-0" :class="{ 'is-live': running(byProject.get(project) ?? []) }">{{ running(byProject.get(project) ?? []) }}/{{ (byProject.get(project) ?? []).length }}</span>
+                </button>
+                <!-- the star: filled for a favorite, an outline on hover otherwise; a click toggles it -->
+                <button
+                  class="btn btn-ghost btn-xs btn-square shrink-0"
+                  :class="isFavorite(project) ? 'text-warning' : 'hidden opacity-50 group-hover:inline-flex hover:opacity-100'"
+                  :title="isFavorite(project) ? 'Remove from Favorites' : 'Add to Favorites'"
+                  @click.stop="toggleFavorite(project)"
+                >
+                  <svg viewBox="0 0 20 20" class="size-3.5" :fill="isFavorite(project) ? 'currentColor' : 'none'" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"><path :d="STAR" /></svg>
                 </button>
                 <div class="hidden shrink-0 items-center group-hover:flex">
                   <button class="btn btn-ghost btn-xs btn-square" title=".env in DoCatz" @click="showProject(project, 'env')"><svg viewBox="0 0 20 20" class="size-3.5" fill="currentColor"><path fill-rule="evenodd" d="M8 7a5 5 0 1 1 3.61 4.804l-1.903 1.903A1 1 0 0 1 9 14H8v1a1 1 0 0 1-1 1H6v1a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1v-2a1 1 0 0 1 .293-.707L8.196 8.39A5.002 5.002 0 0 1 8 7Zm5-3a.75.75 0 0 0 0 1.5A1.5 1.5 0 0 1 14.5 7 .75.75 0 0 0 16 7a3 3 0 0 0-3-3Z" clip-rule="evenodd" /></svg></button>
