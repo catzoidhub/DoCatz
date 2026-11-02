@@ -1,11 +1,11 @@
 <svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="164" height="314" viewBox="0 0 164 314">
-  <!-- NSIS Welcome / Finish sidebar (164 × 314, the size MUI2 draws it at), in the colours of the DoCatz tile: amber,
-       with the logo's indigo for text (dark text on a light tile) and its teal as the accent. -->
+  <!-- NSIS Welcome / Finish sidebar (164 × 314, the size MUI2 draws it at), in the colours of the DoCatz tile: sky
+       blue, with the logo's indigo for text (dark text on a light tile), its teal glow and the lamps' amber as the accent. -->
   <defs>
     <linearGradient id="bg" x1="0" y1="0" x2="0.6" y2="1">
-      <stop offset="0" stop-color="#f4bf6a"/>
-      <stop offset="0.6" stop-color="#f0ac4e"/>
-      <stop offset="1" stop-color="#e9973a"/>
+      <stop offset="0" stop-color="#9ad5fa"/>
+      <stop offset="0.6" stop-color="#6dbcf3"/>
+      <stop offset="1" stop-color="#4fa3e7"/>
     </linearGradient>
     <radialGradient id="teal" cx="0" cy="1" r="0.75">
       <stop offset="0" stop-color="#3cc8b4" stop-opacity="0.18"/>
@@ -31,5 +31,5 @@
     <path d="M74 262 L80 268 L74 274" stroke-opacity="0.55"/>
     <path d="M86 262 L92 268 L86 274" stroke-opacity="0.9"/>
   </g>
-  <circle cx="102" cy="268" r="2.6" fill="#1fa892"/>
+  <circle cx="102" cy="268" r="2.6" fill="#ffc14d"/>
 </svg>

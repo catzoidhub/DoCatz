@@ -1,21 +1,21 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="600" height="400" viewBox="0 0 600 400">
   <!-- DMG window background (600 × 400; icons at 150,190 and 450,190 — electron-builder.yml dmg.contents).
-       Colours: the DoCatz tile's amber, with the logo's indigo for the wordmark (dark text on a light tile) and its
-       teal as the accent. Mid-tone on purpose: Finder writes icon labels black in light mode and white in dark mode;
+       Colours: the DoCatz tile's sky blue, with the logo's indigo for the wordmark (dark text on a light tile), its
+       antenna's teal as a glow and the container lamps' amber as the accent. Mid-tone on purpose: Finder writes icon labels black in light mode and white in dark mode;
        both read here. -->
   <defs>
     <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0" stop-color="#eba24a"/>
-      <stop offset="0.55" stop-color="#e08f35"/>
-      <stop offset="1" stop-color="#d27b28"/>
+      <stop offset="0" stop-color="#86cbf8"/>
+      <stop offset="0.55" stop-color="#5eb3f0"/>
+      <stop offset="1" stop-color="#4499e2"/>
     </linearGradient>
     <radialGradient id="glowTeal" cx="0.12" cy="1" r="0.6">
       <stop offset="0" stop-color="#3cc8b4" stop-opacity="0.22"/>
       <stop offset="1" stop-color="#3cc8b4" stop-opacity="0"/>
     </radialGradient>
     <radialGradient id="glowLight" cx="0.95" cy="0.02" r="0.5">
-      <stop offset="0" stop-color="#ffe2b0" stop-opacity="0.45"/>
-      <stop offset="1" stop-color="#ffe2b0" stop-opacity="0"/>
+      <stop offset="0" stop-color="#e6f6ff" stop-opacity="0.5"/>
+      <stop offset="1" stop-color="#e6f6ff" stop-opacity="0"/>
     </radialGradient>
     <radialGradient id="halo" cx="0.5" cy="0.5" r="0.5">
       <stop offset="0" stop-color="#ffffff" stop-opacity="0.32"/>
@@ -54,11 +54,11 @@
     <path d="M290 176 L304 190 L290 204" stroke-opacity="0.55"/>
     <path d="M318 176 L332 190 L318 204" stroke-opacity="0.9"/>
   </g>
-  <circle cx="348" cy="190" r="4" fill="#1fa892"/>
-  <circle cx="348" cy="190" r="9" fill="#1fa892" fill-opacity="0.25"/>
+  <circle cx="348" cy="190" r="4" fill="#ffc14d"/>
+  <circle cx="348" cy="190" r="9" fill="#ffc14d" fill-opacity="0.35"/>
 
   <!-- Footer -->
   <g font-family="-apple-system, 'SF Pro Text', 'Helvetica Neue', sans-serif" text-anchor="middle" fill="#2f2878" fill-opacity="0.6" font-size="11" font-weight="500">
-    <text x="300" y="372">MySQL, PostgreSQL, SQLite, Redis, MongoDB and more — in one window</text>
+    <text x="300" y="372">Containers, compose projects and a domain for each — in one window</text>
   </g>
 </svg>

@@ -14,7 +14,7 @@
 
   !macro customWelcomePage
     !define MUI_WELCOMEPAGE_TITLE "Welcome to DoCatz"
-    !define MUI_WELCOMEPAGE_TEXT "A fast, light Docker engine and container manager: your containers grouped by compose project, with logs, a terminal, files and a domain each.$\r$\n$\r$\nIt installs for your account only — no administrator rights needed."
+    !define MUI_WELCOMEPAGE_TEXT "A fast, light Docker engine and container manager: your containers grouped by compose project, with logs, a terminal, files and a domain each.$\r$\n$\r$\nDoCatz installs for your account only: no administrator rights needed. Its engine runs in WSL 2; if Windows does not have it yet, DoCatz offers to install it after the first start, and Windows asks you then.$\r$\n$\r$\nPrivacy: DoCatz checks catzoid.com for updates and sends crash reports only if you agree; both can be turned off in Settings. Policy: catzoid.com/legal/privacy$\r$\n$\r$\nClick Next to continue."
     !insertmacro skipPageIfUpdated
     !insertmacro MUI_PAGE_WELCOME
 
