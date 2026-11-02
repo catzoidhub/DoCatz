@@ -2234,6 +2234,19 @@ html.is-win .dc-top {
   padding-left: 0.75rem;
   padding-right: calc(100vw - env(titlebar-area-x, 0px) - env(titlebar-area-width, 100vw) + 0.75rem);
 }
+/* Windows (Catzoid #76, the family rule DevCatz follows): the minimize / maximize / close buttons sit over the top-right
+   corner (titleBarOverlay, 48 px). Every page's top header carries `win-top`: 48 px of room above it on Windows, nothing
+   on macOS. DoCatz's headers are a fixed h-14 with their content at the bottom, so on Windows they grow by that room
+   instead of squeezing it. */
+html.is-win .win-top {
+  height: auto;
+  padding-top: 3rem;
+}
+/* A tall dialog (Welcome) keeps clear of the caption buttons too: centred, it leaves 48 px above it. */
+html.is-win .modal-box.win-fit {
+  max-height: calc(100vh - 7rem);
+}
+
 /* Jobs and Settings sit on the middle line of the Windows caption buttons (minimize / maximize / close), not on the
    tabs' baseline as beside the Mac traffic lights. */
 html.is-win .dc-top-btn {

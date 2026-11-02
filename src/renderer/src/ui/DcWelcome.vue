@@ -92,7 +92,7 @@ const privacy = () => site.value && api.openUrl(`${site.value}/docs/privacy-and-
 <template>
   <Teleport to="body">
     <dialog v-if="open" open class="modal modal-open" @keydown.esc="done">
-      <div class="modal-box flex max-h-[calc(100vh-2.5rem)] w-[38rem] max-w-[95vw] flex-col gap-5 overflow-hidden">
+      <div class="modal-box win-fit flex max-h-[calc(100vh-2.5rem)] w-[38rem] max-w-[95vw] flex-col gap-5 overflow-hidden">
         <div class="flex shrink-0 items-start gap-3">
           <CatMood mood="success" class="size-11 shrink-0" />
           <div>
