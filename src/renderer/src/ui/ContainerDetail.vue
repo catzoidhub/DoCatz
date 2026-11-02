@@ -120,7 +120,6 @@ const memPct = computed(() => (props.stats && props.stats.memLimit ? (props.stat
         <!-- a DevCatz gateway's container: read-only here, DevCatz starts, stops and removes it -->
         <button v-else-if="gatewayKind" class="btn btn-sm btn-primary" title="DevCatz installs, starts and stops its gateways" @click="gatewayLink(gatewayKind)">Open in DevCatz</button>
         <template v-else>
-          <button v-if="db" class="btn btn-sm gap-2 @max-3xl:btn-square" aria-label="Open in DBCatz" :title="`Open in DBCatz: ${db.engine} on ${db.host}:${db.port}${db.user ? ` as ${db.user}` : ''}, with the password the container was started with`" @click="dbcatzLink(db.id)"><img :src="dbcatzLogo" alt="" class="size-5 drop-shadow-sm" draggable="false" /><span class="@max-3xl:hidden">Open in DBCatz</span></button>
           <button v-if="running" class="btn btn-sm" @click="act('stop')">Stop</button>
           <button v-else class="btn btn-sm btn-primary" @click="act('start')">Start</button>
           <button class="btn btn-sm" @click="act('restart')">Restart</button>
@@ -136,6 +135,8 @@ const memPct = computed(() => (props.stats && props.stats.memLimit ? (props.stat
       <div role="tablist" class="seg">
         <a v-for="t in TABS" :key="t.id" role="tab" class="seg-item" :class="{ 'is-active': containerTab === t.id }" @click="containerTab = t.id">{{ t.label }}</a>
       </div>
+      <span class="flex-1" />
+      <button v-if="db" class="btn btn-sm gap-2" :title="`Open in DBCatz: ${db.engine} on ${db.host}:${db.port}${db.user ? ` as ${db.user}` : ''}, with the password the container was started with`" @click="dbcatzLink(db.id)"><img :src="dbcatzLogo" alt="" class="size-5 drop-shadow-sm" draggable="false" />Open in DBCatz</button>
     </div>
 
     <div class="min-h-0 flex-1">

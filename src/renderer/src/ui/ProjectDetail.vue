@@ -154,7 +154,6 @@ const rateText = (v: number) => `${bytes(v)}/s`;
         <button class="btn btn-ghost btn-sm btn-square" title="Close" @click="openProject = null">✕</button>
       </div>
       <div v-else class="no-drag flex shrink-0 items-center gap-1">
-        <button v-if="httpServices.length" class="btn btn-sm gap-2 @max-3xl:btn-square" aria-label="Open in DialCatz" :title="`Open in DialCatz: an environment with ${httpServices.join(', ')}’s address${httpServices.length > 1 ? 'es' : ''}, and their routes as requests`" @click="dialcatzLink(project)"><img :src="dialcatzLogo" alt="" class="size-5 drop-shadow-sm" draggable="false" /><span class="@max-3xl:hidden">Open in DialCatz</span></button>
         <button class="btn btn-sm btn-primary" :disabled="busy" title="docker compose up --build: rebuild the images, then recreate what changed (a changed .env included)" @click="compose('build-up')"><span v-if="doing === 'build-up'" class="loading loading-spinner loading-xs" /><template v-else>Build &amp; Up</template></button>
         <button v-if="!allUp || doing === 'up'" class="btn btn-sm" :disabled="busy" title="docker compose up: recreates what changed, without building" @click="compose('up')"><span v-if="doing === 'up'" class="loading loading-spinner loading-xs" /><template v-else>Up</template></button>
         <button v-if="running || doing === 'restart'" class="btn btn-sm" :disabled="busy" @click="compose('restart')"><span v-if="doing === 'restart'" class="loading loading-spinner loading-xs" /><template v-else>Restart</template></button>
@@ -167,6 +166,8 @@ const rateText = (v: number) => `${bytes(v)}/s`;
       <div role="tablist" class="seg">
         <a v-for="t in TABS" :key="t.id" role="tab" class="seg-item" :class="{ 'is-active': projectTab === t.id }" @click="projectTab = t.id">{{ t.label }}</a>
       </div>
+      <span class="flex-1" />
+      <button v-if="httpServices.length" class="btn btn-sm gap-2" :title="`Open in DialCatz: an environment with ${httpServices.join(', ')}’s address${httpServices.length > 1 ? 'es' : ''}, and their routes as requests`" @click="dialcatzLink(project)"><img :src="dialcatzLogo" alt="" class="size-5 drop-shadow-sm" draggable="false" />Open in DialCatz</button>
     </div>
 
     <div class="min-h-0 flex-1">
