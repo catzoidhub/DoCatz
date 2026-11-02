@@ -514,6 +514,25 @@ export interface DcReportSettings {
 
 export type SiblingApp = 'devcatz' | 'dbcatz' | 'dialcatz';
 
+/**
+ * A DevCatz gateway (Postal, ntfy, Gotify, Jasmin, Telegram Bot API, WAHA) as DevCatz's bridge.json lists it — Windows,
+ * where DevCatz runs its Docker gateways on DoCatz's engine: compose project `devcatz-gw-<kind>`, or the container
+ * `devcatz-waha`. DevCatz owns their lifecycle; DoCatz starts, stops and installs them through devcatz:// links.
+ */
+export interface DcGateway {
+  kind: string;
+  name: string;
+  category: string;
+  installed: boolean;
+  /** DevCatz's word for it (running / stopped …). */
+  status: string;
+  version: string | null;
+  webUi: string | null;
+  /** Its compose project, or (WAHA) its one container. */
+  project: string | null;
+  container: string | null;
+}
+
 // ------------------------------------------------------------ API (preload bridge)
 
 export interface DoCatzApi {
@@ -552,6 +571,8 @@ export interface DoCatzApi {
   reveal(path: string): Promise<void>;
   /** Opens a sibling Catzoid app at a link (devcatz://…, dbcatz://…); false when it is not installed. */
   openSibling(app: SiblingApp, link: string): Promise<boolean>;
+  /** Windows: DevCatz's Docker gateways from its bridge.json, installed or not ([] elsewhere, or without DevCatz). */
+  devcatzGateways(): Promise<DcGateway[]>;
   /** Opens a terminal (Terminal on macOS, PowerShell on Windows) running `command` against DoCatz (Commands page). */
   runInTerminal(command: string): Promise<void>;
 
@@ -662,7 +683,7 @@ export interface DoCatzApi {
 
 /** Every method of the bridge, registered as `docatz:<name>` IPC handlers. */
 export const API_METHODS: (keyof DoCatzApi)[] = [
-  'appInfo', 'aboutInfo', 'updateState', 'updateCheck', 'updateDownload', 'updateCancel', 'updateSkip', 'updateInstall', 'updateConfigure', 'reportPreview', 'reportSend', 'captureWindow', 'reportError', 'reportSettings', 'reportConfigure', 'uninstallPlan', 'uninstallRun', 'settings', 'setSettings', 'setAiKey', 'aiModels', 'aiProbe', 'aiTest', 'aiCancel', 'aiAsk', 'aiPreviewAsk', 'aiExplainLog', 'aiPreviewLog', 'aiFile', 'aiPreviewFile', 'openUrl', 'reveal', 'openSibling', 'runInTerminal',
+  'appInfo', 'aboutInfo', 'updateState', 'updateCheck', 'updateDownload', 'updateCancel', 'updateSkip', 'updateInstall', 'updateConfigure', 'reportPreview', 'reportSend', 'captureWindow', 'reportError', 'reportSettings', 'reportConfigure', 'uninstallPlan', 'uninstallRun', 'settings', 'setSettings', 'setAiKey', 'aiModels', 'aiProbe', 'aiTest', 'aiCancel', 'aiAsk', 'aiPreviewAsk', 'aiExplainLog', 'aiPreviewLog', 'aiFile', 'aiPreviewFile', 'openUrl', 'reveal', 'openSibling', 'devcatzGateways', 'runInTerminal',
   'engineState', 'engineStart', 'engineStop', 'engineRestart', 'engineReset', 'engineConfigure', 'engineCancel', 'engineSetupWsl', 'restartComputer', 'engineLog', 'contextSet', 'cliInstall', 'cliPath', 'diskUsage',
   'containers', 'container', 'containerEnv', 'containerAction', 'containerRemove', 'stats', 'logsFollow', 'logsStop', 'termOpen', 'termInput', 'termResize', 'termClose', 'files', 'fileSave', 'projects', 'composePick', 'composeRun', 'composeProject', 'runCancel', 'readText', 'writeText',
   'images', 'imageRemove', 'imagePull', 'volumes', 'volumeRemove', 'networks', 'networkRemove', 'prunePreview', 'prune',

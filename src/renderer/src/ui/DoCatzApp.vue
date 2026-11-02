@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { currentOS, keyLabel } from '@shared/platform';
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
-import { aiOn, api, askOpen, startStatsPolling, attempt, composeFile, composeOpen, containerTab, containers, engine, findFocus, findText, init, openContainer, reportOpen, reportsAsk, section, settingsTab, toast, update, updateOpen, type Section } from '../store';
+import { aiOn, api, askOpen, startStatsPolling, attempt, composeFile, composeOpen, containerTab, containers, engine, findFocus, findText, gatewayFocus, gateways, init, openContainer, openProject, refreshGateways, reportOpen, reportsAsk, section, settingsTab, toast, update, updateOpen, type Section } from '../store';
 import askMark from '../assets/logos/ask-catzoid.svg';
 import CatMood from './CatMood.vue';
 import ContainersView from './ContainersView.vue';
@@ -79,6 +79,19 @@ function openRoute(route: string) {
     if (running?.project) findText.value = running.project;
     composeFile.value = arg;
     composeOpen.value = !running;
+  } else if (head === 'gateways') {
+    // docatz://gateways?kind=<kind> (DevCatz's "Open in DoCatz"): the gateway in its group — its project or container
+    // when it runs here, else its row (Install) highlighted.
+    section.value = 'containers';
+    findText.value = '';
+    gatewayFocus.value = arg || null;
+    void refreshGateways().then(() => {
+      // Without DevCatz's list (an older DevCatz wrote bridge.json), the project's own name finds it.
+      const g = gateways.value.find((x) => x.kind === arg) ?? { project: `devcatz-gw-${arg}`, container: null };
+      const here = (n: string | null) => !!n && containers.value.some((c) => c.project === n || c.name === n);
+      if (g.project && here(g.project)) openProject.value = g.project;
+      else if (g.container && here(g.container)) openContainer.value = g.container;
+    });
   } else if (head === 'settings') {
     section.value = 'settings';
     if (arg) settingsTab.value = arg as typeof settingsTab.value;

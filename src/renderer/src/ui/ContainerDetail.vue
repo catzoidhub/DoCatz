@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue';
 import type { DcContainer, DcContainerDetail, DcStats } from '@shared/types';
-import { api, attempt, bytes, changes, containerTab, errorText, notify, openContainer, statsHistory, type ContainerTab } from '../store';
+import { api, attempt, bytes, changes, containerTab, errorText, gatewayKindOf, gatewayLink, gateways, notify, openContainer, statsHistory, type ContainerTab } from '../store';
 import ConfirmDialog from '../components/ConfirmDialog.vue';
 import DcNavButtons from './DcNavButtons.vue';
 import LogsPane from './LogsPane.vue';
@@ -16,6 +16,8 @@ import TimeChart from './TimeChart.vue';
  */
 const props = defineProps<{ container: DcContainer; stats: DcStats | null }>();
 const c = computed(() => props.container);
+/** A DevCatz gateway's container (its devcatz-gw-<kind> project, or WAHA's own container): read-only here. */
+const gatewayKind = computed(() => gatewayKindOf(c.value.project) ?? gateways.value.find((g) => g.container === c.value.name)?.kind ?? null);
 const detail = ref<DcContainerDetail | null>(null);
 const TABS: { id: ContainerTab; label: string }[] = [
   { id: 'info', label: 'Info' },
@@ -108,6 +110,8 @@ const memPct = computed(() => (props.stats && props.stats.memLimit ? (props.stat
       </div>
       <div class="no-drag flex shrink-0 items-center gap-1">
         <span v-if="busy" class="loading loading-spinner loading-sm mx-2" />
+        <!-- a DevCatz gateway's container: read-only here, DevCatz starts, stops and removes it -->
+        <button v-else-if="gatewayKind" class="btn btn-sm btn-primary" title="DevCatz installs, starts and stops its gateways" @click="gatewayLink(gatewayKind)">Open in DevCatz</button>
         <template v-else>
           <button v-if="running" class="btn btn-sm" @click="act('stop')">Stop</button>
           <button v-else class="btn btn-sm btn-primary" @click="act('start')">Start</button>

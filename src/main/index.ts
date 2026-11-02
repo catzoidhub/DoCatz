@@ -17,6 +17,7 @@ import { DockerError } from './docker/client';
 import * as ops from './docker/ops';
 import { Domains } from './domains';
 import { Engine } from './engine';
+import { devcatzGateways } from './gateways';
 import { Reporter } from './reporter';
 import { run } from './proc';
 import { projects, Runs } from './runs';
@@ -154,6 +155,13 @@ function handleLink(raw: string): void {
       if (!/^[\w.-]{1,200}$/.test(name)) throw new Error('bad container name');
       return openWindow(`containers/${name}`);
     }
+    // DevCatz's "Open in DoCatz" for a gateway: docatz://gateways?kind=<kind> (its group in Containers; Windows only, as
+    // the group — elsewhere the link opens Containers).
+    if (u.hostname === 'gateways' && isWin) {
+      const kind = u.searchParams.get('kind') ?? u.pathname.replace(/^\//, '');
+      if (kind && !/^[a-z0-9-]{1,30}$/.test(kind)) throw new Error('bad gateway kind');
+      return openWindow(kind ? `gateways/${kind}` : 'gateways');
+    }
     if (u.hostname === 'compose') {
       const path = u.searchParams.get('path') ?? '';
       if (!/\.(ya?ml)$/i.test(path) || path.length > 1000 || /[\u0000-\u001f]/.test(path)) throw new Error('bad compose path');
@@ -278,6 +286,8 @@ function api(): DoCatzApi {
       await openCatzoidApp(path, link);
       return true;
     },
+
+    devcatzGateways: async () => devcatzGateways(),
 
     engineState: () => engine.state(),
     engineStart: () => engine.start(),

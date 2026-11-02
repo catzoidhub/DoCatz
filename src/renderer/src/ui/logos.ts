@@ -36,6 +36,13 @@ const ALIAS: Record<string, string> = {
   'nats-streaming': 'nats',
   'clickhouse-server': 'clickhouse',
   'seaweedfs-server': 'seaweedfs',
+  // DevCatz's gateways (their images' own names; Telegram Bot API's carries "telegram" inside)
+  'telegram-bot-api': 'telegram',
+};
+
+/** Images whose last part says nothing on its own (gotify/server): by organisation/name, without registry or tag. */
+const FULL: Record<string, string> = {
+  'gotify/server': 'gotify',
 };
 
 export interface ServiceLook {
@@ -67,11 +74,23 @@ const LABEL: Record<string, string> = {
   rustfs: 'RustFS',
   httpd: 'Apache httpd',
   clickhouse: 'ClickHouse',
+  jasmin: 'Jasmin',
+  ntfy: 'ntfy',
+  gotify: 'Gotify',
+  postal: 'Postal',
+  waha: 'WAHA',
+  telegram: 'Telegram Bot API',
 };
 
+/** A DevCatz gateway's own logo by its kind (jasmin, ntfy, gotify, postal, waha, telegram); null when there is none. */
+export const gatewayLogo = (kind: string): string | null => LOGO[kind] ?? null;
+
 export function serviceLook(image: string): ServiceLook {
-  const name = image.toLowerCase().replace(/@.*$/, '').replace(/:[^/]*$/, '').split('/').pop() ?? '';
-  const key = ALIAS[name] ?? name;
+  const path = image.toLowerCase().replace(/@.*$/, '').replace(/:[^/]*$/, '');
+  const name = path.split('/').pop() ?? '';
+  // ghcr.io/gotify/server → gotify/server (a first part with a dot or port is the registry)
+  const full = path.split('/').filter((p, i) => !(i === 0 && /[.:]/.test(p))).join('/');
+  const key = FULL[full] ?? ALIAS[name] ?? name;
   if (LOGO[key]) return { logo: LOGO[key], label: LABEL[key] ?? key };
   // Images that carry the name inside (bitnami-postgresql, my-redis-cache, api-node).
   const hit = Object.keys(LOGO).find((k) => k.length > 3 && name.includes(k)) ?? Object.keys(ALIAS).find((k) => k.length > 3 && name.includes(k));

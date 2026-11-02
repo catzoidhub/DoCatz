@@ -1,5 +1,6 @@
 import { computed, ref, watch } from 'vue';
-import type { DcAiFeature, DcContainer, DcProjectPrefs, DcStats, DcReportKind, DcRun, DcUpdateState, DoCatzSettings, DoCatzSettingsPatch, EngineState, Theme } from '@shared/types';
+import type { DcAiFeature, DcContainer, DcGateway, DcProjectPrefs, DcStats, DcReportKind, DcRun, DcUpdateState, DoCatzSettings, DoCatzSettingsPatch, EngineState, Theme } from '@shared/types';
+import { currentOS } from '@shared/platform';
 
 /** The preload bridge (see src/preload/index.ts). */
 export const api = window.docatz;
@@ -62,6 +63,25 @@ export const changes = ref(0);
 /** Compose runs and pulls, by token (the newest shows in the run panel). */
 export const runs = ref<Record<string, DcRun>>({});
 
+/** Windows: DevCatz's Docker gateways (main/gateways.ts), reloaded with the list; [] elsewhere. */
+export const gateways = ref<DcGateway[]>([]);
+/** The gateway a docatz://gateways?kind= link points at, highlighted in its group. */
+export const gatewayFocus = ref<string | null>(null);
+export async function refreshGateways(): Promise<void> {
+  gateways.value = await api.devcatzGateways().catch(() => gateways.value);
+}
+/** A gateway's compose project, from its name (devcatz-gw-<kind>) — Windows only, where DevCatz puts them on DoCatz. */
+export const gatewayKindOf = (project: string | null | undefined): string | null => (currentOS === 'windows' && project?.startsWith('devcatz-gw-') ? project.slice(11) : null);
+/**
+ * Gateways are read-only in DoCatz: DevCatz installs, starts and stops them (it keeps `compose up` attached). DoCatz
+ * only opens one there — devcatz://gateways/<kind>.
+ */
+export async function gatewayLink(kind: string): Promise<boolean> {
+  const ok = await attempt(() => api.openSibling('devcatz', `devcatz://gateways/${encodeURIComponent(kind)}`));
+  if (ok === false) notify('error', 'DevCatz is not installed: gateways are installed, started and stopped there');
+  return ok === true;
+}
+
 /** Stats samples per container (the list polls every 5 s), the last 10 minutes — the Monitoring charts read them. */
 export const HISTORY_SAMPLES = 120;
 export const statsHistory = ref<Record<string, { t: number; cpu: number; mem: number; rx: number; tx: number }[]>>({});
@@ -101,6 +121,8 @@ export async function refreshContainers(): Promise<void> {
   } catch {
     containers.value = [];
   }
+  // DevCatz's gateway list follows the containers (installs and starts show up as engine events too).
+  if (currentOS === 'windows') void refreshGateways();
 }
 
 // ---------------------------------------------------------------- the project list's arrangement (favorites, groups, order)

@@ -66,6 +66,8 @@ identify what a container runs:
   (`src/renderer/src/assets/logos/db`, sources listed there).
 - Search, storage and realtime servers (meilisearch, typesense, opensearch, manticore, zincsearch, minio, rustfs,
   seaweedfs, nats, centrifugo, mercure) — copied from DevCatz (`src/renderer/src/assets/logos`, sources listed there).
+- DevCatz's gateways (jasmin, ntfy, gotify, postal, waha, telegram) — copied from DevCatz (`src/renderer/src/assets/logos`,
+  sources listed there), for their services in the DevCatz Gateways group.
 - The rest are the projects' GitHub organisation avatars, https://github.com/<org>.png?size=96: nginx (nginx),
   node (nodejs), python (python), golang (golang), php (php), rabbitmq (rabbitmq), memcached (memcached), mailpit
   (axllent), traefik (traefik), caddy (caddyserver), httpd (apache), cassandra (apache), grafana (grafana),

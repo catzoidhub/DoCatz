@@ -2,13 +2,15 @@
 import { computed, ref, watch } from 'vue';
 import type { DcComposeAction, DcComposeProject, DcContainer, DcStats } from '@shared/types';
 import { currentOS } from '@shared/platform';
-import { api, attempt, bytes, changes, composeFile, composeOpen, containerTab, notify, openContainer, isFavorite, openProject, PROJECT_ICON, projectTab, runs, statsHistory, toggleFavorite, token, type ProjectTab } from '../store';
+import { api, attempt, bytes, changes, composeFile, composeOpen, containerTab, gatewayKindOf, gatewayLink, gateways, notify, openContainer, isFavorite, openProject, PROJECT_ICON, projectTab, runs, statsHistory, toggleFavorite, token, type ProjectTab } from '../store';
+import devcatzLogo from '../assets/logos/devcatz.png';
 import ConfirmDialog from '../components/ConfirmDialog.vue';
 import DcNavButtons from './DcNavButtons.vue';
 import ProjectEnv from './ProjectEnv.vue';
 import RunPanel from './RunPanel.vue';
 import ServiceMark from './ServiceMark.vue';
 import { frameworkTag } from '../frameworks';
+import { gatewayLogo } from './logos';
 import TimeChart, { type Series } from './TimeChart.vue';
 
 /**
@@ -17,13 +19,21 @@ import TimeChart, { type Series } from './TimeChart.vue';
  * before .docatz.<tld>), Containers (each service, opening its own page) and Monitoring (CPU and memory, live).
  */
 const props = defineProps<{ project: string; containers: DcContainer[]; stats: Record<string, DcStats> }>();
-const TABS: { id: ProjectTab; label: string }[] = [
+/** A DevCatz gateway (devcatz-gw-<kind>, Windows): read-only here, DevCatz runs it. */
+const gateway = computed(() => {
+  const kind = gatewayKindOf(props.project);
+  if (!kind) return null;
+  return gateways.value.find((g) => g.project === props.project) ?? { kind, name: kind, version: null, webUi: null };
+});
+// A gateway has no Environment tab: its settings are DevCatz's, and DoCatz's .env would not reach it.
+const TABS = computed<{ id: ProjectTab; label: string }[]>(() => [
   { id: 'general', label: 'General' },
-  { id: 'env', label: 'Environment' },
+  ...(gateway.value ? [] : [{ id: 'env' as const, label: 'Environment' }]),
   { id: 'domains', label: 'Domains' },
   { id: 'containers', label: 'Containers' },
   { id: 'monitoring', label: 'Monitoring' },
-];
+]);
+watch(gateway, (g) => g && projectTab.value === 'env' && (projectTab.value = 'general'), { immediate: true });
 
 const info = ref<DcComposeProject | null>(null);
 async function load() {
@@ -121,20 +131,25 @@ const rateText = (v: number) => `${bytes(v)}/s`;
   <section class="flex h-full min-w-0 flex-col">
     <header class="drag win-top flex h-14 shrink-0 items-end gap-3 border-b border-base-300/60 px-4 pb-2">
       <div class="no-drag"><DcNavButtons /></div>
-      <span class="mb-0.5 grid size-9 shrink-0 place-items-center rounded-xl bg-primary/15 text-primary">
+      <img v-if="gateway" :src="gatewayLogo(gateway.kind) ?? devcatzLogo" class="mb-0.5 size-9 shrink-0 rounded-xl border border-base-300/70 bg-base-100 object-contain p-1" :alt="gateway.name" />
+      <span v-else class="mb-0.5 grid size-9 shrink-0 place-items-center rounded-xl bg-primary/15 text-primary">
         <svg viewBox="0 0 20 20" class="size-5" fill="currentColor"><path :d="PROJECT_ICON" /></svg>
       </span>
       <div class="min-w-0 flex-1 pb-0.5">
         <div class="flex items-center gap-2">
           <h1 class="truncate text-base font-semibold tracking-tight">{{ project }}</h1>
-          <button class="no-drag btn btn-ghost btn-xs btn-square" :class="isFavorite(project) ? 'text-warning' : 'opacity-50 hover:opacity-100'" :title="isFavorite(project) ? 'Remove from Favorites' : 'Add to Favorites'" @click="toggleFavorite(project)">
+          <button v-if="!gateway" class="no-drag btn btn-ghost btn-xs btn-square" :class="isFavorite(project) ? 'text-warning' : 'opacity-50 hover:opacity-100'" :title="isFavorite(project) ? 'Remove from Favorites' : 'Add to Favorites'" @click="toggleFavorite(project)">
             <svg viewBox="0 0 20 20" class="size-4" :fill="isFavorite(project) ? 'currentColor' : 'none'" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"><path d="M10.868 2.884c-.321-.772-1.415-.772-1.736 0l-1.83 4.401-4.753.381c-.833.067-1.171 1.107-.536 1.651l3.62 3.102-1.106 4.637c-.194.813.691 1.456 1.405 1.02L10 15.591l4.069 2.485c.713.436 1.598-.207 1.404-1.02l-1.106-4.637 3.62-3.102c.635-.544.297-1.584-.536-1.65l-4.752-.382-1.831-4.401Z" /></svg>
           </button>
           <span class="badge badge-sm" :class="running ? 'badge-success badge-soft' : 'badge-ghost'">{{ running }}/{{ containers.length }} running</span>
         </div>
-        <p class="truncate text-xs opacity-55">Compose project<template v-if="dir"> · {{ dir }}</template></p>
+        <p class="truncate text-xs opacity-55">{{ gateway ? `DevCatz gateway${gateway.version ? ` ${gateway.version}` : ''} · read-only` : 'Compose project' }}<template v-if="dir"> · {{ dir }}</template></p>
       </div>
-      <div class="no-drag flex shrink-0 items-center gap-1">
+      <div v-if="gateway" class="no-drag flex shrink-0 items-center gap-1">
+        <button class="btn btn-sm btn-primary" title="DevCatz installs, starts and stops its gateways" @click="gatewayLink(gateway.kind)">Open in DevCatz</button>
+        <button class="btn btn-ghost btn-sm btn-square" title="Close" @click="openProject = null">✕</button>
+      </div>
+      <div v-else class="no-drag flex shrink-0 items-center gap-1">
         <button class="btn btn-sm btn-primary" :disabled="busy" title="docker compose up --build: rebuild the images, then recreate what changed (a changed .env included)" @click="compose('build-up')"><span v-if="doing === 'build-up'" class="loading loading-spinner loading-xs" /><template v-else>Build &amp; Up</template></button>
         <button v-if="!allUp || doing === 'up'" class="btn btn-sm" :disabled="busy" title="docker compose up: recreates what changed, without building" @click="compose('up')"><span v-if="doing === 'up'" class="loading loading-spinner loading-xs" /><template v-else>Up</template></button>
         <button v-if="running || doing === 'restart'" class="btn btn-sm" :disabled="busy" @click="compose('restart')"><span v-if="doing === 'restart'" class="loading loading-spinner loading-xs" /><template v-else>Restart</template></button>
@@ -185,12 +200,12 @@ const rateText = (v: number) => `${bytes(v)}/s`;
               <ul v-else class="space-y-1">
                 <li v-for="f in info.files" :key="f" class="flex items-center gap-2 text-sm">
                   <span class="min-w-0 flex-1 truncate font-mono text-xs" :title="f">{{ f }}</span>
-                  <button class="btn btn-ghost btn-xs" @click="editCompose(f)">Open</button>
+                  <button v-if="!gateway" class="btn btn-ghost btn-xs" @click="editCompose(f)">Open</button>
                   <button class="btn btn-ghost btn-xs" @click="api.reveal(f)">Show</button>
                 </li>
               </ul>
               <!-- Windows: a project on a Windows drive is mounted into WSL (/mnt/d/…), where no file-change events arrive -->
-              <details v-if="onWindowsDrive" class="mt-1 rounded-lg bg-base-200/60 px-3 py-2 text-xs">
+              <details v-if="onWindowsDrive && !gateway" class="mt-1 rounded-lg bg-base-200/60 px-3 py-2 text-xs">
                 <summary class="cursor-pointer opacity-80">Live reload inside the containers needs polling on Windows</summary>
                 <div class="mt-2 space-y-1.5 opacity-80">
                   <p>
@@ -206,7 +221,24 @@ const rateText = (v: number) => `${bytes(v)}/s`;
               </details>
             </div>
           </div>
-          <div class="card">
+          <!-- a DevCatz gateway: read-only here, DevCatz installs, starts and stops it -->
+          <div v-if="gateway" class="card">
+            <div class="card-body gap-3">
+              <div class="flex items-center gap-2">
+                <img :src="devcatzLogo" class="size-5 rounded-md" alt="DevCatz" />
+                <h2>Managed by DevCatz</h2>
+              </div>
+              <p class="text-xs opacity-60">
+                {{ gateway.name }} is one of DevCatz’s gateways, running on DoCatz’s engine. It is read-only here: DevCatz installs, starts, stops and
+                updates it (it keeps the compose run attached), so do that in DevCatz.
+              </p>
+              <div class="flex flex-wrap gap-1.5">
+                <button class="btn btn-sm btn-primary" @click="gatewayLink(gateway.kind)">Open in DevCatz</button>
+                <button v-if="gateway.webUi && running" class="btn btn-sm" @click="api.openUrl(gateway.webUi)">Open web UI</button>
+              </div>
+            </div>
+          </div>
+          <div v-else class="card">
             <div class="card-body gap-3">
               <h2>Deploy</h2>
               <p class="text-xs opacity-60">Runs with the project’s .env in DoCatz (Environment tab) when it has one. <b>Build &amp; Up</b> rebuilds the images and recreates every container whose image or environment changed.</p>
@@ -253,7 +285,7 @@ const rateText = (v: number) => `${bytes(v)}/s`;
                   <template v-else>
                     <a class="link min-w-0 flex-1 truncate font-mono text-xs" @click="api.openUrl(c.url)">{{ c.url }}</a>
                     <span v-if="c.domainName" class="badge badge-ghost badge-xs">custom</span>
-                    <button class="btn btn-ghost btn-xs" @click="startEdit(c)">Edit</button>
+                    <button v-if="!gateway" class="btn btn-ghost btn-xs" @click="startEdit(c)">Edit</button>
                   </template>
                 </li>
               </ul>

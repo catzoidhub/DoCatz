@@ -2,7 +2,8 @@
 import { keyLabel } from '@shared/platform';
 import { computed, nextTick, ref, watch } from 'vue';
 import type { DcComposeAction, DcContainer } from '@shared/types';
-import { api, attempt, bytes, composeFile, composeOpen, containers, editProjectPrefs, engineUp, findFocus, findText, isFavorite, liveStats, moveToGroup, notify, openContainer, openProject, PROJECT_ICON, projectPrefs, projectTab, runs, toggleFavorite, token, type ProjectTab } from '../store';
+import { api, attempt, bytes, composeFile, composeOpen, containers, editProjectPrefs, engineUp, findFocus, findText, gatewayFocus, gatewayKindOf, gatewayLink, gateways, isFavorite, liveStats, moveToGroup, notify, openContainer, openProject, PROJECT_ICON, projectPrefs, projectTab, runs, toggleFavorite, token, type ProjectTab } from '../store';
+import devcatzLogo from '../assets/logos/devcatz.png';
 import { useListView } from '../listview';
 import PopMenu from '../components/PopMenu.vue';
 import ContainerDetail from './ContainerDetail.vue';
@@ -12,6 +13,7 @@ import ProjectDetail from './ProjectDetail.vue';
 import ConfirmDialog from '../components/ConfirmDialog.vue';
 import ServiceMark from './ServiceMark.vue';
 import { frameworkTag } from '../frameworks';
+import { gatewayLogo } from './logos';
 
 /**
  * Containers (DoCatz TODO #12), arranged as DevCatz's sites: compose projects in Favorites, the user's own groups and
@@ -37,7 +39,8 @@ const byProject = computed(() => {
 /** A project's containers as the list shows them (search and Running only applied). */
 const shownOf = (p: string) => (byProject.value.get(p) ?? []).filter((c) => (!view.value.runningOnly || c.state === 'running') && (matches(c) || p.toLowerCase().includes(q.value)));
 const ordered = computed(() => {
-  const names = [...byProject.value.keys()];
+  // DevCatz's gateways (devcatz-gw-<kind>, Windows) have their own group at the bottom, not among the projects.
+  const names = [...byProject.value.keys()].filter((n) => !gatewayKindOf(n));
   if (view.value.sort === 'name') return names.sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base', numeric: true }));
   const idx = new Map(projectPrefs.value.order.map((n, i) => [n, i]));
   return names.map((n, i) => ({ n, k: idx.get(n) ?? 1e6 + i })).sort((a, b) => a.k - b.k || a.n.localeCompare(b.n)).map((x) => x.n);
@@ -73,9 +76,37 @@ const sections = computed<Section[]>(() => {
   if (rest.length) out.push(mk('rest', out.length ? 'Other projects' : '', rest));
   return out;
 });
-/** Containers of no compose project, at the bottom. */
-const loose = computed(() => containers.value.filter((c) => !c.project && (!view.value.runningOnly || c.state === 'running') && matches(c)));
-const nothingShown = computed(() => !sections.value.some((s) => s.projects.length) && !loose.value.length);
+/** Containers of no compose project, at the bottom (a gateway's own container — WAHA — sits with the gateways). */
+const loose = computed(() => containers.value.filter((c) => !c.project && !gwContainers.value.has(c.name) && (!view.value.runningOnly || c.state === 'running') && matches(c)));
+const nothingShown = computed(() => !sections.value.some((s) => s.projects.length) && !loose.value.length && !gwRows.value.length);
+
+// ---- DevCatz Gateways (Windows), read-only: DevCatz runs its Docker gateways here and owns them — it installs, starts
+// and stops them, keeping `compose up` attached; DoCatz lists them last with DevCatz's mark (installed or not) and opens them in DevCatz.
+const gwContainers = computed(() => new Set(gateways.value.map((g) => g.container).filter((n): n is string => !!n)));
+interface GwRow {
+  kind: string;
+  name: string;
+  version: string | null;
+  webUi: string | null;
+  project: string | null;
+  /** Its containers on this engine; none: not installed (DevCatz's Install). */
+  list: DcContainer[];
+}
+const gwRows = computed<GwRow[]>(() => {
+  const rows: GwRow[] = gateways.value.map((g) => ({ kind: g.kind, name: g.name, version: g.version, webUi: g.webUi, project: g.project, list: g.project ? (byProject.value.get(g.project) ?? []) : containers.value.filter((c) => c.name === g.container) }));
+  // A devcatz-gw-* project DevCatz does not list (an older DevCatz, or bridge.json not written yet): still here.
+  for (const [p, list] of byProject.value) {
+    const kind = gatewayKindOf(p);
+    if (kind && !rows.some((r) => r.project === p)) rows.push({ kind, name: kind, version: null, webUi: null, project: p, list });
+  }
+  return rows.filter((r) => (!view.value.runningOnly || running(r.list) > 0) && (!q.value || [r.name, r.kind].some((x) => x.toLowerCase().includes(q.value)) || r.list.some(matches)));
+});
+const gwKey = (r: GwRow) => r.project ?? `gw:${r.kind}`;
+function openGateway(r: GwRow) {
+  gatewayFocus.value = r.kind;
+  if (r.project && r.list.length) showProject(r.project);
+  else if (r.list[0]) openContainer.value = r.list[0].name;
+}
 const toggleSection = (s: Section) => {
   if (s.group) void editProjectPrefs((p) => {
     const g = p.groups.find((x) => x.name === s.group);
@@ -390,6 +421,53 @@ function openCompose() {
               </div>
             </li>
           </ul>
+        </template>
+
+        <!-- DevCatz Gateways (Windows): last, with DevCatz's mark; DevCatz installs, starts and stops them -->
+        <template v-if="gwRows.length">
+          <div class="group/sec mt-3 mb-1 flex cursor-pointer items-center gap-1.5 rounded-md py-1 pr-2 pl-1.5 text-[11px] font-semibold tracking-wide uppercase text-base-content/55 transition-colors select-none hover:text-base-content/80" :title="listView.isCollapsed('gateways') ? 'Show DevCatz Gateways' : 'Hide DevCatz Gateways'" @click="listView.toggle('gateways')">
+            <img :src="devcatzLogo" class="size-3.5 shrink-0 rounded-sm" alt="" />
+            <span class="min-w-0 flex-1 truncate">DevCatz Gateways</span>
+            <span class="sec-count normal-case" :class="{ 'is-live': gwRows.some((r) => running(r.list)) }">{{ gwRows.length }}</span>
+            <svg class="size-3.5 shrink-0 opacity-45 transition group-hover/sec:opacity-90" :class="{ '-rotate-90': listView.isCollapsed('gateways') }" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M5.22 8.22a.75.75 0 0 1 1.06 0L10 11.94l3.72-3.72a.75.75 0 1 1 1.06 1.06l-4.25 4.25a.75.75 0 0 1-1.06 0L5.22 9.28a.75.75 0 0 1 0-1.06Z" clip-rule="evenodd" /></svg>
+          </div>
+          <template v-if="!listView.isCollapsed('gateways')">
+            <section v-for="r in gwRows" :key="'gw-' + r.kind" class="mb-1">
+              <div class="group flex items-center gap-1 rounded-lg py-1.5 pr-2 pl-0.5 transition-colors" :class="(r.project && openProject === r.project) || (gatewayFocus === r.kind && !r.list.length) ? 'bg-primary/15' : 'hover:bg-base-300/40'">
+                <button v-if="r.list.length" class="grid size-5 shrink-0 place-items-center rounded-md opacity-60 transition hover:bg-base-300/70 hover:opacity-100" :title="folded.has(gwKey(r)) ? `Show ${r.name}’s services` : `Hide ${r.name}’s services`" :aria-expanded="!folded.has(gwKey(r))" @click.stop="fold(gwKey(r))">
+                  <svg viewBox="0 0 20 20" class="size-4 transition-transform duration-150" :class="{ '-rotate-90': folded.has(gwKey(r)) }" fill="currentColor"><path fill-rule="evenodd" d="M5.22 8.22a.75.75 0 0 1 1.06 0L10 11.94l3.72-3.72a.75.75 0 1 1 1.06 1.06l-4.25 4.25a.75.75 0 0 1-1.06 0L5.22 9.28a.75.75 0 0 1 0-1.06Z" clip-rule="evenodd" /></svg>
+                </button>
+                <span v-else class="size-5 shrink-0" />
+                <button class="flex min-w-0 flex-1 items-center gap-2 text-left" :title="r.list.length ? `${r.name} — a DevCatz gateway${r.version ? ` (${r.version})` : ''}` : `${r.name} — not installed; DevCatz installs it`" @click="openGateway(r)">
+                  <!-- the gateway's own logo (Jasmin, ntfy …); DevCatz's mark is on the group heading -->
+                  <img :src="gatewayLogo(r.kind) ?? devcatzLogo" class="size-6 shrink-0 rounded-md border border-base-300/70 bg-base-100 object-contain p-0.5" :class="{ 'opacity-45 grayscale': !r.list.length }" :alt="r.name" />
+                  <span class="truncate text-[13px] font-semibold tracking-tight" :class="{ 'text-primary': openProject === r.project && !!r.project, 'opacity-60': !r.list.length }">{{ r.name }}</span>
+                  <span v-if="r.list.length" class="sec-count shrink-0" :class="{ 'is-live': running(r.list) }">{{ running(r.list) }}/{{ r.list.length }}</span>
+                  <span v-else class="shrink-0 text-[11px] opacity-45">not installed</span>
+                </button>
+                <!-- read-only: DevCatz installs, starts and stops its gateways; here they are looked at, and opened in DevCatz -->
+                <div class="hidden shrink-0 items-center group-hover:flex">
+                  <button v-if="r.webUi && running(r.list)" class="btn btn-ghost btn-xs btn-square" :title="`Open ${r.webUi}`" @click.stop="api.openUrl(r.webUi)"><svg viewBox="0 0 20 20" class="size-3.5" fill="currentColor"><path d="M11 3a1 1 0 1 0 0 2h2.59l-6.3 6.29a1 1 0 1 0 1.42 1.42L15 6.41V9a1 1 0 1 0 2 0V4a1 1 0 0 0-1-1h-5ZM5 5a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2v-3a1 1 0 1 0-2 0v3H5V7h3a1 1 0 0 0 0-2H5Z" /></svg></button>
+                  <button class="btn btn-ghost btn-xs btn-square" :title="`Open ${r.name} in DevCatz${r.list.length ? '' : ' (installed there)'}`" @click.stop="gatewayLink(r.kind)"><img :src="devcatzLogo" class="size-3.5 rounded-sm" alt="DevCatz" /></button>
+                </div>
+              </div>
+              <ul v-if="r.list.length" v-show="!folded.has(gwKey(r))" class="mt-0.5 ml-[1.9rem] space-y-0.5 border-l border-base-300/60 pl-2">
+                <li v-for="c in r.list" :key="c.id">
+                  <div class="flex cursor-default items-center gap-2.5 rounded-xl px-2 py-1.5 transition-colors" :class="openContainer === c.name ? 'bg-primary/15 ring-1 ring-primary/30' : 'hover:bg-base-300/40'" @click="openContainer = c.name">
+                    <span class="relative shrink-0" :title="c.status">
+                      <ServiceMark :container="c" :dim="c.state !== 'running'" />
+                      <span class="status status-xs absolute -right-0.5 -bottom-0.5 ring-2 ring-base-200" :class="dot(c) || 'bg-base-content/30'" />
+                    </span>
+                    <div class="min-w-0 flex-1">
+                      <div class="truncate text-[13px] font-medium">{{ c.service ?? c.name }}</div>
+                      <div class="truncate text-[11px] opacity-55">{{ imageLine(c) }}<template v-if="portLine(c)"> · {{ portLine(c) }}</template></div>
+                    </div>
+                    <span v-if="stats[c.id]" class="shrink-0 text-right font-mono text-[10px] leading-tight opacity-55">{{ stats[c.id].cpu.toFixed(0) }}%<br />{{ bytes(stats[c.id].memUsed) }}</span>
+                  </div>
+                </li>
+              </ul>
+            </section>
+          </template>
         </template>
       </div>
       <RunPanel v-if="run" :run="run" @close="runToken = null" />
