@@ -1,7 +1,7 @@
 {
   "name": "docatz",
   "productName": "DoCatz",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "license": "GPL-3.0-only",
   "private": true,
   "description": "DoCatz \u2014 a fast, light Docker engine and container manager: a small Linux VM, containers grouped by compose project, logs, terminal and files, every container on its own domain. Part of the Catzoid family.",
