@@ -102,6 +102,13 @@ const gwRows = computed<GwRow[]>(() => {
   return rows.filter((r) => (!view.value.runningOnly || running(r.list) > 0) && (!q.value || [r.name, r.kind].some((x) => x.toLowerCase().includes(q.value)) || r.list.some(matches)));
 });
 const gwKey = (r: GwRow) => r.project ?? `gw:${r.kind}`;
+/**
+ * The group starts folded (DevCatz's things, not the user's projects); the list remembers folded sections, so this one
+ * is remembered when it is opened instead. A docatz://gateways link opens it, so the gateway it points at shows.
+ */
+const GW_OPEN = 'gateways:open';
+const gwFolded = computed(() => !listView.isCollapsed(GW_OPEN));
+watch(gatewayFocus, (k) => k && gwFolded.value && listView.toggle(GW_OPEN), { immediate: true });
 function openGateway(r: GwRow) {
   gatewayFocus.value = r.kind;
   if (r.project && r.list.length) showProject(r.project);
@@ -425,13 +432,13 @@ function openCompose() {
 
         <!-- DevCatz Gateways (Windows): last, with DevCatz's mark; DevCatz installs, starts and stops them -->
         <template v-if="gwRows.length">
-          <div class="group/sec mt-3 mb-1 flex cursor-pointer items-center gap-1.5 rounded-md py-1 pr-2 pl-1.5 text-[11px] font-semibold tracking-wide uppercase text-base-content/55 transition-colors select-none hover:text-base-content/80" :title="listView.isCollapsed('gateways') ? 'Show DevCatz Gateways' : 'Hide DevCatz Gateways'" @click="listView.toggle('gateways')">
+          <div class="group/sec mt-3 mb-1 flex cursor-pointer items-center gap-1.5 rounded-md py-1 pr-2 pl-1.5 text-[11px] font-semibold tracking-wide uppercase text-base-content/55 transition-colors select-none hover:text-base-content/80" :title="gwFolded ? 'Show DevCatz Gateways' : 'Hide DevCatz Gateways'" @click="listView.toggle(GW_OPEN)">
             <img :src="devcatzLogo" class="size-3.5 shrink-0 rounded-sm" alt="" />
             <span class="min-w-0 flex-1 truncate">DevCatz Gateways</span>
             <span class="sec-count normal-case" :class="{ 'is-live': gwRows.some((r) => running(r.list)) }">{{ gwRows.length }}</span>
-            <svg class="size-3.5 shrink-0 opacity-45 transition group-hover/sec:opacity-90" :class="{ '-rotate-90': listView.isCollapsed('gateways') }" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M5.22 8.22a.75.75 0 0 1 1.06 0L10 11.94l3.72-3.72a.75.75 0 1 1 1.06 1.06l-4.25 4.25a.75.75 0 0 1-1.06 0L5.22 9.28a.75.75 0 0 1 0-1.06Z" clip-rule="evenodd" /></svg>
+            <svg class="size-3.5 shrink-0 opacity-45 transition group-hover/sec:opacity-90" :class="{ '-rotate-90': gwFolded }" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M5.22 8.22a.75.75 0 0 1 1.06 0L10 11.94l3.72-3.72a.75.75 0 1 1 1.06 1.06l-4.25 4.25a.75.75 0 0 1-1.06 0L5.22 9.28a.75.75 0 0 1 0-1.06Z" clip-rule="evenodd" /></svg>
           </div>
-          <template v-if="!listView.isCollapsed('gateways')">
+          <template v-if="!gwFolded">
             <section v-for="r in gwRows" :key="'gw-' + r.kind" class="mb-1">
               <div class="group flex items-center gap-1 rounded-lg py-1.5 pr-2 pl-0.5 transition-colors" :class="(r.project && openProject === r.project) || (gatewayFocus === r.kind && !r.list.length) ? 'bg-primary/15' : 'hover:bg-base-300/40'">
                 <button v-if="r.list.length" class="grid size-5 shrink-0 place-items-center rounded-md opacity-60 transition hover:bg-base-300/70 hover:opacity-100" :title="folded.has(gwKey(r)) ? `Show ${r.name}’s services` : `Hide ${r.name}’s services`" :aria-expanded="!folded.has(gwKey(r))" @click.stop="fold(gwKey(r))">

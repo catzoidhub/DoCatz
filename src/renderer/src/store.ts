@@ -67,11 +67,22 @@ export const runs = ref<Record<string, DcRun>>({});
 export const gateways = ref<DcGateway[]>([]);
 /** The gateway a docatz://gateways?kind= link points at, highlighted in its group. */
 export const gatewayFocus = ref<string | null>(null);
+/**
+ * Whether DevCatz is on this PC. The gateways are DevCatz's: without it there is no DevCatz Gateways group, and a
+ * devcatz-gw-* project left behind is an ordinary project (nothing else looks after it). Checked with the list, at
+ * most every 10 s (DevCatz installed or removed meanwhile shows up then).
+ */
+export const devcatzInstalled = ref(false);
+let devcatzCheckedAt = 0;
 export async function refreshGateways(): Promise<void> {
-  gateways.value = await api.devcatzGateways().catch(() => gateways.value);
+  if (Date.now() - devcatzCheckedAt > 10_000) {
+    devcatzCheckedAt = Date.now();
+    devcatzInstalled.value = !!(await api.appInfo().catch(() => null))?.siblings.devcatz;
+  }
+  gateways.value = devcatzInstalled.value ? await api.devcatzGateways().catch(() => gateways.value) : [];
 }
-/** A gateway's compose project, from its name (devcatz-gw-<kind>) — Windows only, where DevCatz puts them on DoCatz. */
-export const gatewayKindOf = (project: string | null | undefined): string | null => (currentOS === 'windows' && project?.startsWith('devcatz-gw-') ? project.slice(11) : null);
+/** A gateway's compose project, from its name (devcatz-gw-<kind>) — Windows with DevCatz installed, where it puts them on DoCatz. */
+export const gatewayKindOf = (project: string | null | undefined): string | null => (currentOS === 'windows' && devcatzInstalled.value && project?.startsWith('devcatz-gw-') ? project.slice(11) : null);
 /**
  * Gateways are read-only in DoCatz: DevCatz installs, starts and stops them (it keeps `compose up` attached). DoCatz
  * only opens one there — devcatz://gateways/<kind>.
@@ -121,13 +132,14 @@ export async function refreshContainers(): Promise<void> {
     containers.value = [];
     return;
   }
+  // DevCatz's gateway list follows the containers (installs and starts show up as engine events too) — read first, so
+  // the gateways never show a moment as ordinary projects before moving to their group.
+  if (currentOS === 'windows') await refreshGateways();
   try {
     containers.value = await api.containers();
   } catch {
     containers.value = [];
   }
-  // DevCatz's gateway list follows the containers (installs and starts show up as engine events too).
-  if (currentOS === 'windows') void refreshGateways();
 }
 
 // ---------------------------------------------------------------- the project list's arrangement (favorites, groups, order)
