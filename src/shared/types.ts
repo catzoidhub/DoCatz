@@ -156,6 +156,18 @@ export interface EngineState {
 
 // ------------------------------------------------------------ containers, images, volumes, networks
 
+/** The framework a service is built from (the same names as DevCatz's), for its mark. */
+export type DcFrameworkName =
+  | 'nuxt' | 'next' | 'vite-vue' | 'vite-react' | 'vite-svelte' | 'tanstack-start' | 'vite' | 'astro' | 'sveltekit' | 'angular' | 'nestjs' | 'express' | 'node'
+  | 'go' | 'rust'
+  | 'laravel' | 'codeigniter' | 'yii' | 'symfony' | 'cakephp' | 'wordpress' | 'drupal' | 'joomla' | 'slim' | 'php'
+  | 'django' | 'flask' | 'fastapi' | 'litestar' | 'python';
+export interface DcFramework {
+  framework: DcFrameworkName;
+  /** A Go / Rust / Python / Node app's own web framework (gin, axum, starlette, fastify …), when recognised. */
+  library: string | null;
+}
+
 export interface DcPort {
   private: number;
   public: number | null;
@@ -186,6 +198,8 @@ export interface DcContainer {
   /** What its domain name is kept under (`<project>/<service>` or the container's name), and the custom name if set. */
   domainKey: string;
   domainName: string | null;
+  /** Built from source: the framework found in its build folder (its mark in the list); null for an image. */
+  framework: DcFramework | null;
 }
 export interface DcContainerDetail extends DcContainer {
   command: string;

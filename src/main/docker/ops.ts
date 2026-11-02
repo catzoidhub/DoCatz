@@ -2,6 +2,7 @@ import type { IncomingMessage } from 'node:http';
 import type { Duplex } from 'node:stream';
 import type { DcContainer, DcContainerDetail, DcContainerState, DcDiskUsage, DcImage, DcLogChunk, DcNetwork, DcPort, DcPruneKind, DcPrunePreview, DcStats, DcVolume } from '@shared/types';
 import { demuxer, docker } from './client';
+import { frameworkOf } from '../frameworks';
 
 /**
  * What the app does with the engine, on top of the Docker API client: lists shaped for the window, stats, logs,
@@ -71,6 +72,7 @@ function shape(c: ApiContainer, urlFor: UrlFor): DcContainer {
     ip: Object.values(c.NetworkSettings?.Networks ?? {}).map((n) => n.IPAddress).find((x) => !!x) ?? null,
     domainKey: c.Labels?.[PROJECT] && c.Labels?.[SERVICE] ? `${c.Labels[PROJECT]}/${c.Labels[SERVICE]}` : (c.Names[0] ?? c.Id.slice(0, 12)).replace(/^\//, ''),
     domainName: null,
+    framework: frameworkOf(c.Labels?.[PROJECT] ?? null, c.Labels?.[SERVICE] ?? null),
   };
   base.domainName = domainNameOf(base.domainKey);
   return { ...base, url: urlFor(base) };

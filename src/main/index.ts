@@ -16,6 +16,7 @@ import { Domains } from './domains';
 import { Engine } from './engine';
 import { Reporter } from './reporter';
 import { projects, Runs } from './runs';
+import { learnProject } from './frameworks';
 import { applySettings, migrateToShared, setAiKey, setSettings, settings } from './settings';
 import { siteBase } from './shared';
 import { DocatzTray } from './tray';
@@ -66,6 +67,11 @@ async function refresh(): Promise<void> {
       containers = [];
     }
     await domains.setRoutes(containers).catch((e) => console.warn('routes:', (e as Error).message));
+    // Frameworks of services built from source (their marks): learnt per project in the background.
+    if (containers.some((c) => c.project && !c.framework))
+      void projects()
+        .then((list) => list.forEach((p) => void learnProject(p.name, p.files, () => void refresh())))
+        .catch(() => undefined);
     writeBridge(containers, containers.length || (await engine.up()) ? 'running' : 'stopped', { httpsPort: domains.httpsPort, httpPort: domains.httpPort });
     send('app:changed', null);
     tray.update(await engine.state().catch(() => null), containers);

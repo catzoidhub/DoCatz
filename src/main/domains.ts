@@ -116,6 +116,7 @@ export class Domains {
     // Whether :443 reaches DoCatz changes when DevCatz starts or quits (it is the front when installed): check every
     // 10 s, and when it changes the URLs follow at once.
     const probe = async () => {
+      await this.standInCheck();
       const on = shared().cleanUrls?.on === true;
       const r = on ? await this.reachesDocatz() : 'no';
       const reaches = r === 'yes';
@@ -128,6 +129,55 @@ export class Domains {
   }
 
   private probeTimer: ReturnType<typeof setInterval> | null = null;
+
+  // ---------------------------------------------------------------- standing in for DevCatz's proxy
+
+  /**
+   * With DevCatz installed, :443 / :80 point at DevCatz's proxy, which only runs while DevCatz does. While DevCatz is
+   * closed, DoCatz listens on those ports itself (its own names answer; DevCatz's get a page saying to open DevCatz),
+   * and lets go of them as soon as DevCatz starts (checked every 2 s while standing in; DevCatz retries its bind).
+   */
+  private standIn: Server[] = [];
+  private standInTimer: ReturnType<typeof setInterval> | null = null;
+
+  private async devcatzRunning(): Promise<boolean> {
+    if (isWin) return /DevCatz\.exe/i.test((await run('tasklist', ['/FI', 'IMAGENAME eq DevCatz.exe', '/NH'], { timeout: 10_000 })).stdout);
+    return (await run('/usr/bin/pgrep', ['-f', 'DevCatz.app/Contents/MacOS/DevCatz'], { timeout: 10_000 })).code === 0;
+  }
+
+  private async standInCheck(): Promise<void> {
+    const c = shared().cleanUrls;
+    const wanted = !!c?.on && c.by === 'devcatz' && this.devcatz !== null && this.ca !== null && !(await this.devcatzRunning());
+    if (wanted && !this.standIn.length) this.startStandIn(c!.httpsPort, c!.httpPort);
+    else if (!wanted && this.standIn.length) this.stopStandIn();
+  }
+
+  private startStandIn(httpsPort: number, httpPort: number): void {
+    const handler = (req: IncomingMessage, res: ServerResponse) => this.forward(req, res);
+    const upgrade = (req: IncomingMessage, socket: Socket, head: Buffer) => this.upgrade(req, socket, head);
+    const https = this.leaf('docatz.localhost');
+    for (const host of ['127.0.0.1', '::1']) {
+      const h = createHttp(handler);
+      h.on('upgrade', upgrade);
+      const t = createHttps({ SNICallback: (name, cb) => cb(null, this.context(name)), ...https }, handler);
+      t.on('upgrade', upgrade);
+      for (const [srv, port] of [[h, httpPort], [t, httpsPort]] as const) {
+        srv.on('error', () => srv.close());
+        srv.listen(port, host);
+        this.standIn.push(srv);
+      }
+    }
+    this.standInTimer = setInterval(() => void this.devcatzRunning().then((up) => up && this.stopStandIn()), 2000);
+  }
+
+  private stopStandIn(): void {
+    if (this.standInTimer) clearInterval(this.standInTimer);
+    this.standInTimer = null;
+    for (const s of this.standIn) s.close();
+    this.standIn = [];
+    this.probe = null;
+    this.onChange();
+  }
 
   private listen(s: Server, port: number, host: string): void {
     s.on('error', (e: NodeJS.ErrnoException) => console.warn(`DoCatz proxy: ${host}:${port} — ${e.code === 'EADDRINUSE' ? 'the port is in use' : e.message}`));
@@ -144,6 +194,7 @@ export class Domains {
 
   stop(): void {
     if (this.probeTimer) clearInterval(this.probeTimer);
+    this.stopStandIn();
     for (const s of this.servers) s.close();
     this.servers = [];
     void this.dns.stop();
@@ -233,6 +284,12 @@ export class Domains {
   private forward(req: IncomingMessage, res: ServerResponse): void {
     res.setHeader(MARK, '1');
     const port = this.target(req);
+    const host = String(req.headers.host ?? '').split(':')[0].toLowerCase();
+    if (!port && this.standIn.length && !host.endsWith(`.docatz.${this.tld()}`)) {
+      res.writeHead(503, { 'content-type': 'text/html; charset=utf-8' });
+      res.end(`<!doctype html><meta charset="utf-8"><title>DevCatz is closed</title><body style="font:15px system-ui;padding:3rem;color:#334"><h2>${host.replace(/[<>&"]/g, '')} is a DevCatz site</h2><p>Open DevCatz to serve it. DoCatz answers here only for its own names while DevCatz is closed.</p>`);
+      return;
+    }
     if (!port) {
       res.writeHead(502, { 'content-type': 'text/html; charset=utf-8' });
       res.end(`<!doctype html><meta charset="utf-8"><title>DoCatz</title><body style="font:15px system-ui;padding:3rem;color:#334"><h2>Nothing runs at ${String(req.headers.host ?? '').replace(/[<>&"]/g, '')}</h2><p>No running container has this name. Start it in DoCatz.</p>`);

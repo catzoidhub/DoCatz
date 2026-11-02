@@ -1,13 +1,14 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue';
 import type { DcContainer, DcContainerDetail, DcStats } from '@shared/types';
-import { api, attempt, bytes, changes, containerTab, errorText, notify, openContainer, type ContainerTab } from '../store';
+import { api, attempt, bytes, changes, containerTab, errorText, notify, openContainer, statsHistory, type ContainerTab } from '../store';
 import ConfirmDialog from '../components/ConfirmDialog.vue';
 import DcNavButtons from './DcNavButtons.vue';
 import LogsPane from './LogsPane.vue';
 import TermPane from './TermPane.vue';
 import FilesPane from './FilesPane.vue';
-import { serviceLook } from './logos';
+import ServiceMark from './ServiceMark.vue';
+import TimeChart from './TimeChart.vue';
 
 /**
  * One container (DoCatz TODO #12 / #13 / #15): its actions, and tabs — Info (image, command, ports, domain, mounts,
@@ -16,7 +17,6 @@ import { serviceLook } from './logos';
 const props = defineProps<{ container: DcContainer; stats: DcStats | null }>();
 const c = computed(() => props.container);
 const detail = ref<DcContainerDetail | null>(null);
-const look = computed(() => serviceLook(c.value.image));
 const TABS: { id: ContainerTab; label: string }[] = [
   { id: 'info', label: 'Info' },
   { id: 'logs', label: 'Logs' },
@@ -79,6 +79,7 @@ async function saveName() {
     notify('success', nameInput.value.trim() ? `Now at ${nameInput.value.trim()}.${suffix.value}` : 'Back to the default name');
   }
 }
+const history = computed(() => statsHistory.value[c.value.id] ?? []);
 const memPct = computed(() => (props.stats && props.stats.memLimit ? (props.stats.memUsed / props.stats.memLimit) * 100 : 0));
 </script>
 
@@ -86,10 +87,7 @@ const memPct = computed(() => (props.stats && props.stats.memLimit ? (props.stat
   <section class="flex h-full flex-col">
     <header class="drag win-top flex h-14 shrink-0 items-end gap-3 border-b border-base-300/60 px-4 pb-2">
       <div class="no-drag"><DcNavButtons /></div>
-      <span class="mb-0.5 grid size-9 shrink-0 place-items-center overflow-hidden rounded-xl border border-base-300/70 bg-base-100" :title="look.label">
-        <img v-if="look.logo" :src="look.logo" alt="" class="size-7 rounded object-contain" draggable="false" />
-        <svg v-else viewBox="0 0 20 20" class="size-5 text-primary" fill="currentColor"><path fill-rule="evenodd" clip-rule="evenodd" d="M3 6.5A2.5 2.5 0 0 1 5.5 4h9A2.5 2.5 0 0 1 17 6.5v7a2.5 2.5 0 0 1-2.5 2.5h-9A2.5 2.5 0 0 1 3 13.5v-7ZM6 7a.75.75 0 0 0-.75.75v4.5a.75.75 0 0 0 1.5 0v-4.5A.75.75 0 0 0 6 7Zm2.75.75a.75.75 0 0 1 1.5 0v4.5a.75.75 0 0 1-1.5 0v-4.5ZM14 7a.75.75 0 0 0-.75.75v4.5a.75.75 0 0 0 1.5 0v-4.5A.75.75 0 0 0 14 7Z" /></svg>
-      </span>
+      <ServiceMark :container="c" size="lg" class="mb-0.5" />
       <div class="min-w-0 flex-1 pb-0.5">
         <div class="flex items-center gap-2">
           <h1 class="truncate text-base font-semibold tracking-tight">{{ c.name }}</h1>
@@ -228,6 +226,8 @@ const memPct = computed(() => (props.stats && props.stats.memLimit ? (props.stat
           <div class="card"><div class="card-body gap-1"><span class="label-caps">Memory</span><span class="text-2xl font-semibold tabular-nums">{{ bytes(stats.memUsed) }}</span><progress class="progress progress-primary h-1.5" :value="memPct" max="100" /><span class="text-xs opacity-55">of {{ bytes(stats.memLimit) }}</span></div></div>
           <div class="card"><div class="card-body gap-1"><span class="label-caps">Network</span><span class="text-sm tabular-nums">↓ {{ bytes(stats.netRx) }} · ↑ {{ bytes(stats.netTx) }}</span><span class="text-xs opacity-55">since the container started</span></div></div>
           <div class="card"><div class="card-body gap-1"><span class="label-caps">Disk I/O</span><span class="text-sm tabular-nums">read {{ bytes(stats.blockRead) }} · written {{ bytes(stats.blockWrite) }}</span><span class="text-xs opacity-55">{{ stats.pids }} processes</span></div></div>
+          <div class="card sm:col-span-2"><div class="card-body gap-2"><div class="flex items-baseline gap-2"><h2 class="flex-1">CPU</h2><span class="text-xs opacity-50">every 5 s, the last 10 minutes</span></div><TimeChart :series="[{ name: 'CPU', color: 'oklch(70% 0.14 240)', points: history.map((h) => ({ t: h.t, v: h.cpu })) }]" :format="(v: number) => `${v < 10 ? v.toFixed(1) : Math.round(v)}%`" :min-max="5" :height="150" /></div></div>
+          <div class="card sm:col-span-2"><div class="card-body gap-2"><h2>Memory</h2><TimeChart :series="[{ name: 'Memory', color: 'oklch(64% 0.17 280)', points: history.map((h) => ({ t: h.t, v: h.mem })) }]" :format="bytes" :min-max="32 * 1024 * 1024" :height="150" /></div></div>
         </div>
       </div>
     </div>

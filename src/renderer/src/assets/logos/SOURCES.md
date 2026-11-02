@@ -71,3 +71,70 @@ identify what a container runs:
   (axllent), traefik (traefik), caddy (caddyserver), httpd (apache), cassandra (apache), grafana (grafana),
   prometheus (prometheus), alpine (alpinelinux), ubuntu (canonical), debian (debian), keycloak (keycloak),
   clickhouse (ClickHouse), adminer (vrana), jenkins (jenkinsci), gitea (go-gitea), n8n (n8n-io).
+
+Framework marks (`stackicons.ts` and `fw/`), copied from DevCatz so DoCatz shows the same mark for a service built from source (sources as listed in DevCatz's SOURCES.md):
+
+Framework logos (`fw/*.png`, 128 px; site list, Overview and Apps) for frameworks Simple Icons does not have — each project's own mark:
+
+- echo.png — https://echo.labstack.com/apple-touch-icon.png (Echo's site icon)
+- fiber.png — https://github.com/gofiber.png (Fiber's GitHub organisation avatar: the speed lines and F of the wordmark, cropped to a square)
+- chi.png — https://github.com/go-chi.png (chi's GitHub organisation avatar)
+- gorilla.png — https://github.com/gorilla.png (Gorilla toolkit's GitHub organisation avatar)
+- beego.png — https://github.com/beego.png (Beego's GitHub organisation avatar)
+- iris.png — https://github.com/iris-contrib.png (Iris's GitHub organisation avatar)
+- buffalo.png — https://github.com/gobuffalo.png (Buffalo's GitHub organisation avatar)
+- hertz.png — https://github.com/cloudwego.png (CloudWeGo, the organisation behind Hertz)
+- kratos.png — https://github.com/go-kratos.png (Kratos's GitHub organisation avatar)
+- go-zero.png — https://github.com/zeromicro.png (go-zero's GitHub organisation avatar)
+- gofr.png — https://github.com/gofr-dev.png (GoFr's GitHub organisation avatar)
+- starlette.png — https://github.com/encode/starlette/blob/master/docs/img/starlette.svg (rendered; the "St" of the wordmark, cropped to a square)
+- quart.png — https://github.com/pallets/quart/blob/main/docs/_static/quart-icon.svg (rendered)
+- tornado.png — https://github.com/tornadoweb.png (Tornado's GitHub organisation avatar)
+- pyramid.png — https://github.com/Pylons.png (the Pylons Project, Pyramid's home)
+- bottle.png — https://github.com/bottlepy.png (Bottle's GitHub organisation avatar)
+- blacksheep.png — https://github.com/Neoteroi/BlackSheep/blob/main/blacksheep.svg (rendered)
+- litestar.png — https://github.com/litestar-org.png (Litestar's GitHub organisation avatar)
+- slim.png — https://github.com/slimphp.png (Slim's GitHub organisation avatar)
+
+Fastify, Hono and Koa come from Simple Icons 13.21.0 like the other marks in stackicons.ts. httprouter has no logo of its own and shows the Go mark.
+
+Data libraries (site Database tab):
+
+- gorm.png — https://github.com/go-gorm.png (GORM's GitHub organisation avatar: the gopher in the O of the wordmark, cropped to a square)
+- kysely.svg — https://github.com/kysely-org/kysely/blob/master/site/static/img/logo.svg
+- sqlmodel.svg — https://github.com/fastapi/sqlmodel/blob/main/docs/img/icon.svg
+- Knex.js, Prisma, SQLAlchemy (also shown for Alembic, SQLAlchemy's migration tool), Drizzle, Sequelize and Doctrine come from Simple Icons 13.21.0; Eloquent ORM, the DB facade and Artisan show the Laravel mark.
+- PyPika and Hydrahon have no logo of their own (their GitHub organisations are the companies Kayak and ClanCats), so they show the Python and PHP marks.
+
+More data libraries and migration tools (fw/*.png, 128 px):
+
+- goose.png — https://github.com/pressly/goose/blob/master/assets/goose_logo.png
+- ent.png — https://github.com/ent/ent/blob/master/doc/website/static/img/logo.png (padded to a square)
+- atlas.png — https://github.com/ariga.png (Ariga, the maker of Atlas; its avatar is the Atlas wordmark)
+- sqlc.png — https://github.com/sqlc-dev.png (sqlc's GitHub organisation avatar)
+- mikroorm.png — https://github.com/mikro-orm/mikro-orm/blob/master/docs/static/img/favicon.ico (MikroORM's icon)
+- node-pg-migrate.png — https://github.com/salsita/node-pg-migrate/blob/main/docs/src/public/logo.svg (rendered)
+- cycle.png — https://github.com/cycle/orm/blob/2.x/.idea/icon.svg (rendered)
+- peewee.png — https://github.com/coleifer/peewee/blob/master/docs/peewee4-logo.png
+- piccolo.png — https://github.com/piccolo-orm/piccolo/blob/master/docs/src/logo.png (the icon of the logo, cropped)
+- laminas.png — https://github.com/laminas.png (Laminas's GitHub organisation avatar)
+- propel.png — https://github.com/propelorm.png (Propel's GitHub organisation avatar)
+- tortoise.png — https://github.com/tortoise.png (Tortoise ORM's GitHub organisation avatar; also shown for Aerich)
+- pony.png — https://github.com/ponyorm.png (Pony ORM's GitHub organisation avatar)
+- TypeORM and Mongoose come from Simple Icons 13.21.0. Phinx (a CakePHP project) shows the CakePHP mark.
+- No logo of their own, so they show their language's mark: golang-migrate, dbmate, sql-migrate, tern, sqlx, pgx, Bun (uptrace's avatar is Uptrace's), SQLBoiler, Squirrel, goqu; Objection.js, db-migrate, Umzug (Node); Yoyo (Python); RedBeanPHP, Medoo (PHP).
+
+Rust frameworks (Simple Icons 13.21.0 for Rust, Actix, Rocket, Tauri, Leptos, Bevy, Solana / Anchor, WebAssembly and Hugging Face / Candle; the rest are each project's GitHub organisation avatar, 128 px):
+
+- axum.png — https://github.com/tokio-rs.png (Tokio, the organisation behind Axum)
+- yew.png — https://github.com/yewstack.png (Yew's GitHub organisation avatar)
+- dioxus.png — https://github.com/DioxusLabs.png (Dioxus's GitHub organisation avatar)
+- burn.png — https://github.com/tracel-ai.png (Tracel, the organisation behind Burn)
+- poem.png — https://github.com/poem-web.png (Poem's GitHub organisation avatar)
+- salvo.png — https://github.com/salvo-rs.png (Salvo's GitHub organisation avatar)
+- loco.png — https://github.com/loco-rs.png (Loco's GitHub organisation avatar)
+- sycamore.png — https://github.com/sycamore-rs.png (Sycamore's GitHub organisation avatar)
+- diesel.png — https://github.com/diesel-rs.png (Diesel's GitHub organisation avatar)
+- seaorm.png — https://github.com/SeaQL.png (SeaQL, the organisation behind SeaORM)
+- sqlx.png — https://github.com/launchbadge.png (LaunchBadge, the company behind SQLx; SQLx has no logo of its own)
+- silo.svg — https://github.com/pgsty/silo/blob/main/.github/silo.svg (the SILO emblem from its repository)

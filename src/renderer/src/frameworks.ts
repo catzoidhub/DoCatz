@@ -1,0 +1,97 @@
+import { STACK_ICONS, type StackIcon } from './stackicons';
+
+/**
+ * The name and mark of a framework — the same tables as DevCatz's (src/renderer/src/runtimes.ts), so a service built
+ * from a Laravel, Nuxt or Gin project wears the same mark in DoCatz as its site does in DevCatz.
+ */
+
+const TAGS: Record<string, [string, string]> = {
+  laravel: ['Laravel', 'laravel'],
+  mix: ['Laravel', 'laravel'],
+  php: ['PHP', 'php'],
+  codeigniter: ['CodeIgniter', 'codeigniter'],
+  yii: ['Yii', 'yii'],
+  symfony: ['Symfony', 'symfony'],
+  cakephp: ['CakePHP', 'cakephp'],
+  wordpress: ['WordPress', 'wordpress'],
+  drupal: ['Drupal', 'drupal'],
+  joomla: ['Joomla', 'joomla'],
+  slim: ['Slim', 'slim'],
+  go: ['Go', 'go'],
+  rust: ['Rust', 'rust'],
+  nuxt: ['Nuxt', 'nuxtdotjs'],
+  'vite-vue': ['Vue', 'vuedotjs'],
+  'vite-react': ['React', 'react'],
+  'vite-svelte': ['Svelte', 'svelte'],
+  'tanstack-start': ['TanStack Start', 'tanstack'],
+  angular: ['Angular', 'angular'],
+  next: ['Next.js', 'nextdotjs'],
+  nestjs: ['NestJS', 'nestjs'],
+  astro: ['Astro', 'astro'],
+  sveltekit: ['SvelteKit', 'svelte'],
+  vite: ['Vite', 'vite'],
+  express: ['Express', 'express'],
+  node: ['Node.js', 'nodedotjs'],
+  django: ['Django', 'django'],
+  flask: ['Flask', 'flask'],
+  fastapi: ['FastAPI', 'fastapi'],
+  litestar: ['Litestar', 'litestar'],
+  python: ['Python', 'python'],
+};
+
+
+/** Web frameworks of Go, Rust, Python and Node apps (DcFramework.library). */
+const LIBRARIES: Record<string, [string, string]> = {
+  gin: ['Gin', 'gin'],
+  echo: ['Echo', 'echo'],
+  fiber: ['Fiber', 'fiber'],
+  chi: ['Chi', 'chi'],
+  gorilla: ['Gorilla mux', 'gorilla'],
+  beego: ['Beego', 'beego'],
+  iris: ['Iris', 'iris'],
+  buffalo: ['Buffalo', 'buffalo'],
+  hertz: ['Hertz', 'hertz'],
+  kratos: ['Kratos', 'kratos'],
+  'go-zero': ['go-zero', 'gozero'],
+  gofr: ['GoFr', 'gofr'],
+  httprouter: ['httprouter', 'go'],
+  actix: ['Actix Web', 'actix'],
+  axum: ['Axum', 'axum'],
+  rocket: ['Rocket', 'rocket'],
+  warp: ['Warp', 'rust'],
+  poem: ['Poem', 'poem'],
+  salvo: ['Salvo', 'salvo'],
+  tide: ['Tide', 'rust'],
+  tonic: ['tonic (gRPC)', 'rust'],
+  hyper: ['hyper', 'rust'],
+  loco: ['Loco', 'loco'],
+  yew: ['Yew', 'yew'],
+  leptos: ['Leptos', 'leptos'],
+  dioxus: ['Dioxus', 'dioxus'],
+  sycamore: ['Sycamore', 'sycamore'],
+  tauri: ['Tauri', 'tauri'],
+  electron: ['Electron', 'electron'],
+  bevy: ['Bevy', 'bevy'],
+  burn: ['Burn', 'burn'],
+  candle: ['Candle', 'huggingface'],
+  anchor: ['Anchor (Solana)', 'solana'],
+  starlette: ['Starlette', 'starlette'],
+  quart: ['Quart', 'quart'],
+  sanic: ['Sanic', 'sanic'],
+  tornado: ['Tornado', 'tornado'],
+  pyramid: ['Pyramid', 'pyramid'],
+  falcon: ['Falcon', 'falcon'],
+  bottle: ['Bottle', 'bottle'],
+  aiohttp: ['aiohttp', 'aiohttp'],
+  blacksheep: ['BlackSheep', 'blacksheep'],
+  fastify: ['Fastify', 'fastify'],
+  hono: ['Hono', 'hono'],
+  koa: ['Koa', 'koa'],
+  express: ['Express', 'express'],
+};
+
+/** The name and mark of a framework; a Go / Python app's own web framework (`library`) wins when known. */
+export function frameworkTag(fw: string, library?: string | null): { label: string; icon: StackIcon } {
+  const [label, icon] = (library && LIBRARIES[library]) || TAGS[fw] || ['JavaScript', 'javascript'];
+  return { label, icon: STACK_ICONS[icon] ?? STACK_ICONS.javascript };
+}

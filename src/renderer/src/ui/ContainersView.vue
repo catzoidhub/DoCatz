@@ -2,13 +2,13 @@
 import { keyLabel } from '@shared/platform';
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import type { DcComposeAction, DcContainer, DcStats } from '@shared/types';
-import { api, attempt, bytes, composeFile, composeOpen, containers, engineUp, findFocus, findText, openContainer, openProject, PROJECT_ICON, projectTab, runs, token, type ProjectTab } from '../store';
+import { api, attempt, bytes, composeFile, composeOpen, containers, engineUp, findFocus, findText, openContainer, openProject, recordStats, PROJECT_ICON, projectTab, runs, token, type ProjectTab } from '../store';
 import ContainerDetail from './ContainerDetail.vue';
 import EngineGate from './EngineGate.vue';
 import RunPanel from './RunPanel.vue';
 import ProjectDetail from './ProjectDetail.vue';
 import ConfirmDialog from '../components/ConfirmDialog.vue';
-import { serviceLook } from './logos';
+import ServiceMark from './ServiceMark.vue';
 
 /**
  * Containers (DoCatz TODO #12): grouped by compose project, each with its state, ports and domain, and live CPU /
@@ -46,6 +46,7 @@ async function pollStats() {
   if (!ids.length || document.hidden) return;
   const list = await api.stats(ids).catch(() => [] as DcStats[]);
   stats.value = Object.fromEntries(list.map((s) => [s.id, s]));
+  recordStats(list);
 }
 onMounted(() => {
   void pollStats();
@@ -79,7 +80,6 @@ async function compose(project: string, action: DcComposeAction) {
 }
 const run = computed(() => (runToken.value ? runs.value[runToken.value] : null));
 
-const look = (c: DcContainer) => serviceLook(c.image);
 const dot = (c: DcContainer) => (c.state === 'running' ? (c.health === 'unhealthy' ? 'status-error' : c.health === 'starting' ? 'status-warning' : 'status-success') : c.state === 'paused' || c.state === 'restarting' ? 'status-warning' : c.state === 'dead' ? 'status-error' : '');
 const portLine = (c: DcContainer) => c.ports.filter((p) => p.public).map((p) => (p.public === p.private ? `${p.public}` : `${p.public}→${p.private}`)).join(' · ');
 
@@ -138,11 +138,8 @@ function openCompose() {
             <li v-for="c in list" :key="c.id">
               <div class="group flex cursor-default items-center gap-2.5 rounded-xl px-2 py-1.5 transition-colors" :class="openContainer === c.name ? 'bg-primary/15 ring-1 ring-primary/30' : 'hover:bg-base-300/40'" @click="openContainer = c.name">
                 <!-- what it runs: its logo (or the container icon), with its state on the corner -->
-                <span class="relative shrink-0" :title="`${look(c).label} · ${c.status}`">
-                  <span class="grid size-8 place-items-center overflow-hidden rounded-lg border border-base-300/70 bg-base-100" :class="{ 'opacity-50 grayscale': c.state !== 'running' }">
-                    <img v-if="look(c).logo" :src="look(c).logo!" alt="" class="size-6 rounded object-contain" draggable="false" />
-                    <svg v-else viewBox="0 0 20 20" class="size-[18px] text-primary" fill="currentColor"><path fill-rule="evenodd" clip-rule="evenodd" d="M3 6.5A2.5 2.5 0 0 1 5.5 4h9A2.5 2.5 0 0 1 17 6.5v7a2.5 2.5 0 0 1-2.5 2.5h-9A2.5 2.5 0 0 1 3 13.5v-7ZM6 7a.75.75 0 0 0-.75.75v4.5a.75.75 0 0 0 1.5 0v-4.5A.75.75 0 0 0 6 7Zm2.75.75a.75.75 0 0 1 1.5 0v4.5a.75.75 0 0 1-1.5 0v-4.5ZM14 7a.75.75 0 0 0-.75.75v4.5a.75.75 0 0 0 1.5 0v-4.5A.75.75 0 0 0 14 7Z" /></svg>
-                  </span>
+                <span class="relative shrink-0" :title="c.status">
+                  <ServiceMark :container="c" :dim="c.state !== 'running'" />
                   <span class="status status-xs absolute -right-0.5 -bottom-0.5 ring-2 ring-base-200" :class="dot(c) || 'bg-base-content/30'" />
                 </span>
                 <div class="min-w-0 flex-1">

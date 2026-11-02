@@ -1,12 +1,13 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue';
 import type { DcComposeAction, DcComposeProject, DcContainer, DcStats } from '@shared/types';
-import { api, attempt, bytes, changes, composeFile, composeOpen, containerTab, notify, openContainer, openProject, PROJECT_ICON, projectTab, runs, token, type ProjectTab } from '../store';
+import { api, attempt, bytes, changes, composeFile, composeOpen, containerTab, notify, openContainer, openProject, PROJECT_ICON, projectTab, runs, statsHistory, token, type ProjectTab } from '../store';
 import ConfirmDialog from '../components/ConfirmDialog.vue';
 import DcNavButtons from './DcNavButtons.vue';
 import ProjectEnv from './ProjectEnv.vue';
 import RunPanel from './RunPanel.vue';
-import { serviceLook } from './logos';
+import ServiceMark from './ServiceMark.vue';
+import TimeChart, { type Series } from './TimeChart.vue';
 
 /**
  * A compose project's page (as a Dokploy compose service): General (folder, compose files, Up / Restart / Stop /
@@ -68,34 +69,36 @@ function openOne(c: DcContainer) {
 }
 const dot = (c: DcContainer) => (c.state === 'running' ? (c.health === 'unhealthy' ? 'status-error' : 'status-success') : c.state === 'paused' || c.state === 'restarting' ? 'status-warning' : 'bg-base-content/30');
 
-// ---- Monitoring: the stats the list polls every 5 s, kept for the last few minutes
-const HISTORY = 60;
-const history = ref<Record<string, { cpu: number; mem: number }[]>>({});
-watch(
-  () => props.stats,
-  (s) => {
-    const next = { ...history.value };
+// ---- Monitoring: charts from the samples the list takes every 5 s (the last 10 minutes)
+const PALETTE = ['oklch(70% 0.14 240)', 'oklch(70% 0.16 330)', 'oklch(74% 0.15 78)', 'oklch(70% 0.13 180)', 'oklch(64% 0.17 280)', 'oklch(68% 0.16 28)', 'oklch(70% 0.15 150)'];
+const colourOf = (i: number) => PALETTE[i % PALETTE.length];
+const cpuSeries = computed<Series[]>(() => props.containers.map((c, i) => ({ name: c.service ?? c.name, color: colourOf(i), points: (statsHistory.value[c.id] ?? []).map((h) => ({ t: h.t, v: h.cpu })) })));
+const memSeries = computed<Series[]>(() => props.containers.map((c, i) => ({ name: c.service ?? c.name, color: colourOf(i), points: (statsHistory.value[c.id] ?? []).map((h) => ({ t: h.t, v: h.mem })) })));
+/** Bytes per second from the counters (they only grow while a container runs). */
+const netSeries = computed<Series[]>(() => {
+  const rate = (key: 'rx' | 'tx') => {
+    const byTime = new Map<number, number>();
     for (const c of props.containers) {
-      const st = s[c.id];
-      if (!st) continue;
-      next[c.id] = [...(next[c.id] ?? []), { cpu: st.cpu, mem: st.memUsed }].slice(-HISTORY);
+      const h = statsHistory.value[c.id] ?? [];
+      for (let i = 1; i < h.length; i++) {
+        const dt = (h[i].t - h[i - 1].t) / 1000;
+        const t = Math.round(h[i].t / 5000) * 5000;
+        if (dt > 0) byTime.set(t, (byTime.get(t) ?? 0) + Math.max(0, h[i][key] - h[i - 1][key]) / dt);
+      }
     }
-    history.value = next;
-  },
-  { immediate: true, deep: true },
-);
+    return [...byTime.entries()].sort((a, b) => a[0] - b[0]).map(([t, v]) => ({ t, v }));
+  };
+  return [
+    { name: 'Received', color: PALETTE[0], points: rate('rx') },
+    { name: 'Sent', color: PALETTE[1], points: rate('tx') },
+  ];
+});
 const totals = computed(() => {
   const list = props.containers.map((c) => props.stats[c.id]).filter(Boolean) as DcStats[];
   return { cpu: list.reduce((a, s) => a + s.cpu, 0), mem: list.reduce((a, s) => a + s.memUsed, 0), rx: list.reduce((a, s) => a + s.netRx, 0), tx: list.reduce((a, s) => a + s.netTx, 0) };
 });
-/** A sparkline path for 0…max over HISTORY samples (120 × 28). */
-function spark(points: number[], max: number): string {
-  if (points.length < 2) return '';
-  const m = Math.max(max, ...points, 1e-9);
-  const step = 120 / (HISTORY - 1);
-  const start = HISTORY - points.length;
-  return points.map((v, i) => `${i ? 'L' : 'M'}${((start + i) * step).toFixed(1)},${(27 - (v / m) * 25).toFixed(1)}`).join(' ');
-}
+const pct = (v: number) => `${v < 10 ? v.toFixed(1) : Math.round(v)}%`;
+const rateText = (v: number) => `${bytes(v)}/s`;
 </script>
 
 <template>
@@ -182,7 +185,7 @@ function spark(points: number[], max: number): string {
               <p class="text-xs opacity-60">Each service answers at its own name, no published port needed. Change the part before .docatz; the ending follows Settings → Domains.</p>
               <ul class="divide-y divide-base-300/50">
                 <li v-for="c in containers" :key="c.id" class="flex flex-wrap items-center gap-2 py-2">
-                  <img v-if="serviceLook(c.image).logo" :src="serviceLook(c.image).logo!" alt="" class="size-5 rounded" draggable="false" />
+                  <ServiceMark :container="c" size="sm" />
                   <span class="w-28 truncate text-sm font-medium">{{ c.service }}</span>
                   <template v-if="!c.url"><span class="text-xs opacity-50">{{ c.state === 'running' ? 'no network address' : 'starts with the service' }}</span></template>
                   <template v-else-if="editing === c.id">
@@ -215,10 +218,7 @@ function spark(points: number[], max: number): string {
               <tr v-for="c in containers" :key="c.id" class="cursor-pointer hover:bg-base-200/60" @click="openOne(c)">
                 <td>
                   <div class="flex items-center gap-2">
-                    <span class="grid size-7 place-items-center overflow-hidden rounded-lg border border-base-300/70 bg-base-100">
-                      <img v-if="serviceLook(c.image).logo" :src="serviceLook(c.image).logo!" alt="" class="size-5 rounded object-contain" draggable="false" />
-                      <svg v-else viewBox="0 0 20 20" class="size-4 text-primary" fill="currentColor"><path d="M3 6.5A2.5 2.5 0 0 1 5.5 4h9A2.5 2.5 0 0 1 17 6.5v7a2.5 2.5 0 0 1-2.5 2.5h-9A2.5 2.5 0 0 1 3 13.5v-7Z" /></svg>
-                    </span>
+                    <ServiceMark :container="c" size="sm" />
                     <span class="font-medium">{{ c.service }}</span>
                   </div>
                 </td>
@@ -234,29 +234,31 @@ function spark(points: number[], max: number): string {
 
       <!-- Monitoring -->
       <div v-else-if="projectTab === 'monitoring'" class="h-full overflow-y-auto">
-        <div class="mx-auto max-w-3xl space-y-4 p-5">
+        <div class="mx-auto max-w-4xl space-y-4 p-5">
           <div class="grid gap-3 sm:grid-cols-3">
-            <div class="card"><div class="card-body gap-1"><span class="label-caps">CPU</span><span class="text-2xl font-semibold tabular-nums">{{ totals.cpu.toFixed(1) }}%</span><span class="text-xs opacity-55">all services · one core = 100%</span></div></div>
+            <div class="card"><div class="card-body gap-1"><span class="label-caps">CPU</span><span class="text-2xl font-semibold tabular-nums">{{ pct(totals.cpu) }}</span><span class="text-xs opacity-55">all services · one core = 100%</span></div></div>
             <div class="card"><div class="card-body gap-1"><span class="label-caps">Memory</span><span class="text-2xl font-semibold tabular-nums">{{ bytes(totals.mem) }}</span><span class="text-xs opacity-55">all services</span></div></div>
             <div class="card"><div class="card-body gap-1"><span class="label-caps">Network</span><span class="text-sm tabular-nums">↓ {{ bytes(totals.rx) }} · ↑ {{ bytes(totals.tx) }}</span><span class="text-xs opacity-55">since each started</span></div></div>
           </div>
           <div class="card">
             <div class="card-body gap-2">
-              <h2>Per service</h2>
-              <p class="text-xs opacity-55">Live, every 5 seconds; the lines show the last five minutes this page was open.</p>
-              <div v-for="c in containers" :key="c.id" class="grid grid-cols-[7rem_1fr_1fr] items-center gap-4 border-t border-base-300/50 py-2">
-                <span class="truncate text-sm font-medium">{{ c.service }}</span>
-                <div class="flex items-center gap-2">
-                  <svg viewBox="0 0 120 28" class="h-7 w-28 shrink-0 text-primary"><path :d="spark((history[c.id] ?? []).map((h) => h.cpu), 5)" fill="none" stroke="currentColor" stroke-width="1.5" /></svg>
-                  <span class="font-mono text-xs">{{ stats[c.id] ? `${stats[c.id].cpu.toFixed(1)}%` : '—' }}</span>
-                </div>
-                <div class="flex items-center gap-2">
-                  <svg viewBox="0 0 120 28" class="h-7 w-28 shrink-0 text-[var(--c-images)]"><path :d="spark((history[c.id] ?? []).map((h) => h.mem), stats[c.id]?.memLimit ? stats[c.id].memLimit / 8 : 1)" fill="none" stroke="currentColor" stroke-width="1.5" /></svg>
-                  <span class="font-mono text-xs">{{ stats[c.id] ? bytes(stats[c.id].memUsed) : c.state === 'running' ? '…' : 'stopped' }}</span>
-                </div>
-              </div>
+              <div class="flex items-baseline gap-2"><h2 class="flex-1">CPU</h2><span class="text-xs opacity-50">per service, every 5 s, the last 10 minutes</span></div>
+              <TimeChart :series="cpuSeries" :format="pct" :min-max="5" />
             </div>
           </div>
+          <div class="card">
+            <div class="card-body gap-2">
+              <h2>Memory</h2>
+              <TimeChart :series="memSeries" :format="bytes" :min-max="64 * 1024 * 1024" />
+            </div>
+          </div>
+          <div class="card">
+            <div class="card-body gap-2">
+              <h2>Network</h2>
+              <TimeChart :series="netSeries" :format="rateText" :min-max="1024" :height="140" />
+            </div>
+          </div>
+          <p class="text-xs opacity-50">The charts fill while DoCatz is open (Containers polls every 5 seconds); they start empty after a restart.</p>
         </div>
       </div>
     </div>

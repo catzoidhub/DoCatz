@@ -98,7 +98,7 @@ const uninstalling = ref(false);
         <span class="flex-1" />
         <button v-if="info" class="btn btn-ghost btn-xs" @click="api.openUrl(info.site)">{{ host }}</button>
       </div>
-      <ul class="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
+      <ul class="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
         <li v-for="f in FAMILY" :key="f.name">
           <button
             type="button"

@@ -1,5 +1,5 @@
 import { computed, ref, watch } from 'vue';
-import type { DcAiFeature, DcContainer, DcReportKind, DcRun, DcUpdateState, DoCatzSettings, DoCatzSettingsPatch, EngineState, Theme } from '@shared/types';
+import type { DcAiFeature, DcContainer, DcStats, DcReportKind, DcRun, DcUpdateState, DoCatzSettings, DoCatzSettingsPatch, EngineState, Theme } from '@shared/types';
 
 /** The preload bridge (see src/preload/index.ts). */
 export const api = window.docatz;
@@ -61,6 +61,16 @@ export const containers = ref<DcContainer[]>([]);
 export const changes = ref(0);
 /** Compose runs and pulls, by token (the newest shows in the run panel). */
 export const runs = ref<Record<string, DcRun>>({});
+
+/** Stats samples per container (the list polls every 5 s), the last 10 minutes — the Monitoring charts read them. */
+export const HISTORY_SAMPLES = 120;
+export const statsHistory = ref<Record<string, { t: number; cpu: number; mem: number; rx: number; tx: number }[]>>({});
+export function recordStats(list: DcStats[]): void {
+  const t = Date.now();
+  const next = { ...statsHistory.value };
+  for (const s of list) next[s.id] = [...(next[s.id] ?? []), { t, cpu: s.cpu, mem: s.memUsed, rx: s.netRx, tx: s.netTx }].slice(-HISTORY_SAMPLES);
+  statsHistory.value = next;
+}
 
 export async function refreshContainers(): Promise<void> {
   if (!engineUp.value) {
