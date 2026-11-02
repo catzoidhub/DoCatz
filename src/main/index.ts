@@ -6,13 +6,13 @@ import { createWriteStream, readFileSync, statSync, writeFileSync } from 'node:f
 import { basename, join } from 'node:path';
 import { pipeline } from 'node:stream/promises';
 import type { Duplex } from 'node:stream';
-import { API_METHODS, type DcContainer, type DoCatzApi, type SiblingApp } from '@shared/types';
+import { API_METHODS, type DcContainer, type DoCatzApi, type SiblingApp, type TaskProgress } from '@shared/types';
 import { AskAi } from './ai';
 import { buildDetail, buildLogs, listBuilds, removeBuild } from './builds';
 import { composeEnvironmentKeys, envCreate, ownServices, envRead, envRemove, envSetLocked, envState, envWrite, expectedEnv } from './envs';
 import { writeBridge } from './bridge';
 import { removeContext, setPath as setCliPath } from './cli';
-import { findCatzoidApp, openCatzoidApp, platformId } from './companion';
+import { findCatzoidApp, installCatzoidApp, installSteps, openCatzoidApp, platformId } from './companion';
 import { DockerError } from './docker/client';
 import * as ops from './docker/ops';
 import { Domains } from './domains';
@@ -211,6 +211,11 @@ const siblingInfo: Record<SiblingApp, [string, string, string]> = {
   dialcatz: ['DialCatz', 'dialcatz', 'com.mrcatz.dialcatz'],
 };
 
+/** Where each sibling's releases are (Download & Install), and the one install that may run at a time. */
+const SIBLING_REPO: Record<SiblingApp, string> = { devcatz: 'catzoidhub/DevCatz', dbcatz: 'catzoidhub/DBCatz', dialcatz: 'catzoidhub/DialCatz' };
+let siblingTask: TaskProgress | null = null;
+let siblingAbort: AbortController | null = null;
+
 function api(): DoCatzApi {
   const win = () => mainWindow() ?? undefined;
   return {
@@ -288,6 +293,28 @@ function api(): DoCatzApi {
     },
 
     devcatzGateways: async () => devcatzGateways(),
+    siblingInstall: async (which, link) => {
+      const info = siblingInfo[which];
+      if (!info || !link.startsWith(`${info[1]}://`)) throw new Error('Unknown app or link');
+      if (siblingTask && !siblingTask.done && !siblingTask.error) return;
+      siblingAbort = new AbortController();
+      siblingTask = { kind: 'install', title: `Installing ${info[0]}`, steps: installSteps(info[0]), step: 0 };
+      const set = (p: Partial<TaskProgress>) => {
+        siblingTask = { ...siblingTask!, ...p };
+        send('app:siblingTask', siblingTask);
+      };
+      set({});
+      try {
+        await installCatzoidApp(info[0], SIBLING_REPO[which], link, set, siblingAbort.signal);
+        set({ step: siblingTask.steps.length, done: true, detail: '' });
+      } catch (e) {
+        const cancelled = siblingAbort.signal.aborted;
+        set({ error: cancelled ? 'Cancelled' : (e as Error).message, cancelled, done: true });
+      } finally {
+        siblingAbort = null;
+      }
+    },
+    siblingInstallCancel: async () => siblingAbort?.abort(),
 
     engineState: () => engine.state(),
     engineStart: () => engine.start(),

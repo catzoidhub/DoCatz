@@ -1,5 +1,5 @@
 import { contextBridge, ipcRenderer } from 'electron';
-import { API_METHODS, type DcDomains, type DcLogChunk, type DcRun, type DcTermData, type DcUpdateState, type DoCatzApi, type DoCatzSettings, type EngineState } from '@shared/types';
+import { API_METHODS, type DcDomains, type DcLogChunk, type DcRun, type DcTermData, type DcUpdateState, type DoCatzApi, type DoCatzSettings, type EngineState, type TaskProgress } from '@shared/types';
 
 const api = Object.fromEntries(API_METHODS.map((m) => [m, (...args: unknown[]) => ipcRenderer.invoke(`docatz:${m}`, ...args)])) as unknown as DoCatzApi;
 
@@ -32,6 +32,8 @@ const bridge = {
   onTerm: (cb: (d: DcTermData) => void) => on('app:term', cb),
   /** A compose run or image pull as it goes. */
   onRun: (cb: (r: DcRun) => void) => on('app:run', cb),
+  /** A sibling app's Download & Install as it goes (null: none). */
+  onSiblingTask: (cb: (t: TaskProgress | null) => void) => on('app:siblingTask', cb),
   /** The settings changed outside the window (another Catzoid app changed the shared theme / AI connection). */
   onSettings: (cb: (s: DoCatzSettings) => void) => on('app:settings', cb),
   onUpdate: (cb: (s: DcUpdateState) => void) => on('app:update', cb),

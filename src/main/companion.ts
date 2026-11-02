@@ -3,6 +3,8 @@ import { app, shell } from 'electron';
 import { existsSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
+import type { TaskProgress } from '@shared/types';
+import { Cancelled, fetchPinned } from './download';
 
 /**
  * Which build of a Catzoid app fits this computer, and where a sibling app lives (Catzoid family rule, user
@@ -78,4 +80,50 @@ export async function openCatzoidApp(path: string, link: string): Promise<void> 
   }
   const ok = await new Promise<boolean>((resolve) => execFile('open', ['-a', path, link], { timeout: 30_000 }, (e) => resolve(!e)));
   if (!ok) await shell.openExternal(link);
+}
+
+/** The steps a sibling's Download & Install shows (the same as DevCatz's for DoCatz). */
+export const installSteps = (name: string) => ['Find the latest release', 'Download', 'Verify the checksum', 'Install', `Open ${name}`];
+
+/** The newest release's file matching `match`, with its SHA-256 from GitHub's release digest. */
+async function githubAsset(repo: string, match: RegExp): Promise<{ url: string; sha256: string; tag: string; name: string }> {
+  const res = await fetch(`https://api.github.com/repos/${repo}/releases?per_page=10`, { headers: { Accept: 'application/vnd.github+json' } });
+  if (!res.ok) throw new Error(`GitHub answered ${res.status}${res.status === 403 ? ' (too many requests: try again later)' : ''}`);
+  const releases = (await res.json()) as { tag_name: string; prerelease: boolean; draft: boolean; assets: { name: string; browser_download_url: string; digest?: string }[] }[];
+  for (const r of releases) {
+    if (r.prerelease || r.draft) continue;
+    const a = r.assets.find((x) => match.test(x.name));
+    if (a?.digest?.startsWith('sha256:')) return { url: a.browser_download_url, sha256: a.digest.slice(7), tag: r.tag_name, name: a.name };
+  }
+  throw new Error(`There is no ${platformLabel()} build of it with a checksum in ${repo}'s releases yet`);
+}
+
+/**
+ * Download & Install of a sibling Catzoid app, as DevCatz installs DoCatz (Windows; the only place DoCatz offers it —
+ * DevCatz's gateways): the latest release's installer for this platform (platformAsset), checked against the release's
+ * SHA-256 digest, run silently per user (no administrator prompt), then the app opened at `link`.
+ */
+export async function installCatzoidApp(
+  name: string,
+  repo: string,
+  link: string,
+  set: (p: Partial<TaskProgress>) => void,
+  signal: AbortSignal,
+): Promise<void> {
+  const want = platformAsset(name);
+  if (!isWin || !want) throw new Error(`Installing ${name} from DoCatz works on Windows; download it from its page instead`);
+  set({ step: 0 });
+  const asset = await githubAsset(repo, want.pattern);
+  if (signal.aborted) throw new Cancelled();
+  set({ step: 1, detail: `${asset.name} (${asset.tag})` });
+  // fetchPinned checks the SHA-256 as it downloads and never keeps a file that does not match.
+  const exe = await fetchPinned({ url: asset.url, sha256: asset.sha256, name: asset.name }, (fraction, got, total) => set({ detail: `${(got / 1e6).toFixed(0)} of ${(total / 1e6).toFixed(0)} MB`, fraction }), signal);
+  set({ step: 2, detail: 'SHA-256 matches the release digest', fraction: undefined });
+  set({ step: 3, detail: catzoidAppPaths(name)[0] });
+  const code = await new Promise<number>((resolve) => execFile(exe, ['/S'], { timeout: 600_000, windowsHide: true }, (e) => resolve(e ? Number((e as NodeJS.ErrnoException).code) || 1 : 0)));
+  if (code !== 0) throw new Error(`The ${name} installer stopped (exit ${code})`);
+  const path = await findCatzoidApp(name, name.toLowerCase(), '');
+  if (!path) throw new Error(`${name} was installed but could not be found`);
+  set({ step: 4, detail: '' });
+  await openCatzoidApp(path, link);
 }
