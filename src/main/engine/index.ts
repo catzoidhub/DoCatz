@@ -91,7 +91,9 @@ export class Engine {
     }
     let diskBytes: number | null = null;
     try {
-      diskBytes = b.dir ? statSync(join(b.dir, 'diffdisk')).blocks * 512 : null;
+      // Lima's sparse diffdisk (blocks in use); WSL's dynamically growing ext4.vhdx (its size is what it uses).
+      const st = b.dir ? statSync(join(b.dir, isWin ? 'ext4.vhdx' : 'diffdisk')) : null;
+      diskBytes = st ? (isWin ? st.size : st.blocks * 512) : null;
     } catch {
       diskBytes = null;
     }
@@ -99,6 +101,8 @@ export class Engine {
       backend: this.backend.id,
       status,
       message,
+      needs: b.needs ?? null,
+      prereqs: b.prereqs ?? null,
       config: c,
       pending: b.status === 'running' || b.status === 'stopped' ? pending : [],
       host,
@@ -166,6 +170,30 @@ export class Engine {
 
   cancel(): void {
     this.abort?.abort();
+  }
+
+  /** Windows: installs WSL (one administrator prompt); the state then asks for a restart. */
+  async setupWsl(): Promise<void> {
+    if (this.busy || this.task || !this.backend.installPrerequisite) return;
+    this.abort = new AbortController();
+    this.task = { kind: 'engine', title: 'Installing WSL', steps: ['Approve Windows’ administrator prompt', 'Install WSL 2 and Virtual Machine Platform (a few minutes)', 'Restart Windows to finish'], step: 0 };
+    void this.changed();
+    try {
+      await this.backend.installPrerequisite({
+        step: (i, detail) => this.progress({ step: i, detail }),
+        detail: (text, fraction) => this.progress({ detail: text, fraction }),
+        signal: this.abort.signal,
+      });
+      // Done: the state now asks for the restart (needs: 'restart'), with why.
+      this.task = null;
+    } catch (e) {
+      const cancelled = (e as Error).message === 'Cancelled';
+      this.task = cancelled ? null : { ...this.task!, error: (e as Error).message, done: true };
+      if (!cancelled) throw e;
+    } finally {
+      this.abort = null;
+      void this.changed();
+    }
   }
 
   async stop(): Promise<void> {

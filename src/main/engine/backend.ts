@@ -1,4 +1,4 @@
-import type { EngineBackendId, EngineConfig, EngineStatus } from '@shared/types';
+import type { EngineBackendId, EngineConfig, EnginePrereqs, EngineStatus } from '@shared/types';
 
 /**
  * The VM layer behind one interface (DoCatz TODO #1 / #29): Lima on Apple's Virtualization.framework on macOS, a
@@ -15,6 +15,10 @@ export interface BackendStatus {
   dir: string;
   /** What the VM runs with now (null: not created). */
   running: { cpus: number; memoryGiB: number; diskGiB: number; rosetta: boolean } | null;
+  /** What the computer needs first (Windows: WSL installed, then a restart). */
+  needs?: 'install-wsl' | 'restart' | null;
+  /** Windows: what the engine stands on, checked one by one. */
+  prereqs?: EnginePrereqs;
 }
 
 /** A step of a setup / start, for the progress shown in the window. */
@@ -36,6 +40,8 @@ export interface Backend {
   reset(): Promise<void>;
   /** Applies CPU / memory / disk / Rosetta to a stopped VM (some need a restart, the window says which). */
   configure(config: EngineConfig): Promise<void>;
+  /** Installs what the computer needs first (Windows: WSL, through one administrator prompt). */
+  installPrerequisite?(r: StepReporter): Promise<void>;
   /** The VM manager's log, for problems. */
   log(): Promise<string>;
   /** Stops anything DoCatz itself keeps running for the engine (Windows: the relay) when DoCatz quits. */
