@@ -51,12 +51,12 @@ async function go() {
 
 <template>
   <dialog open class="modal modal-open" @keydown.esc="!busy && emit('close')">
-    <div class="modal-box w-[34rem] max-w-[95vw] space-y-4">
+    <div class="modal-box win-fit max-h-[calc(100vh-4rem)] w-[34rem] max-w-[95vw] space-y-4">
       <div class="flex items-start gap-3">
         <CatMood mood="warning" class="size-10 shrink-0" />
         <div>
           <h3 class="text-lg font-semibold tracking-tight">Uninstall DoCatz?</h3>
-          <p class="text-sm opacity-70">This removes DoCatz and what it keeps on this computer. It cannot be undone.</p>
+          <p class="text-sm opacity-70">This removes DoCatz and what it keeps on {{ words.thisComputer }}. It cannot be undone.</p>
         </div>
       </div>
       <template v-if="plan">
