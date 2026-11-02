@@ -61,7 +61,8 @@ const at = computed(() => {
 </script>
 
 <template>
-  <div class="relative">
+  <div>
+   <div class="relative">
     <svg ref="svg" :viewBox="`0 0 ${W} ${H}`" class="w-full select-none" :style="{ height: `${H}px` }" preserveAspectRatio="none" @mousemove="move" @mouseleave="hover = null">
       <g class="text-base-content">
         <line v-for="tk in ticks" :key="tk.v" :x1="PAD.l" :x2="W - PAD.r" :y1="tk.y" :y2="tk.y" stroke="currentColor" stroke-opacity="0.08" />
@@ -81,6 +82,7 @@ const at = computed(() => {
       <div class="mb-0.5 font-mono text-[10px] opacity-50">{{ at.time }}</div>
       <div v-for="r in at.rows" :key="r.name" class="flex items-center gap-1.5"><span class="size-2 rounded-full" :style="{ background: r.color }" /><span class="flex-1 truncate">{{ r.name }}</span><span class="font-mono">{{ format(r.v) }}</span></div>
     </div>
+   </div>
     <div v-if="series.length > 1" class="mt-1.5 flex flex-wrap gap-x-3 gap-y-1 pl-[52px] text-[11px]">
       <span v-for="s in series" :key="s.name" class="flex items-center gap-1.5 opacity-75"><span class="size-2 rounded-full" :style="{ background: s.color }" />{{ s.name }}</span>
     </div>

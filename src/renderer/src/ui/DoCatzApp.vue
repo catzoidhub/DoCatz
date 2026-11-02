@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { currentOS, keyLabel } from '@shared/platform';
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
-import { aiOn, api, askOpen, attempt, composeFile, composeOpen, containerTab, containers, engine, findFocus, findText, init, openContainer, reportOpen, reportsAsk, section, settingsTab, toast, update, updateOpen, type Section } from '../store';
+import { aiOn, api, askOpen, startStatsPolling, attempt, composeFile, composeOpen, containerTab, containers, engine, findFocus, findText, init, openContainer, reportOpen, reportsAsk, section, settingsTab, toast, update, updateOpen, type Section } from '../store';
 import askMark from '../assets/logos/ask-catzoid.svg';
 import CatMood from './CatMood.vue';
 import ContainersView from './ContainersView.vue';
@@ -9,6 +9,8 @@ import ImagesView from './ImagesView.vue';
 import VolumesView from './VolumesView.vue';
 import NetworksView from './NetworksView.vue';
 import BuildsView from './BuildsView.vue';
+import MonitoringView from './MonitoringView.vue';
+import CommandsView from './CommandsView.vue';
 import EngineView from './EngineView.vue';
 import DcSettings from './DcSettings.vue';
 import AskDocatz from './AskDocatz.vue';
@@ -33,6 +35,8 @@ const ICONS: Record<string, string> = {
   networks: 'M10 2a2.5 2.5 0 0 1 .75 4.89V9h3.5a1.75 1.75 0 0 1 1.75 1.75v1.36a2.5 2.5 0 1 1-1.5 0v-1.36a.25.25 0 0 0-.25-.25h-8.5a.25.25 0 0 0-.25.25v1.36a2.5 2.5 0 1 1-1.5 0v-1.36C4 9.78 4.78 9 5.75 9h3.5V6.89A2.5 2.5 0 0 1 10 2Z',
   builds: 'M11.98 1.8a1 1 0 0 1 .87 1.16L12.2 7H16a1 1 0 0 1 .78 1.63l-7 8.6a1 1 0 0 1-1.76-.8L8.67 12.6H5a1 1 0 0 1-.78-1.63l7-8.82a1 1 0 0 1 .76-.35Z',
   engine: 'M7 2a1 1 0 0 1 1 1v1h4V3a1 1 0 1 1 2 0v1h.5A2.5 2.5 0 0 1 17 6.5V7h1a1 1 0 1 1 0 2h-1v2h1a1 1 0 1 1 0 2h-1v.5a2.5 2.5 0 0 1-2.5 2.5H14v1a1 1 0 1 1-2 0v-1H8v1a1 1 0 1 1-2 0v-1h-.5A2.5 2.5 0 0 1 3 13.5V13H2a1 1 0 1 1 0-2h1V9H2a1 1 0 1 1 0-2h1v-.5A2.5 2.5 0 0 1 5.5 4H6V3a1 1 0 0 1 1-1Zm0 5a.5.5 0 0 0-.5.5v5a.5.5 0 0 0 .5.5h6a.5.5 0 0 0 .5-.5v-5A.5.5 0 0 0 13 7H7Z',
+  monitoring: 'M3 3.75A.75.75 0 0 1 3.75 3h.5a.75.75 0 0 1 .75.75v11.5h11.25a.75.75 0 0 1 .75.75v.5a.75.75 0 0 1-.75.75H3.75A.75.75 0 0 1 3 16.5V3.75Zm11.53 2.72a.75.75 0 0 1 0 1.06l-3.5 3.5a.75.75 0 0 1-1.06 0L8.5 9.56l-1.97 1.97a.75.75 0 1 1-1.06-1.06l2.5-2.5a.75.75 0 0 1 1.06 0L10.5 9.44l2.97-2.97a.75.75 0 0 1 1.06 0Z',
+  commands: 'M3 4.5A1.5 1.5 0 0 1 4.5 3h11A1.5 1.5 0 0 1 17 4.5v11a1.5 1.5 0 0 1-1.5 1.5h-11A1.5 1.5 0 0 1 3 15.5v-11Zm3.22 2.72a.75.75 0 0 0 0 1.06L8.94 11l-2.72 2.72a.75.75 0 1 0 1.06 1.06l3.25-3.25a.75.75 0 0 0 0-1.06L7.28 7.22a.75.75 0 0 0-1.06 0ZM11 13.25a.75.75 0 0 0 0 1.5h3a.75.75 0 0 0 0-1.5h-3Z',
   cog: 'M7.84 1.804A1 1 0 0 1 8.82 1h2.36a1 1 0 0 1 .98.804l.331 1.652a6.993 6.993 0 0 1 1.929 1.115l1.598-.54a1 1 0 0 1 1.186.447l1.18 2.044a1 1 0 0 1-.205 1.251l-1.267 1.113a7.047 7.047 0 0 1 0 2.228l1.267 1.113a1 1 0 0 1 .206 1.25l-1.18 2.045a1 1 0 0 1-1.187.447l-1.598-.54a6.993 6.993 0 0 1-1.929 1.115l-.33 1.652a1 1 0 0 1-.98.804H8.82a1 1 0 0 1-.98-.804l-.331-1.652a6.993 6.993 0 0 1-1.929-1.115l-1.598.54a1 1 0 0 1-1.186-.447l-1.18-2.044a1 1 0 0 1 .205-1.251l1.267-1.114a7.05 7.05 0 0 1 0-2.227L1.821 7.773a1 1 0 0 1-.206-1.25l1.18-2.045a1 1 0 0 1 1.187-.447l1.598.54A6.992 6.992 0 0 1 7.51 3.456l.33-1.652ZM10 13a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z',
 };
 const RAIL: { id: Section; label: string }[] = [
@@ -42,6 +46,11 @@ const RAIL: { id: Section; label: string }[] = [
   { id: 'networks', label: 'Networks' },
   { id: 'builds', label: 'Builds' },
   { id: 'engine', label: 'Engine' },
+];
+/** A group of its own under a divider (as OrbStack's): what runs now, and the commands to drive it. */
+const TOOLS: { id: Section; label: string }[] = [
+  { id: 'monitoring', label: 'Monitoring' },
+  { id: 'commands', label: 'Commands' },
 ];
 const running = computed(() => containers.value.filter((c) => c.state === 'running').length);
 const engineDot = computed(() => {
@@ -73,13 +82,14 @@ function openRoute(route: string) {
   } else if (head === 'settings') {
     section.value = 'settings';
     if (arg) settingsTab.value = arg as typeof settingsTab.value;
-  } else if (['images', 'volumes', 'networks', 'builds', 'engine'].includes(head)) section.value = head as Section;
+  } else if (['images', 'volumes', 'networks', 'builds', 'engine', 'monitoring', 'commands'].includes(head)) section.value = head as Section;
 }
 
 const askOn = aiOn('ask');
 
 onMounted(async () => {
   await init();
+  startStatsPolling();
   api.onOpen(openRoute);
   api.onCommand(({ command }) => {
     if (command.startsWith('section:')) section.value = command.slice(8) as Section;
@@ -173,6 +183,20 @@ function openAppMenu(e: MouseEvent) {
           <span v-if="r.id === 'containers' && running" class="absolute top-1 right-3 rounded-full bg-primary px-1.5 text-[10px] font-semibold leading-4 text-primary-content ring-2 ring-base-200" :title="`${running} running`">{{ running }}</span>
           <span v-if="r.id === 'engine'" class="absolute top-1.5 right-4 size-2 rounded-full ring-2 ring-base-200" :class="engineDot" :title="`Engine: ${engine?.status ?? '…'}`" />
         </button>
+        <!-- Monitoring and Commands: a group of their own -->
+        <div class="my-1.5 h-px w-12 shrink-0 bg-base-content/15" />
+        <button
+          v-for="(r, i) in TOOLS"
+          :key="r.id"
+          class="rail-item relative shrink-0"
+          :class="{ 'is-active': section === r.id }"
+          :style="{ '--rail-c': `var(--c-${r.id})` }"
+          :title="`${r.label} (${keyLabel(`mod+${i + 7}`)})`"
+          @click="section = r.id"
+        >
+          <span class="rail-icon"><svg class="size-5" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" clip-rule="evenodd" :d="ICONS[r.id]" /></svg></span>
+          {{ r.label }}
+        </button>
       </div>
       <div class="mb-2 h-px w-12 shrink-0 bg-base-content/15" />
       <button class="rail-item relative shrink-0" :class="{ 'is-active': section === 'settings' }" style="--rail-c: var(--c-settings)" :title="`Settings (${keyLabel('mod+,')})`" @click="section = 'settings'">
@@ -190,6 +214,8 @@ function openAppMenu(e: MouseEvent) {
         <VolumesView v-else-if="section === 'volumes'" />
         <NetworksView v-else-if="section === 'networks'" />
         <BuildsView v-else-if="section === 'builds'" />
+        <MonitoringView v-else-if="section === 'monitoring'" />
+        <CommandsView v-else-if="section === 'commands'" />
         <EngineView v-else-if="section === 'engine'" />
         <DcSettings v-else-if="section === 'settings'" />
       </template>

@@ -16,6 +16,8 @@ export type AppCommand =
   | 'section:volumes'
   | 'section:networks'
   | 'section:builds'
+  | 'section:monitoring'
+  | 'section:commands'
   | 'section:engine'
   | 'openCompose'
   | 'engineStart'
@@ -117,6 +119,9 @@ function template(): MenuItemConstructorOptions[] {
         item('Networks', 'section:networks', 'CmdOrCtrl+4'),
         item('Builds', 'section:builds', 'CmdOrCtrl+5'),
         item('Engine', 'section:engine', 'CmdOrCtrl+6'),
+        sep,
+        item('Monitoring', 'section:monitoring', 'CmdOrCtrl+7'),
+        item('Commands', 'section:commands', 'CmdOrCtrl+8'),
         sep,
         item('Back', 'navBack', 'CmdOrCtrl+['),
         item('Forward', 'navForward', 'CmdOrCtrl+]'),

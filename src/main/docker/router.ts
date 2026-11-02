@@ -81,27 +81,32 @@ ${servers}
 export class Router {
   private id: string | null = null;
   private last = '';
-  private listening = new Map<string, number>();
+  private listening = new Map<string, number[]>();
   private busy: Promise<void> | null = null;
   private pending: RouterTarget[] | null = null;
 
-  /** The port a container listens on, when it exposes none (read once per container from /proc/net/tcp*). */
-  async listeningPort(containerId: string): Promise<number | null> {
-    if (this.listening.has(containerId)) return this.listening.get(containerId) ?? null;
-    let port: number | null = null;
+  /**
+   * The TCP ports a container listens on (from /proc/net/tcp*, any image with `cat`). An empty answer is not kept, so
+   * an app that is still booting is looked at again next time.
+   */
+  async listeningPorts(containerId: string): Promise<number[]> {
+    const hit = this.listening.get(containerId);
+    if (hit?.length) return hit;
+    let ports: number[] = [];
     try {
       const r = await execRun(containerId, ['cat', '/proc/net/tcp', '/proc/net/tcp6']);
-      const ports = new Set<number>();
+      const set = new Set<number>();
       for (const line of r.stdout.split('\n')) {
-        const m = /^\s*\d+:\s+[0-9A-F]+:([0-9A-F]{4})\s+[0-9A-F]+:[0-9A-F]{4}\s+0A\s/.exec(line);
-        if (m) ports.add(parseInt(m[1], 16));
+        // local address 0.0.0.0 / :: / the container's own (not 127.0.0.1 only: the router could not reach it)
+        const m = /^\s*\d+:\s+([0-9A-F]+):([0-9A-F]{4})\s+[0-9A-F]+:[0-9A-F]{4}\s+0A\s/.exec(line);
+        if (m && !/^0100007F$|^0{24}01000000$/.test(m[1])) set.add(parseInt(m[2], 16));
       }
-      port = [...ports].sort((a, b) => a - b)[0] ?? null;
+      ports = [...set].sort((a, b) => a - b);
     } catch {
-      port = null;
+      ports = [];
     }
-    this.listening.set(containerId, port ?? 0);
-    return port;
+    if (ports.length) this.listening.set(containerId, ports);
+    return ports;
   }
 
   forget(containerId: string): void {

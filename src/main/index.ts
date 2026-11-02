@@ -1,4 +1,7 @@
 import { app, dialog, ipcMain, shell } from 'electron';
+import { execFile, spawn } from 'node:child_process';
+import { binDir } from './paths';
+import { isWin } from './platform';
 import { createWriteStream, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { basename, join } from 'node:path';
 import { pipeline } from 'node:stream/promises';
@@ -6,7 +9,7 @@ import type { Duplex } from 'node:stream';
 import { API_METHODS, type DcContainer, type DoCatzApi, type SiblingApp } from '@shared/types';
 import { AskAi } from './ai';
 import { buildDetail, buildLogs, listBuilds, removeBuild } from './builds';
-import { envCreate, envRead, envRemove, envSetLocked, envState, envWrite } from './envs';
+import { composeEnvironmentKeys, envCreate, envRead, envRemove, envSetLocked, envState, envWrite, expectedEnv } from './envs';
 import { writeBridge } from './bridge';
 import { removeContext, setPath as setCliPath } from './cli';
 import { findCatzoidApp, openCatzoidApp, platformId } from './companion';
@@ -244,6 +247,18 @@ function api(): DoCatzApi {
       else if (/^https?:\/\//i.test(url)) await shell.openExternal(url);
     },
     reveal: async (path) => shell.showItemInFolder(path),
+    runInTerminal: async (command) => {
+      if (typeof command !== 'string' || command.length > 2000 || /[\u0000-\u0008\n\r]/.test(command)) throw new Error('Not a command DoCatz runs');
+      // DoCatz's own docker first on PATH and the docatz context, so a command never lands on another engine.
+      if (isWin) {
+        const ps = `$env:DOCKER_CONTEXT='docatz'; $env:Path='${binDir().replace(/'/g, "''")};' + $env:Path; ${command}`;
+        spawn('cmd.exe', ['/c', 'start', 'powershell.exe', '-NoExit', '-Command', ps], { detached: true, stdio: 'ignore', windowsHide: false }).unref();
+        return;
+      }
+      const sh = `export PATH="${binDir()}:$PATH" DOCKER_CONTEXT=docatz; ${command}`;
+      const as = sh.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+      await new Promise<void>((resolve, reject) => execFile('/usr/bin/osascript', ['-e', `tell application "Terminal" to do script "${as}"`, '-e', 'tell application "Terminal" to activate'], (e) => (e ? reject(new Error('Terminal did not open')) : resolve())));
+    },
     openSibling: async (which, link) => {
       const info = siblingInfo[which];
       if (!info || !link.startsWith(`${info[1]}://`)) throw new Error('Unknown app or link');
@@ -355,6 +370,22 @@ function api(): DoCatzApi {
       return envState(project, null);
     },
     envRemove: async (project) => envRemove(project),
+    envDrift: async (project) => {
+      const want = expectedEnv(project);
+      if (!Object.keys(want).length) return [];
+      const list = (await ops.listContainers(domains.urlFor)).filter((c) => c.project === project && c.state === 'running');
+      const files = (await projects().catch(() => [])).find((p) => p.name === project)?.files ?? [];
+      const fixed = await composeEnvironmentKeys(files, project).catch(() => ({}) as Record<string, Set<string>>);
+      const out: { container: string; service: string; keys: string[] }[] = [];
+      for (const c of list) {
+        const have = await ops.containerEnv(c.id).catch(() => null);
+        if (!have) continue;
+        // A key the compose file sets under environment: is the compose file's to decide, not drift.
+        const keys = Object.keys(want).filter((k) => have[k] !== want[k] && !fixed[c.service ?? '']?.has(k));
+        if (keys.length) out.push({ container: c.name, service: c.service ?? c.name, keys });
+      }
+      return out;
+    },
     setDomainName: async (key, name) => domains.setName(key, name),
 
     builds: () => needEngine(() => listBuilds()),

@@ -531,6 +531,8 @@ export interface DoCatzApi {
   reveal(path: string): Promise<void>;
   /** Opens a sibling Catzoid app at a link (devcatz://…, dbcatz://…); false when it is not installed. */
   openSibling(app: SiblingApp, link: string): Promise<boolean>;
+  /** Opens a terminal (Terminal on macOS, PowerShell on Windows) running `command` against DoCatz (Commands page). */
+  runInTerminal(command: string): Promise<void>;
 
   // engine
   engineState(): Promise<EngineState>;
@@ -602,6 +604,8 @@ export interface DoCatzApi {
   envCreate(project: string, dir: string | null, from: 'env' | 'example' | 'empty'): Promise<DcProjectEnv>;
   envLock(project: string, on: boolean): Promise<DcProjectEnv>;
   envRemove(project: string): Promise<void>;
+  /** Per running container of the project, the DoCatz .env keys whose value inside differs (names only, never values). */
+  envDrift(project: string): Promise<{ container: string; service: string; keys: string[] }[]>;
   /** The name in front of `.docatz.<tld>` for a container (compose: per service); null = the default name. */
   setDomainName(key: string, name: string | null): Promise<void>;
 
@@ -629,11 +633,11 @@ export interface DoCatzApi {
 
 /** Every method of the bridge, registered as `docatz:<name>` IPC handlers. */
 export const API_METHODS: (keyof DoCatzApi)[] = [
-  'appInfo', 'aboutInfo', 'updateState', 'updateCheck', 'updateDownload', 'updateCancel', 'updateSkip', 'updateInstall', 'updateConfigure', 'reportPreview', 'reportSend', 'captureWindow', 'reportError', 'reportSettings', 'reportConfigure', 'uninstallPlan', 'uninstallRun', 'settings', 'setSettings', 'setAiKey', 'aiModels', 'aiProbe', 'aiTest', 'aiCancel', 'aiAsk', 'aiPreviewAsk', 'aiExplainLog', 'aiPreviewLog', 'aiFile', 'aiPreviewFile', 'openUrl', 'reveal', 'openSibling',
+  'appInfo', 'aboutInfo', 'updateState', 'updateCheck', 'updateDownload', 'updateCancel', 'updateSkip', 'updateInstall', 'updateConfigure', 'reportPreview', 'reportSend', 'captureWindow', 'reportError', 'reportSettings', 'reportConfigure', 'uninstallPlan', 'uninstallRun', 'settings', 'setSettings', 'setAiKey', 'aiModels', 'aiProbe', 'aiTest', 'aiCancel', 'aiAsk', 'aiPreviewAsk', 'aiExplainLog', 'aiPreviewLog', 'aiFile', 'aiPreviewFile', 'openUrl', 'reveal', 'openSibling', 'runInTerminal',
   'engineState', 'engineStart', 'engineStop', 'engineRestart', 'engineReset', 'engineConfigure', 'engineCancel', 'engineLog', 'contextSet', 'cliInstall', 'cliPath', 'diskUsage',
   'containers', 'container', 'containerEnv', 'containerAction', 'containerRemove', 'stats', 'logsFollow', 'logsStop', 'termOpen', 'termInput', 'termResize', 'termClose', 'files', 'fileSave', 'projects', 'composePick', 'composeRun', 'composeProject', 'runCancel', 'readText', 'writeText',
   'images', 'imageRemove', 'imagePull', 'volumes', 'volumeRemove', 'networks', 'networkRemove', 'prunePreview', 'prune',
-  'envState', 'envRead', 'envWrite', 'envCreate', 'envLock', 'envRemove', 'setDomainName',
+  'envState', 'envRead', 'envWrite', 'envCreate', 'envLock', 'envRemove', 'envDrift', 'setDomainName',
   'builds', 'build', 'buildLogs', 'buildRemove',
   'domains', 'setDomains', 'caTrust', 'cleanUrls', 'resolver',
   'appMenu', 'menuShortcuts', 'menuKey',

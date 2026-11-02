@@ -33,7 +33,7 @@ export async function attempt<T>(fn: () => Promise<T>, success?: string): Promis
 
 // ---------------------------------------------------------------- where the user is
 
-export type Section = 'containers' | 'images' | 'volumes' | 'networks' | 'builds' | 'engine' | 'settings';
+export type Section = 'containers' | 'images' | 'volumes' | 'networks' | 'builds' | 'engine' | 'monitoring' | 'commands' | 'settings';
 export const section = ref<Section>('containers');
 /** The open container (by name) in Containers, and its tab. */
 export const openContainer = ref<string | null>(null);
@@ -70,6 +70,25 @@ export function recordStats(list: DcStats[]): void {
   const next = { ...statsHistory.value };
   for (const s of list) next[s.id] = [...(next[s.id] ?? []), { t, cpu: s.cpu, mem: s.memUsed, rx: s.netRx, tx: s.netTx }].slice(-HISTORY_SAMPLES);
   statsHistory.value = next;
+}
+
+/** The latest stats of every running container (polled every 5 s while the engine runs and the window is visible). */
+export const liveStats = ref<Record<string, DcStats>>({});
+let statsTimer: ReturnType<typeof setInterval> | null = null;
+async function pollStats(): Promise<void> {
+  const ids = containers.value.filter((c) => c.state === 'running').map((c) => c.id);
+  if (!engineUp.value || !ids.length || document.hidden) {
+    if (!ids.length) liveStats.value = {};
+    return;
+  }
+  const list = await api.stats(ids).catch(() => [] as DcStats[]);
+  liveStats.value = Object.fromEntries(list.map((s) => [s.id, s]));
+  recordStats(list);
+}
+export function startStatsPolling(): void {
+  if (statsTimer) return;
+  void pollStats();
+  statsTimer = setInterval(() => void pollStats(), 5000);
 }
 
 export async function refreshContainers(): Promise<void> {

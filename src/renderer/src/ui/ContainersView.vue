@@ -2,7 +2,7 @@
 import { keyLabel } from '@shared/platform';
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import type { DcComposeAction, DcContainer, DcStats } from '@shared/types';
-import { api, attempt, bytes, composeFile, composeOpen, containers, engineUp, findFocus, findText, openContainer, openProject, recordStats, PROJECT_ICON, projectTab, runs, token, type ProjectTab } from '../store';
+import { api, attempt, bytes, composeFile, composeOpen, containers, engineUp, findFocus, findText, liveStats, openContainer, openProject, PROJECT_ICON, projectTab, runs, token, type ProjectTab } from '../store';
 import ContainerDetail from './ContainerDetail.vue';
 import EngineGate from './EngineGate.vue';
 import RunPanel from './RunPanel.vue';
@@ -39,21 +39,8 @@ const toggle = (p: string) => {
 const runningCount = computed(() => containers.value.filter((c) => c.state === 'running').length);
 const current = computed(() => containers.value.find((c) => c.name === openContainer.value) ?? null);
 
-// ---- live CPU / memory of running containers (every 5 s while this view is open)
-const stats = ref<Record<string, DcStats>>({});
-let timer: ReturnType<typeof setInterval> | null = null;
-async function pollStats() {
-  const ids = containers.value.filter((c) => c.state === 'running').map((c) => c.id);
-  if (!ids.length || document.hidden) return;
-  const list = await api.stats(ids).catch(() => [] as DcStats[]);
-  stats.value = Object.fromEntries(list.map((s) => [s.id, s]));
-  recordStats(list);
-}
-onMounted(() => {
-  void pollStats();
-  timer = setInterval(() => void pollStats(), 5000);
-});
-onBeforeUnmount(() => timer && clearInterval(timer));
+// ---- live CPU / memory: the shared poll (store.ts)
+const stats = liveStats;
 
 // ---- actions
 const busy = ref<Record<string, string>>({});
@@ -129,7 +116,7 @@ function openCompose() {
             <button class="btn btn-ghost btn-xs btn-square shrink-0" :title="collapsed.has(project) ? 'Show its services' : 'Hide its services'" @click="toggle(project)">
               <svg viewBox="0 0 20 20" class="size-3 opacity-50 transition-transform" :class="{ '-rotate-90': collapsed.has(project) }" fill="currentColor"><path d="M5.5 7.5 10 12l4.5-4.5h-9Z" /></svg>
             </button>
-            <div v-if="project" class="flex shrink-0 items-center opacity-0 transition-opacity group-hover:opacity-100">
+            <div v-if="project" class="hidden shrink-0 items-center group-hover:flex">
               <button class="btn btn-ghost btn-xs btn-square" title=".env in DoCatz: the values its containers get" @click="showProject(project, 'env')"><svg viewBox="0 0 20 20" class="size-3.5" fill="currentColor"><path fill-rule="evenodd" d="M8 7a5 5 0 1 1 3.61 4.804l-1.903 1.903A1 1 0 0 1 9 14H8v1a1 1 0 0 1-1 1H6v1a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1v-2a1 1 0 0 1 .293-.707L8.196 8.39A5.002 5.002 0 0 1 8 7Zm5-3a.75.75 0 0 0 0 1.5A1.5 1.5 0 0 1 14.5 7 .75.75 0 0 0 16 7a3 3 0 0 0-3-3Z" clip-rule="evenodd" /></svg></button>
               <button class="btn btn-ghost btn-xs btn-square" title="docker compose up (recreates what changed)" @click="compose(project, 'up')"><svg viewBox="0 0 20 20" class="size-3.5" fill="currentColor"><path d="M6.3 4.2A1 1 0 0 0 5 5.1v9.8a1 1 0 0 0 1.5.86l8.2-4.9a1 1 0 0 0 0-1.72l-8.2-4.9a1 1 0 0 0-.2-.04Z" /></svg></button>
               <button class="btn btn-ghost btn-xs btn-square" title="docker compose restart" @click="compose(project, 'restart')"><svg viewBox="0 0 20 20" class="size-3.5" fill="currentColor"><path fill-rule="evenodd" d="M15.3 7.3A6 6 0 1 0 16 11a1 1 0 1 1 2 0 8 8 0 1 1-2.3-5.6V4a1 1 0 1 1 2 0v4a1 1 0 0 1-1 1h-4a1 1 0 1 1 0-2h2.6Z" clip-rule="evenodd" /></svg></button>

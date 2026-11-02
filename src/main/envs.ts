@@ -128,6 +128,43 @@ export function envCreate(project: string, dir: string | null, from: 'env' | 'ex
   return envState(project, dir);
 }
 
+/**
+ * The values each container should have from DoCatz's .env (loopback hosts pointed as on a run) — compared by the
+ * window with what the containers really have, to say which keys are not applied yet.
+ */
+export function expectedEnv(project: string): Record<string, string> {
+  let file: string;
+  try {
+    file = envFile(project);
+  } catch {
+    return {};
+  }
+  if (!existsSync(file)) return {};
+  const vars = parse(readFileSync(file, 'utf8'));
+  // ${VAR} / $VAR inside values, as compose fills them in when it reads an env_file.
+  const fill = (v: string) => v.replace(/\$\{([A-Za-z_][A-Za-z0-9_]*)(?::?-([^}]*))?\}|\$([A-Za-z_][A-Za-z0-9_]*)/g, (_m, a, def, b) => vars.get(a ?? b) ?? def ?? '');
+  const out: Record<string, string> = {};
+  for (const [k, v] of vars) {
+    const filled = fill(v);
+    out[k] = containerValue(k, filled) ?? filled;
+  }
+  return out;
+}
+
+/** Keys each service sets under `environment:` in its compose file — those win over any env_file, by design. */
+export async function composeEnvironmentKeys(files: string[], project: string): Promise<Record<string, Set<string>>> {
+  if (!files.length) return {};
+  const r = await run(composeBin(), [...files.flatMap((f) => ['-f', f]), '-p', project, 'config', '--format', 'json', '--no-interpolate'], { cwd: dirname(files[0]), env: { ...process.env, DOCKER_HOST: dockerHost() }, timeout: 30_000 });
+  if (r.code !== 0) return {};
+  const cfg = JSON.parse(r.stdout) as { services?: Record<string, { environment?: Record<string, unknown> | string[] }> };
+  const out: Record<string, Set<string>> = {};
+  for (const [name, svc] of Object.entries(cfg.services ?? {})) {
+    const env = svc.environment ?? {};
+    out[name] = new Set(Array.isArray(env) ? env.map((e) => e.split('=')[0]) : Object.keys(env));
+  }
+  return out;
+}
+
 export function envSetLocked(project: string, on: boolean): void {
   store.setExtra(LOCK_KEY, { ...(store.extra<Record<string, boolean>>(LOCK_KEY) ?? {}), [safe(project)]: on });
 }

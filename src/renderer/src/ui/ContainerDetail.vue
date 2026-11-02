@@ -88,16 +88,21 @@ const memPct = computed(() => (props.stats && props.stats.memLimit ? (props.stat
     <header class="drag win-top flex h-14 shrink-0 items-end gap-3 border-b border-base-300/60 px-4 pb-2">
       <div class="no-drag"><DcNavButtons /></div>
       <ServiceMark :container="c" size="lg" class="mb-0.5" />
-      <div class="min-w-0 flex-1 pb-0.5">
-        <div class="flex items-center gap-2">
-          <h1 class="truncate text-base font-semibold tracking-tight">{{ c.name }}</h1>
-          <span class="badge badge-sm" :class="running ? 'badge-success badge-soft' : 'badge-ghost'">{{ c.state }}</span>
-          <span v-if="c.health" class="badge badge-sm badge-soft" :class="c.health === 'healthy' ? 'badge-success' : c.health === 'unhealthy' ? 'badge-error' : 'badge-warning'">{{ c.health }}</span>
+      <div class="min-w-[10rem] flex-1 pb-0.5">
+        <div class="flex min-w-0 items-center gap-2">
+          <h1 class="min-w-0 truncate text-base font-semibold tracking-tight" :title="c.name">{{ c.name }}</h1>
+          <span class="badge badge-sm shrink-0" :class="running ? 'badge-success badge-soft' : 'badge-ghost'">{{ c.state }}</span>
+          <span v-if="c.health" class="badge badge-sm badge-soft shrink-0" :class="c.health === 'healthy' ? 'badge-success' : c.health === 'unhealthy' ? 'badge-error' : 'badge-warning'">{{ c.health }}</span>
         </div>
-        <p class="truncate text-xs opacity-55">{{ c.image }} · {{ c.status }}</p>
+        <p class="flex min-w-0 items-center gap-1.5 text-xs">
+          <span class="truncate opacity-55">{{ c.image }} · {{ c.status }}</span>
+          <template v-if="c.url && running">
+            <span class="shrink-0 opacity-30">·</span>
+            <a class="no-drag link link-hover min-w-0 truncate font-mono text-primary" :title="`Open ${c.url}`" @click="api.openUrl(c.url)">{{ c.url.replace(/^https?:\/\//, '') }}</a>
+          </template>
+        </p>
       </div>
       <div class="no-drag flex shrink-0 items-center gap-1">
-        <button v-if="c.url && running" class="url-chip" :title="`Open ${c.url}`" @click="api.openUrl(c.url)">{{ c.url.replace(/^https?:\/\//, '') }}</button>
         <span v-if="busy" class="loading loading-spinner loading-sm mx-2" />
         <template v-else>
           <button v-if="running" class="btn btn-sm" @click="act('stop')">Stop</button>

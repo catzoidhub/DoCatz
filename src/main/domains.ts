@@ -41,7 +41,9 @@ const HTTPS_KEY = 'domainsHttps';
 const NAMES_KEY = 'domainNames';
 const DEVCATZ_DATA = isWin ? join(process.env.APPDATA ?? join(homedir(), 'AppData', 'Roaming'), 'DevCatz') : join(homedir(), 'Library', 'Application Support', 'DevCatz');
 /** Private ports that usually serve the app (picked first when a container publishes several). */
-const WEB_PORTS = [80, 8080, 3000, 8000, 5173, 5000, 4200, 8888, 4000, 9000, 443, 8443];
+const WEB_PORTS = [80, 8080, 3000, 8000, 5173, 4321, 5000, 4200, 8888, 4000, 9000, 443, 8443];
+/** Ports that are never the app (Caddy / FrankenPHP's admin API, metrics, debuggers). */
+const ADMIN_PORTS = [2019, 9003, 9229];
 /** DoCatz's proxy marks its answers, so a probe through :443 can tell whether it reaches DoCatz. */
 const MARK = 'x-docatz';
 
@@ -255,8 +257,11 @@ export class Domains {
       const published = c.ports.filter((p) => p.type === 'tcp' && p.public);
       const fallback = (published.find((p) => WEB_PORTS.includes(p.private)) ?? published[0])?.public ?? null;
       if (c.ip) {
+        // What it really listens on wins over what the image declares (an Octane app EXPOSEs 8080 but serves on 8000).
         const exposed = c.ports.filter((p) => p.type === 'tcp').map((p) => p.private);
-        const port = exposed.find((p) => WEB_PORTS.includes(p)) ?? exposed[0] ?? (await this.router.listeningPort(c.id)) ?? 80;
+        const listening = (await this.router.listeningPorts(c.id)).filter((p) => !ADMIN_PORTS.includes(p));
+        const web = (list: number[]) => WEB_PORTS.find((w) => list.includes(w));
+        const port = web(listening.filter((p) => exposed.includes(p))) ?? web(listening) ?? listening.find((p) => exposed.includes(p)) ?? listening[0] ?? web(exposed) ?? exposed[0] ?? 80;
         targets.push({ host, ip: c.ip, port });
         next.set(host, { router: true, port });
       } else if (fallback) next.set(host, { router: false, port: fallback });

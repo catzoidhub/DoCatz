@@ -35,7 +35,10 @@ async function load() {
   content.value = saved.value = r.content;
   mtime.value = r.mtime;
 }
-onMounted(load);
+onMounted(async () => {
+  await load();
+  void checkDrift();
+});
 watch(() => props.project, load);
 
 async function create(from: 'env' | 'example' | 'empty') {
@@ -100,11 +103,14 @@ async function recreate() {
   runToken.value = token();
   await attempt(() => api.composeProject(props.project, 'build-up', runToken.value!));
 }
-/** The .env changed after a container of the project was created: those containers still have the old values. */
-const stale = computed(() => {
-  if (!mtime.value) return [] as string[];
-  return containers.value.filter((c) => c.project === props.project && c.created < mtime.value! - 1000).map((c) => c.service ?? c.name);
-});
+/** Running containers whose environment differs from this .env (key names only): asked again after saves and runs. */
+const drift = ref<{ container: string; service: string; keys: string[] }[]>([]);
+async function checkDrift() {
+  drift.value = state.value?.exists ? await api.envDrift(props.project).catch(() => []) : [];
+}
+watch([saved, () => run.value?.done, () => containers.value.filter((c) => c.project === props.project).map((c) => c.id).join()], () => void checkDrift());
+const stale = computed(() => drift.value.map((d) => d.service));
+const driftKeys = computed(() => [...new Set(drift.value.flatMap((d) => d.keys))]);
 </script>
 
 <template>
@@ -129,6 +135,12 @@ const stale = computed(() => {
     </header>
 
     <div class="flex min-h-0 flex-1 flex-col gap-3 p-5">
+      <!-- Saved but not applied: the containers keep the environment they were created with -->
+      <div v-if="state?.exists && stale.length && !(run && !run.done)" role="alert" class="alert alert-warning alert-soft text-sm">
+        <CatMood mood="warning" class="-my-1 size-8 shrink-0" />
+        <span class="min-w-0">{{ stale.join(', ') }} {{ stale.length === 1 ? 'does' : 'do' }} not have these values yet ({{ driftKeys.slice(0, 6).join(', ') }}{{ driftKeys.length > 6 ? ` +${driftKeys.length - 6}` : '' }}). Run <b>Build &amp; Up</b> to recreate {{ stale.length === 1 ? 'it' : 'them' }}. (Keys the compose file sets under <code>environment:</code> always win over any .env and are left out here.)</span>
+        <button class="btn btn-warning btn-sm shrink-0" @click="recreate">Build &amp; Up</button>
+      </div>
       <div v-if="!state" class="grid h-40 place-items-center"><span class="loading loading-spinner" /></div>
       <!-- Not created yet -->
       <div v-else-if="!state.exists" class="rounded-box border border-dashed border-base-300 p-6 text-center">
@@ -139,12 +151,6 @@ const stale = computed(() => {
           <button v-if="state.example" class="btn btn-sm" :class="{ 'btn-primary': !state.projectEnv }" @click="create('example')">Start from {{ state.example }}</button>
           <button class="btn btn-sm" :class="{ 'btn-primary': !state.projectEnv && !state.example }" @click="create('empty')">Start empty</button>
         </div>
-      </div>
-      <!-- Saved but not applied: the containers keep the environment they were created with -->
-      <div v-if="state?.exists && stale.length && !(run && !run.done)" role="alert" class="alert alert-warning alert-soft text-sm">
-        <CatMood mood="warning" class="-my-1 size-8 shrink-0" />
-        <span class="min-w-0">This .env changed after {{ stale.join(', ') }} {{ stale.length === 1 ? 'was' : 'were' }} created, so {{ stale.length === 1 ? 'it still has' : 'they still have' }} the old values. Run <b>Build &amp; Up</b> to recreate {{ stale.length === 1 ? 'it' : 'them' }} with these.</span>
-        <button class="btn btn-warning btn-sm shrink-0" @click="recreate">Build &amp; Up</button>
       </div>
       <!-- Locked: masked, read-only -->
       <CodeEditor v-else-if="locked" :model-value="maskedText" language="env" readonly fill />

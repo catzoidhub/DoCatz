@@ -55,22 +55,25 @@ const PHP: [string, DcFrameworkName][] = [
 
 /** The framework of the app in `dir` (null: none recognised). */
 export function detectFramework(dir: string): DcFramework | null {
+  // PHP first: a Laravel (or Symfony …) app has a package.json too, for its Vite assets — DevCatz calls it Laravel,
+  // with Vite only serving assets behind it.
+  const composer = readJson<{ require?: Record<string, string> }>(join(dir, 'composer.json'));
+  if (existsSync(join(dir, 'wp-includes')) || existsSync(join(dir, 'wp-config.php'))) return { framework: 'wordpress', library: null };
+  if (existsSync(join(dir, 'artisan')) && composer) return { framework: 'laravel', library: null };
+  const php = composer ? PHP.find(([n]) => n in (composer.require ?? {}))?.[1] : undefined;
+  if (php) return { framework: php, library: null };
   const pkg = readJson<{ dependencies?: Record<string, string>; devDependencies?: Record<string, string> }>(join(dir, 'package.json'));
   if (pkg) {
     const deps = { ...(pkg.dependencies ?? {}), ...(pkg.devDependencies ?? {}) };
     const has = (n: string) => n in deps;
     const fw: DcFrameworkName = has('nuxt') ? 'nuxt' : has('next') ? 'next' : has('@angular/core') ? 'angular' : has('@nestjs/core') ? 'nestjs' : has('astro') ? 'astro' : has('@sveltejs/kit') ? 'sveltekit'
       : has('@tanstack/react-start') || has('@tanstack/start') ? 'tanstack-start' : has('vite') && has('vue') ? 'vite-vue' : has('vite') && has('react') ? 'vite-react' : has('vite') && has('svelte') ? 'vite-svelte' : has('vite') ? 'vite' : has('express') ? 'express' : 'node';
+    // A PHP app whose package.json only builds assets (Vite, no app framework of its own) is still a PHP app.
+    if (composer && ['vite', 'node', 'vite-vue', 'vite-react', 'vite-svelte'].includes(fw)) return { framework: 'php', library: null };
     const library = has('electron') ? 'electron' : has('fastify') ? 'fastify' : has('hono') ? 'hono' : has('koa') ? 'koa' : fw === 'express' ? 'express' : null;
     return { framework: fw, library };
   }
-  const composer = readJson<{ require?: Record<string, string> }>(join(dir, 'composer.json'));
-  if (composer || existsSync(join(dir, 'wp-config.php')) || existsSync(join(dir, 'wp-includes'))) {
-    if (existsSync(join(dir, 'wp-includes')) || existsSync(join(dir, 'wp-config.php'))) return { framework: 'wordpress', library: null };
-    const req = composer?.require ?? {};
-    const hit = PHP.find(([n]) => n in req);
-    return { framework: hit?.[1] ?? 'php', library: null };
-  }
+  if (composer) return { framework: 'php', library: null };
   const gomod = readText(join(dir, 'go.mod'));
   if (gomod) return { framework: 'go', library: GO_LIBS.find(([re]) => re.test(gomod))?.[1] ?? null };
   const cargo = readText(join(dir, 'Cargo.toml'));

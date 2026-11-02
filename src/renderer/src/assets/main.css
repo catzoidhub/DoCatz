@@ -91,6 +91,8 @@
   --c-volumes: oklch(76% 0.15 78);
   --c-networks: oklch(70% 0.13 180);
   --c-builds: oklch(70% 0.16 330);
+  --c-monitoring: oklch(70% 0.15 150);
+  --c-commands: oklch(68% 0.12 205);
   --c-engine: oklch(62% 0.04 260);
   --c-settings: oklch(from var(--color-base-content) l c h / 0.9);
 }
