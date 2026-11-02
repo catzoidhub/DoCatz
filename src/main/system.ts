@@ -39,10 +39,10 @@ export async function runAsAdmin(script: string, prompt: string): Promise<AdminR
 }
 
 /** Windows: PowerShell as administrator (the UAC prompt); the script goes in base64 so no quoting reaches the shell. */
-export async function runAsAdminWin(script: string): Promise<AdminResult> {
+export async function runAsAdminWin(script: string, timeout = 300_000): Promise<AdminResult> {
   const inner = Buffer.from(`$ErrorActionPreference = 'Stop'\n${script}`, 'utf16le').toString('base64');
   const outer = `try { $p = Start-Process powershell.exe -Verb RunAs -Wait -PassThru -WindowStyle Hidden -ArgumentList '-NoProfile','-EncodedCommand','${inner}'; exit $p.ExitCode } catch { Write-Error $_.Exception.Message; exit 1223 }`;
-  const { code, stdout, stderr } = await run('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', outer], { timeout: 300_000 });
+  const { code, stdout, stderr } = await run('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', outer], { timeout });
   const message = (stderr || stdout).trim();
   return { ok: code === 0, message: code === 1223 || /cancel/i.test(message) ? '-128 Cancelled' : message || `exit ${code}` };
 }

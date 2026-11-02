@@ -18,6 +18,7 @@ import * as ops from './docker/ops';
 import { Domains } from './domains';
 import { Engine } from './engine';
 import { Reporter } from './reporter';
+import { run } from './proc';
 import { projects, Runs } from './runs';
 import { learnProject } from './frameworks';
 import { projectPrefs, setProjectPrefs } from './prefs';
@@ -288,6 +289,13 @@ function api(): DoCatzApi {
     },
     engineConfigure: (patch) => engine.configure(patch),
     engineCancel: async () => engine.cancel(),
+    engineSetupWsl: () => engine.setupWsl(),
+    restartComputer: async () => {
+      const r = await dialog.showMessageBox(win()!, { type: 'question', buttons: ['Restart Now', 'Later'], defaultId: 0, cancelId: 1, message: 'Restart Windows now?', detail: 'Save your work in other apps first. Windows finishes installing WSL while it restarts; open DoCatz again afterwards to start the engine.' });
+      if (r.response !== 0) return false;
+      await run('shutdown.exe', ['/r', '/t', '5', '/c', 'DoCatz: restarting to finish installing WSL'], { timeout: 15_000 });
+      return true;
+    },
     engineLog: () => engine.log(),
     contextSet: (use) => engine.setContext(use),
     cliInstall: () => engine.installCli(),

@@ -7,6 +7,7 @@ import CatMood from './CatMood.vue';
 import DcNavButtons from './DcNavButtons.vue';
 import PruneDialog from './PruneDialog.vue';
 import TaskSteps from './TaskSteps.vue';
+import WslSetup from './WslSetup.vue';
 
 /**
  * Engine (DoCatz TODO #5 / #6 / #7): the VM's state and Start / Stop / Restart, its CPUs, memory, disk and Rosetta,
@@ -16,6 +17,7 @@ const s = computed(() => engine.value);
 const c = computed(() => s.value?.config);
 const isMac = computed(() => s.value?.backend === 'lima');
 const busy = ref('');
+const wslTask = computed(() => s.value?.task?.title === 'Installing WSL');
 async function run(name: string, fn: () => Promise<unknown>, done?: string) {
   busy.value = name;
   await attempt(fn, done);
@@ -63,6 +65,18 @@ const copy = (t: string) => {
     </header>
     <div v-if="s && c" class="min-h-0 flex-1 overflow-y-auto">
       <div class="mx-auto max-w-2xl space-y-4 px-6 py-6">
+        <!-- Windows: what the engine stands on — first, as the engine starts only once both are on -->
+        <div v-if="s.backend === 'wsl'" class="card" :class="s.needs && 'ring-1 ring-primary/40'">
+          <div class="card-body gap-3">
+            <h2>{{ s.needs ? 'First · Windows Subsystem for Linux' : 'Windows Subsystem for Linux' }}</h2>
+            <p v-if="s.needs" class="text-sm opacity-70">The engine runs in WSL 2, Windows’ own Linux, which needs virtualisation on in the PC. It can start once both are on:</p>
+            <WslSetup />
+            <p v-if="s.prereqs?.wsl" class="text-xs opacity-60">
+              DoCatz’s Linux is its own WSL distro, <span class="font-mono">docatz</span>, kept in {{ s.vm?.dir || '%USERPROFILE%\\.docatz\\vm\\wsl' }}.
+            </p>
+          </div>
+        </div>
+
         <!-- state -->
         <div class="card">
           <div class="card-body gap-3">
@@ -77,11 +91,13 @@ const copy = (t: string) => {
                 <button class="btn btn-sm" :disabled="!!busy" @click="run('stop', () => api.engineStop())"><span v-if="busy === 'stop'" class="loading loading-spinner loading-xs" />Stop</button>
               </template>
               <button v-else-if="!['unsupported', 'starting', 'stopping'].includes(s.status) && !s.task" class="btn btn-primary btn-sm" @click="run('start', () => api.engineStart())">{{ s.status === 'missing' ? 'Set up and start' : 'Start' }}</button>
-              <button v-else-if="s.task && !s.task.error" class="btn btn-ghost btn-sm" @click="api.engineCancel()">Cancel</button>
+              <button v-else-if="s.task && !s.task.error && !wslTask" class="btn btn-ghost btn-sm" @click="api.engineCancel()">Cancel</button>
             </div>
-            <p v-if="s.message && s.status !== 'running'" class="text-sm opacity-70">{{ s.message }}</p>
-            <TaskSteps v-if="s.task" :task="s.task" />
-            <div v-if="s.task?.error" role="alert" class="alert alert-error alert-soft text-sm">
+            <!-- WSL's own install shows in the card above -->
+            <p v-if="s.needs" class="text-sm opacity-70">The engine starts once WSL is ready (above).</p>
+            <p v-else-if="s.message && s.status !== 'running'" class="text-sm opacity-70">{{ s.message }}</p>
+            <TaskSteps v-if="s.task && !wslTask" :task="s.task" />
+            <div v-if="s.task?.error && !wslTask" role="alert" class="alert alert-error alert-soft text-sm">
               <CatMood mood="error" class="-my-1 size-8 shrink-0" />
               <span class="selectable">{{ s.task.error }}</span>
               <button class="btn btn-ghost btn-xs" @click="showLog">Engine log</button>

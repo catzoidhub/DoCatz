@@ -38,6 +38,10 @@ const start = () => attempt(() => api.engineStart());
       </div>
       <TaskSteps v-if="s?.task && !s.task.error" :task="s.task" class="text-left" />
       <div v-if="s?.task && !s.task.error" class="flex justify-center"><button class="btn btn-ghost btn-sm" @click="api.engineCancel()">Cancel</button></div>
+      <div v-else-if="s?.needs" class="flex justify-center gap-2">
+        <button v-if="s.needs === 'install-wsl'" class="btn btn-primary btn-sm" @click="attempt(() => api.engineSetupWsl())">{{ s.task?.error ? 'Try again' : 'Install WSL' }}</button>
+        <button v-else class="btn btn-primary btn-sm" @click="attempt(() => api.restartComputer())">Restart Windows</button>
+      </div>
       <div v-else-if="s && !['unsupported', 'starting', 'stopping'].includes(s.status)" class="flex justify-center gap-2">
         <button class="btn btn-primary btn-sm" @click="start">{{ s.status === 'missing' ? 'Set up and start' : s.task?.error ? 'Try again' : 'Start engine' }}</button>
         <button class="btn btn-ghost btn-sm" @click="section = 'engine'">Engine settings</button>

@@ -130,11 +130,23 @@ export interface EngineConfig {
   /** Start the engine when DoCatz starts. */
   autoStart: boolean;
 }
+export interface EnginePrereqs {
+  /** SVM / VT-x on in the BIOS / UEFI; null when Windows does not say. */
+  virtualization: boolean | null;
+  /** WSL is on this PC (it may still wait for Virtual Machine Platform or a restart). */
+  wslInstalled: boolean;
+  /** WSL 2 can run the engine. */
+  wsl: boolean;
+}
 export interface EngineState {
   backend: EngineBackendId;
   status: EngineStatus;
   /** A plain-words line for the status (an error, why it is unsupported). */
   message: string;
+  /** Windows: what WSL needs before the engine can run — installing it (one administrator prompt), then a restart. */
+  needs: 'install-wsl' | 'restart' | null;
+  /** Windows: virtualisation and WSL 2, each found on or not (null on a Mac). */
+  prereqs: EnginePrereqs | null;
   config: EngineConfig;
   /** Changes that need a restart of the engine (cpus, memory, Rosetta) or a new VM (disk). */
   pending: string[];
@@ -553,6 +565,10 @@ export interface DoCatzApi {
   engineReset(confirm: string): Promise<void>;
   engineConfigure(patch: Partial<EngineConfig>): Promise<EngineState>;
   engineCancel(): Promise<void>;
+  /** Windows: installs WSL (`wsl --install --no-distribution`, one administrator prompt); a restart finishes it. */
+  engineSetupWsl(): Promise<void>;
+  /** Asks, then restarts the computer (to finish installing WSL); false when the user chose Later. */
+  restartComputer(): Promise<boolean>;
   /** The VM manager's own log (setup / start problems). */
   engineLog(): Promise<string>;
   /** Makes the `docatz` docker context; `use` makes it the current one (false: back to `default`). */
@@ -647,7 +663,7 @@ export interface DoCatzApi {
 /** Every method of the bridge, registered as `docatz:<name>` IPC handlers. */
 export const API_METHODS: (keyof DoCatzApi)[] = [
   'appInfo', 'aboutInfo', 'updateState', 'updateCheck', 'updateDownload', 'updateCancel', 'updateSkip', 'updateInstall', 'updateConfigure', 'reportPreview', 'reportSend', 'captureWindow', 'reportError', 'reportSettings', 'reportConfigure', 'uninstallPlan', 'uninstallRun', 'settings', 'setSettings', 'setAiKey', 'aiModels', 'aiProbe', 'aiTest', 'aiCancel', 'aiAsk', 'aiPreviewAsk', 'aiExplainLog', 'aiPreviewLog', 'aiFile', 'aiPreviewFile', 'openUrl', 'reveal', 'openSibling', 'runInTerminal',
-  'engineState', 'engineStart', 'engineStop', 'engineRestart', 'engineReset', 'engineConfigure', 'engineCancel', 'engineLog', 'contextSet', 'cliInstall', 'cliPath', 'diskUsage',
+  'engineState', 'engineStart', 'engineStop', 'engineRestart', 'engineReset', 'engineConfigure', 'engineCancel', 'engineSetupWsl', 'restartComputer', 'engineLog', 'contextSet', 'cliInstall', 'cliPath', 'diskUsage',
   'containers', 'container', 'containerEnv', 'containerAction', 'containerRemove', 'stats', 'logsFollow', 'logsStop', 'termOpen', 'termInput', 'termResize', 'termClose', 'files', 'fileSave', 'projects', 'composePick', 'composeRun', 'composeProject', 'runCancel', 'readText', 'writeText',
   'images', 'imageRemove', 'imagePull', 'volumes', 'volumeRemove', 'networks', 'networkRemove', 'prunePreview', 'prune',
   'projectPrefs', 'setProjectPrefs',
