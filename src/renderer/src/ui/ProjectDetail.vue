@@ -21,7 +21,7 @@ import TimeChart, { type Series } from './TimeChart.vue';
  * before .docatz.<tld>), Containers (each service, opening its own page) and Monitoring (CPU and memory, live).
  */
 const props = defineProps<{ project: string; containers: DcContainer[]; stats: Record<string, DcStats> }>();
-/** A DevCatz gateway (devcatz-gw-<kind>, Windows): read-only here, DevCatz runs it. */
+/** A DevCatz service (devcatz-gw-<kind> or devcatz-svc-<kind>, Windows): read-only here, DevCatz runs it. */
 const gateway = computed(() => {
   const kind = gatewayKindOf(props.project);
   if (!kind) return null;
@@ -147,10 +147,10 @@ const rateText = (v: number) => `${bytes(v)}/s`;
           </button>
           <span class="badge badge-sm shrink-0 whitespace-nowrap @max-3xl:hidden" :class="running ? 'badge-success badge-soft' : 'badge-ghost'">{{ running }}/{{ containers.length }} running</span>
         </div>
-        <p class="truncate text-xs opacity-55">{{ gateway ? `DevCatz gateway${gateway.version ? ` ${gateway.version}` : ''} · read-only` : 'Compose project' }}<template v-if="dir"> · {{ dir }}</template></p>
+        <p class="truncate text-xs opacity-55">{{ gateway ? `DevCatz service${gateway.version ? ` ${gateway.version}` : ''} · read-only` : 'Compose project' }}<template v-if="dir"> · {{ dir }}</template></p>
       </div>
       <div v-if="gateway" class="no-drag flex shrink-0 items-center gap-1">
-        <button class="btn btn-sm btn-primary" title="DevCatz installs, starts and stops its gateways" @click="gatewayLink(gateway.kind)">Open in DevCatz</button>
+        <button class="btn btn-sm btn-primary" title="DevCatz installs, starts and stops its services" @click="gatewayLink(gateway.kind)">Open in DevCatz</button>
         <button class="btn btn-ghost btn-sm btn-square" title="Close" @click="openProject = null">✕</button>
       </div>
       <div v-else class="no-drag flex shrink-0 items-center gap-1">
@@ -227,7 +227,7 @@ const rateText = (v: number) => `${bytes(v)}/s`;
               </details>
             </div>
           </div>
-          <!-- a DevCatz gateway: read-only here, DevCatz installs, starts and stops it -->
+          <!-- a DevCatz service: read-only here, DevCatz installs, starts and stops it -->
           <div v-if="gateway" class="card">
             <div class="card-body gap-3">
               <div class="flex items-center gap-2">
@@ -235,7 +235,7 @@ const rateText = (v: number) => `${bytes(v)}/s`;
                 <h2>Managed by DevCatz</h2>
               </div>
               <p class="text-xs opacity-60">
-                {{ gateway.name }} is one of DevCatz’s gateways, running on DoCatz’s engine. It is read-only here: DevCatz installs, starts, stops and
+                {{ gateway.name }} is one of DevCatz’s services, running on DoCatz’s engine. It is read-only here: DevCatz installs, starts, stops and
                 updates it (it keeps the compose run attached), so do that in DevCatz.
               </p>
               <div class="flex flex-wrap gap-1.5">

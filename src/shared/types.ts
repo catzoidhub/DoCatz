@@ -553,6 +553,8 @@ export interface DcGateway {
   /** Its compose project, or (WAHA) its one container. */
   project: string | null;
   container: string | null;
+  /** Where DevCatz shows it: devcatz://gateways/<kind> or devcatz://services/<kind> (#62). */
+  link: string;
 }
 
 // ------------------------------------------------------------ API (preload bridge)

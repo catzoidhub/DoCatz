@@ -5,10 +5,13 @@ import type { DcGateway } from '@shared/types';
 import { isWin } from './platform';
 
 /**
- * DevCatz's gateways on DoCatz (Windows only; the DevCatz side is its Docker gateways page): DevCatz runs Postal, ntfy,
- * Gotify, Jasmin, Telegram Bot API and WAHA on DoCatz's engine — compose projects `devcatz-gw-<kind>`, WAHA the plain
- * container `devcatz-waha` — and lists every gateway, installed or not, in its bridge.json (no secrets). DoCatz shows
- * the Docker ones in their own group; their lifecycle stays DevCatz's (devcatz://gateways/<kind>?action=…), as DevCatz
+ * DevCatz Services on DoCatz (Windows only): what DevCatz runs on DoCatz's engine, in one read-only group.
+ * - Its gateways: Postal, ntfy, Gotify, Jasmin, Telegram Bot API and WAHA, as compose projects `devcatz-gw-<kind>`
+ *   (WAHA is the plain container `devcatz-waha`), listed in bridge.json's `gateways`.
+ * - Its servers with no Windows build (#62): Typesense, Sonic and Sockudo, as compose projects `devcatz-svc-<kind>`,
+ *   listed in bridge.json's `services` in the same shape.
+ * DevCatz lists every entry, installed or not, with no secrets. DoCatz shows the Docker ones. Their lifecycle stays
+ * DevCatz's (its `link`, devcatz://gateways/<kind> or devcatz://services/<kind>, `?install=1`, `?action=…`), as DevCatz
  * keeps `compose up` attached to them. DEVCATZ_BRIDGE points elsewhere, for tests.
  */
 
@@ -18,7 +21,7 @@ let cache: { mtime: number; list: DcGateway[] } | null = null;
 
 const str = (v: unknown, re: RegExp): string | null => (typeof v === 'string' && re.test(v) ? v : null);
 
-/** The Docker gateways DevCatz lists, checked field by field (another app writes the file); [] without it. */
+/** The Docker gateways and services DevCatz lists, checked field by field (another app writes the file); [] without it. */
 export function devcatzGateways(): DcGateway[] {
   if (!isWin) return [];
   let mtime: number;
@@ -35,10 +38,12 @@ export function devcatzGateways(): DcGateway[] {
     return cache?.list ?? [];
   }
   const list: DcGateway[] = [];
-  for (const g of ((raw as { gateways?: unknown[] })?.gateways ?? []) as Record<string, unknown>[]) {
+  const doc = raw as { gateways?: unknown[]; services?: unknown[] };
+  const entries = [...(doc?.gateways ?? []).map((g) => [g, 'gateways'] as const), ...(doc?.services ?? []).map((g) => [g, 'services'] as const)] as [Record<string, unknown>, 'gateways' | 'services'][];
+  for (const [g, from] of entries) {
     const kind = str(g?.kind, /^[a-z0-9-]{1,30}$/);
     if (!kind || g.docker !== true) continue;
-    const project = str(g.project, /^devcatz-gw-[a-z0-9-]{1,40}$/);
+    const project = str(g.project, /^devcatz-(gw|svc)-[a-z0-9-]{1,40}$/);
     const container = str(g.container, /^devcatz-[\w.-]{1,60}$/);
     if (!project && !container) continue;
     list.push({
@@ -51,6 +56,8 @@ export function devcatzGateways(): DcGateway[] {
       webUi: str(g.webUi, /^https?:\/\/[^\s"<>]{1,300}$/),
       project,
       container,
+      // DevCatz's own link for it; a missing or odd one falls back to the page it has for that list
+      link: str(g.link, /^devcatz:\/\/(gateways|services)\/[a-z0-9-]{1,30}(\?[\w=&-]{0,60})?$/) ?? `devcatz://${from}/${kind}`,
     });
   }
   cache = { mtime, list };

@@ -80,15 +80,15 @@ function openRoute(route: string) {
     if (running?.project) findText.value = running.project;
     composeFile.value = arg;
     composeOpen.value = !running;
-  } else if (head === 'gateways') {
-    // docatz://gateways?kind=<kind> (DevCatz's "Open in DoCatz"): the gateway in its group — its project or container
-    // when it runs here, else its row (Install) highlighted.
+  } else if (head === 'gateways' || head === 'services') {
+    // docatz://gateways?kind=<kind> / docatz://services?kind=<kind> (DevCatz's "Open in DoCatz"): the service in the
+    // DevCatz Services group — its project or container when it runs here, else its row (Install) highlighted.
     section.value = 'containers';
     findText.value = '';
     gatewayFocus.value = arg || null;
     void refreshGateways().then(() => {
       // Without DevCatz's list (an older DevCatz wrote bridge.json), the project's own name finds it.
-      const g = gateways.value.find((x) => x.kind === arg) ?? { project: `devcatz-gw-${arg}`, container: null };
+      const g = gateways.value.find((x) => x.kind === arg) ?? { project: `devcatz-${head === 'services' ? 'svc' : 'gw'}-${arg}`, container: null };
       const here = (n: string | null) => !!n && containers.value.some((c) => c.project === n || c.name === n);
       if (g.project && here(g.project)) openProject.value = g.project;
       else if (g.container && here(g.container)) openContainer.value = g.container;

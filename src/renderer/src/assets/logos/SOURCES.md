@@ -67,7 +67,7 @@ identify what a container runs:
 - Search, storage and realtime servers (meilisearch, typesense, opensearch, manticore, zincsearch, minio, rustfs,
   seaweedfs, nats, centrifugo, mercure) — copied from DevCatz (`src/renderer/src/assets/logos`, sources listed there).
 - DevCatz's gateways (jasmin, ntfy, gotify, postal, waha, telegram) — copied from DevCatz (`src/renderer/src/assets/logos`,
-  sources listed there), for their services in the DevCatz Gateways group.
+  sources listed there), for their services in the DevCatz Services group.
 - The rest are the projects' GitHub organisation avatars, https://github.com/<org>.png?size=96: nginx (nginx),
   node (nodejs), python (python), golang (golang), php (php), rabbitmq (rabbitmq), memcached (memcached), mailpit
   (axllent), traefik (traefik), caddy (caddyserver), httpd (apache), cassandra (apache), grafana (grafana),
@@ -140,3 +140,5 @@ Rust frameworks (Simple Icons 13.21.0 for Rust, Actix, Rocket, Tauri, Leptos, Be
 - seaorm.png — https://github.com/SeaQL.png (SeaQL, the organisation behind SeaORM)
 - sqlx.png — https://github.com/launchbadge.png (LaunchBadge, the company behind SQLx; SQLx has no logo of its own)
 - silo.svg — https://github.com/pgsty/silo/blob/main/.github/silo.svg (the SILO emblem from its repository)
+- sonic.png — https://valeriansaliou.github.io/sonic/images/banner.jpg (Sonic's mascot, cropped from the project banner; copied from DevCatz)
+- sockudo.png — https://github.com/sockudo.png (Sockudo's GitHub organisation avatar; copied from DevCatz)

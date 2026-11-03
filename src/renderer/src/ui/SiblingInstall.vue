@@ -18,7 +18,7 @@ const ABOUT: Record<SiblingApp, { name: string; logo: string; what: string }> = 
   devcatz: {
     name: 'DevCatz',
     logo: devcatzLogo,
-    what: 'DevCatz is the local development app that goes with DoCatz: your sites on their own domains with HTTPS, runtimes, databases — and the gateways (WhatsApp, SMS, email, push) it runs on DoCatz’s engine. It installs, starts and stops them.',
+    what: 'DevCatz is the local development app that goes with DoCatz: your sites on their own domains with HTTPS, runtimes, databases — and the services it runs on DoCatz’s engine (gateways for WhatsApp, SMS, email and push; Typesense, Sonic, Sockudo). It installs, starts and stops them.',
   },
   dbcatz: { name: 'DBCatz', logo: dbcatzLogo, what: 'DBCatz is the database client that goes with DoCatz: the databases in your containers, browsed, queried and backed up.' },
   dialcatz: {

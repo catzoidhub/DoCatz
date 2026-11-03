@@ -39,6 +39,7 @@ import { appMenuPopup, applyMenu, mainWindow, menuKey, menuShortcuts, openWindow
  *   docatz://container/<name>                            a container's page
  *   docatz://compose?path=<file>[&site=<DevCatz site>]   that compose project: its containers when it runs, and the
  *                                                        compose file ready to Up / rebuild (never run by the link)
+ *   docatz://gateways?kind=<k> / docatz://services?kind=<k>  (Windows) a DevCatz service in its group
  */
 
 const engine = new Engine();
@@ -157,12 +158,13 @@ function handleLink(raw: string): void {
       if (!/^[\w.-]{1,200}$/.test(name)) throw new Error('bad container name');
       return openWindow(`containers/${name}`);
     }
-    // DevCatz's "Open in DoCatz" for a gateway: docatz://gateways?kind=<kind> (its group in Containers; Windows only, as
-    // the group — elsewhere the link opens Containers).
-    if (u.hostname === 'gateways' && isWin) {
+    // DevCatz's "Open in DoCatz" for one of its services: docatz://gateways?kind=<kind> (a gateway) or
+    // docatz://services?kind=<kind> (Typesense, Sonic, Sockudo, #62) — the DevCatz Services group in Containers; Windows
+    // only, as the group — elsewhere the link opens Containers.
+    if ((u.hostname === 'gateways' || u.hostname === 'services') && isWin) {
       const kind = u.searchParams.get('kind') ?? u.pathname.replace(/^\//, '');
-      if (kind && !/^[a-z0-9-]{1,30}$/.test(kind)) throw new Error('bad gateway kind');
-      return openWindow(kind ? `gateways/${kind}` : 'gateways');
+      if (kind && !/^[a-z0-9-]{1,30}$/.test(kind)) throw new Error('bad service kind');
+      return openWindow(kind ? `${u.hostname}/${kind}` : u.hostname);
     }
     if (u.hostname === 'compose') {
       const path = u.searchParams.get('path') ?? '';

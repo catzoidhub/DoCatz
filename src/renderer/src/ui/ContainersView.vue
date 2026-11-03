@@ -80,7 +80,8 @@ const sections = computed<Section[]>(() => {
 const loose = computed(() => containers.value.filter((c) => !c.project && !gwContainers.value.has(c.name) && (!view.value.runningOnly || c.state === 'running') && matches(c)));
 const nothingShown = computed(() => !sections.value.some((s) => s.projects.length) && !loose.value.length && !gwRows.value.length);
 
-// ---- DevCatz Gateways (Windows), read-only: DevCatz runs its Docker gateways here and owns them — it installs, starts
+// ---- DevCatz Services (Windows), read-only: DevCatz runs its Docker gateways and its servers with no Windows build
+// (Typesense, Sonic, Sockudo, #62) here and owns them — it installs, starts
 // and stops them, keeping `compose up` attached; DoCatz lists them last with DevCatz's mark (installed or not) and opens them in DevCatz.
 const gwContainers = computed(() => new Set(gateways.value.map((g) => g.container).filter((n): n is string => !!n)));
 interface GwRow {
@@ -94,7 +95,7 @@ interface GwRow {
 }
 const gwRows = computed<GwRow[]>(() => {
   const rows: GwRow[] = gateways.value.map((g) => ({ kind: g.kind, name: g.name, version: g.version, webUi: g.webUi, project: g.project, list: g.project ? (byProject.value.get(g.project) ?? []) : containers.value.filter((c) => c.name === g.container) }));
-  // A devcatz-gw-* project DevCatz does not list (an older DevCatz, or bridge.json not written yet): still here.
+  // A devcatz-gw-* / devcatz-svc-* project DevCatz does not list (an older DevCatz, or bridge.json not written yet): still here.
   for (const [p, list] of byProject.value) {
     const kind = gatewayKindOf(p);
     if (kind && !rows.some((r) => r.project === p)) rows.push({ kind, name: kind, version: null, webUi: null, project: p, list });
@@ -430,11 +431,11 @@ function openCompose() {
           </ul>
         </template>
 
-        <!-- DevCatz Gateways (Windows): last, with DevCatz's mark; DevCatz installs, starts and stops them -->
+        <!-- DevCatz Services (Windows): last, with DevCatz's mark; DevCatz installs, starts and stops them -->
         <template v-if="gwRows.length">
-          <div class="group/sec mt-3 mb-1 flex cursor-pointer items-center gap-1.5 rounded-md py-1 pr-2 pl-1.5 text-[11px] font-semibold tracking-wide uppercase text-base-content/55 transition-colors select-none hover:text-base-content/80" :title="gwFolded ? 'Show DevCatz Gateways' : 'Hide DevCatz Gateways'" @click="listView.toggle(GW_OPEN)">
+          <div class="group/sec mt-3 mb-1 flex cursor-pointer items-center gap-1.5 rounded-md py-1 pr-2 pl-1.5 text-[11px] font-semibold tracking-wide uppercase text-base-content/55 transition-colors select-none hover:text-base-content/80" :title="gwFolded ? 'Show DevCatz Services' : 'Hide DevCatz Services'" @click="listView.toggle(GW_OPEN)">
             <img :src="devcatzLogo" class="size-3.5 shrink-0 rounded-sm" alt="" />
-            <span class="min-w-0 flex-1 truncate">DevCatz Gateways</span>
+            <span class="min-w-0 flex-1 truncate">DevCatz Services</span>
             <span class="sec-count normal-case" :class="{ 'is-live': gwRows.some((r) => running(r.list)) }">{{ gwRows.length }}</span>
             <svg class="size-3.5 shrink-0 opacity-45 transition group-hover/sec:opacity-90" :class="{ '-rotate-90': gwFolded }" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M5.22 8.22a.75.75 0 0 1 1.06 0L10 11.94l3.72-3.72a.75.75 0 1 1 1.06 1.06l-4.25 4.25a.75.75 0 0 1-1.06 0L5.22 9.28a.75.75 0 0 1 0-1.06Z" clip-rule="evenodd" /></svg>
           </div>
@@ -445,7 +446,7 @@ function openCompose() {
                   <svg viewBox="0 0 20 20" class="size-4 transition-transform duration-150" :class="{ '-rotate-90': folded.has(gwKey(r)) }" fill="currentColor"><path fill-rule="evenodd" d="M5.22 8.22a.75.75 0 0 1 1.06 0L10 11.94l3.72-3.72a.75.75 0 1 1 1.06 1.06l-4.25 4.25a.75.75 0 0 1-1.06 0L5.22 9.28a.75.75 0 0 1 0-1.06Z" clip-rule="evenodd" /></svg>
                 </button>
                 <span v-else class="size-5 shrink-0" />
-                <button class="flex min-w-0 flex-1 items-center gap-2 text-left" :title="r.list.length ? `${r.name} — a DevCatz gateway${r.version ? ` (${r.version})` : ''}` : `${r.name} — not installed; DevCatz installs it`" @click="openGateway(r)">
+                <button class="flex min-w-0 flex-1 items-center gap-2 text-left" :title="r.list.length ? `${r.name} — a DevCatz service${r.version ? ` (${r.version})` : ''}` : `${r.name} — not installed; DevCatz installs it`" @click="openGateway(r)">
                   <!-- the gateway's own logo (Jasmin, ntfy …); DevCatz's mark is on the group heading -->
                   <img :src="gatewayLogo(r.kind) ?? devcatzLogo" class="size-6 shrink-0 rounded-md border border-base-300/70 bg-base-100 object-contain p-0.5" :class="{ 'opacity-45 grayscale': !r.list.length }" :alt="r.name" />
                   <span class="truncate text-[13px] font-semibold tracking-tight" :class="{ 'text-primary': openProject === r.project && !!r.project, 'opacity-60': !r.list.length }">{{ r.name }}</span>

@@ -63,13 +63,13 @@ export const changes = ref(0);
 /** Compose runs and pulls, by token (the newest shows in the run panel). */
 export const runs = ref<Record<string, DcRun>>({});
 
-/** Windows: DevCatz's Docker gateways (main/gateways.ts), reloaded with the list; [] elsewhere. */
+/** Windows: DevCatz Services — its Docker gateways and its servers with no Windows build (main/gateways.ts), reloaded with the list; [] elsewhere. */
 export const gateways = ref<DcGateway[]>([]);
 /** The gateway a docatz://gateways?kind= link points at, highlighted in its group. */
 export const gatewayFocus = ref<string | null>(null);
 /**
- * Whether DevCatz is on this PC. The gateways are DevCatz's: without it there is no DevCatz Gateways group, and a
- * devcatz-gw-* project left behind is an ordinary project (nothing else looks after it). Checked with the list, at
+ * Whether DevCatz is on this PC. These services are DevCatz's: without it there is no DevCatz Services group, and a
+ * devcatz-gw-* / devcatz-svc-* project left behind is an ordinary project (nothing else looks after it). Checked with the list, at
  * most every 10 s (DevCatz installed or removed meanwhile shows up then).
  */
 export const devcatzInstalled = ref(false);
@@ -81,14 +81,16 @@ export async function refreshGateways(): Promise<void> {
   }
   gateways.value = devcatzInstalled.value ? await api.devcatzGateways().catch(() => gateways.value) : [];
 }
-/** A gateway's compose project, from its name (devcatz-gw-<kind>) — Windows with DevCatz installed, where it puts them on DoCatz. */
-export const gatewayKindOf = (project: string | null | undefined): string | null => (currentOS === 'windows' && devcatzInstalled.value && project?.startsWith('devcatz-gw-') ? project.slice(11) : null);
+/** A DevCatz service's kind from its compose project (devcatz-gw-<kind>, devcatz-svc-<kind>) — Windows with DevCatz installed, where it puts them on DoCatz. */
+export const gatewayKindOf = (project: string | null | undefined): string | null =>
+  currentOS === 'windows' && devcatzInstalled.value ? (/^devcatz-(?:gw|svc)-([a-z0-9-]+)$/.exec(project ?? '')?.[1] ?? null) : null;
 /**
  * Gateways are read-only in DoCatz: DevCatz installs, starts and stops them (it keeps `compose up` attached). DoCatz
  * only opens one there — devcatz://gateways/<kind>.
  */
 export async function gatewayLink(kind: string): Promise<boolean> {
-  const link = `devcatz://gateways/${encodeURIComponent(kind)}`;
+  // a service (Typesense, Sonic, Sockudo) has its own page in DevCatz: the link DevCatz gave for it
+  const link = gateways.value.find((g) => g.kind === kind)?.link ?? `devcatz://gateways/${encodeURIComponent(kind)}`;
   const ok = await attempt(() => api.openSibling('devcatz', link));
   // Not installed: DoCatz offers Download & Install (SiblingInstall.vue), then opens the gateway there.
   if (ok === false) siblingAsk.value = { which: 'devcatz', link };
