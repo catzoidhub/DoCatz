@@ -13,7 +13,7 @@ import { composeEnvironmentKeys, envCreate, ownServices, envRead, envRemove, env
 import { writeBridge } from './bridge';
 import { listDatabases, updateDatabases } from './dbservices';
 import { removeContext, setPath as setCliPath } from './cli';
-import { findCatzoidApp, installCatzoidApp, installSteps, openCatzoidApp, platformId } from './companion';
+import { findCatzoidApp, installCatzoidApp, installedVersion, installSteps, openCatzoidApp, platformId, siteAsset } from './companion';
 import { DockerError } from './docker/client';
 import * as ops from './docker/ops';
 import { Domains } from './domains';
@@ -218,6 +218,7 @@ const siblingInfo: Record<SiblingApp, [string, string, string]> = {
 /** Where each sibling's releases are (Download & Install), and the one install that may run at a time. */
 const SIBLING_REPO: Record<SiblingApp, string> = { devcatz: 'catzoidhub/DevCatz', dbcatz: 'catzoidhub/DBCatz', dialcatz: 'catzoidhub/DialCatz' };
 let siblingTask: TaskProgress | null = null;
+let siblingLatest: { at: number; latest: Record<SiblingApp, string | null> } | null = null;
 let siblingAbort: AbortController | null = null;
 
 function api(): DoCatzApi {
@@ -296,6 +297,21 @@ function api(): DoCatzApi {
       return true;
     },
 
+    siblingVersions: async () => {
+      // the site's answer is kept 10 minutes (About opens often; a release does not land that often)
+      if (!siblingLatest || Date.now() - siblingLatest.at > 600_000) {
+        const latest = await Promise.all((Object.keys(siblingInfo) as SiblingApp[]).map(async (k) => [k, await siteAsset(k, siteBase()).then((a) => a.version).catch(() => null)] as const));
+        siblingLatest = { at: Date.now(), latest: Object.fromEntries(latest) as Record<SiblingApp, string | null> };
+      }
+      const known = siblingLatest.latest;
+      const out = await Promise.all(
+        (Object.keys(siblingInfo) as SiblingApp[]).map(async (k) => {
+          const path = await findCatzoidApp(...siblingInfo[k]).catch(() => null);
+          return [k, { installed: path ? await installedVersion(path) : null, latest: known[k] }] as const;
+        }),
+      );
+      return Object.fromEntries(out) as Record<SiblingApp, { installed: string | null; latest: string | null }>;
+    },
     devcatzGateways: async () => devcatzGateways(),
     databases: async () => listDatabases().map(({ password: _password, ...d }) => d),
     siblingInstall: async (which, link) => {
@@ -310,7 +326,7 @@ function api(): DoCatzApi {
       };
       set({});
       try {
-        await installCatzoidApp(info[0], SIBLING_REPO[which], link, set, siblingAbort.signal);
+        await installCatzoidApp(info[0], SIBLING_REPO[which], link, set, siblingAbort.signal, siteBase());
         set({ step: siblingTask.steps.length, done: true, detail: '' });
       } catch (e) {
         const cancelled = siblingAbort.signal.aborted;

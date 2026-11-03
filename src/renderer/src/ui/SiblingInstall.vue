@@ -10,9 +10,10 @@ import TaskSteps from './TaskSteps.vue';
 
 /**
  * A link wants another Catzoid app that is not installed ("Open in DevCatz" on a gateway, "Open in DialCatz" on a
- * project): what that app is, and on Windows Download & Install — its latest release from GitHub, checked against the
- * release's SHA-256, installed for this user — then the link opens there. On macOS its download page (a DMG is
- * dragged to Applications by the user). The mirror of DevCatz's "DoCatz is not installed" (DoCatzButton.vue).
+ * project, "Open in DBCatz" on a database): what that app is, and Download & Install — its build for this computer
+ * from the Catzoid site (#60; GitHub when the site cannot be reached), its SHA-256 checked, installed for this user
+ * (Windows) or copied to Applications (macOS) — then the link opens there; or its download page. The mirror of
+ * DevCatz's "DoCatz is not installed" (DoCatzButton.vue).
  */
 const ABOUT: Record<SiblingApp, { name: string; logo: string; what: string }> = {
   devcatz: {
@@ -55,12 +56,11 @@ const download = () => info.value?.site && siblingAsk.value && api.openUrl(`${in
           </div>
         </div>
         <TaskSteps v-if="task" :task="task" />
-        <p v-else-if="win" class="rounded-box bg-base-200/60 px-3 py-2 text-xs opacity-70">
-          Download &amp; Install gets {{ app.name }}’s latest release from GitHub, checks it against the release’s SHA-256, installs it for your account (no
-          administrator prompt) and opens it here. Free and open source.
-        </p>
         <p v-else class="rounded-box bg-base-200/60 px-3 py-2 text-xs opacity-70">
-          Its download page has the build for this Mac. Once it is in Applications, click Open in {{ app.name }} again. Free and open source.
+          Download &amp; Install gets {{ app.name }}’s build for this {{ win ? 'PC' : 'Mac' }} from the Catzoid site (GitHub when the site cannot be reached),
+          checks its SHA-256,
+          <template v-if="win">installs it for your account (no administrator prompt)</template><template v-else>puts {{ app.name }}.app in Applications</template>
+          and opens it here. Free and open source.
         </p>
         <div v-if="task?.error && !task.cancelled" role="alert" class="alert alert-error alert-soft text-sm">
           <span class="selectable min-w-0 flex-1">{{ task.error }}</span>
@@ -73,8 +73,8 @@ const download = () => info.value?.site && siblingAsk.value && api.openUrl(`${in
           </template>
           <template v-else>
             <button class="btn btn-ghost btn-sm" @click="close">Not now</button>
-            <button v-if="win" class="btn btn-primary btn-sm" @click="install">{{ task?.error ? 'Try again' : 'Download & Install' }}</button>
-            <button v-else class="btn btn-primary btn-sm" :disabled="!info?.site" @click="download(); close()">Download page</button>
+            <button v-if="!task" class="btn btn-ghost btn-sm" :disabled="!info?.site" @click="download">Download page</button>
+            <button class="btn btn-primary btn-sm" @click="install">{{ task?.error ? 'Try again' : 'Download & Install' }}</button>
           </template>
         </div>
       </div>
