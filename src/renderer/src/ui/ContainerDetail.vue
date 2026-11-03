@@ -1,9 +1,10 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue';
-import type { DcContainer, DcContainerDetail, DcStats } from '@shared/types';
-import { api, attempt, bytes, changes, containerTab, databaseOf, dbcatzLink, errorText, gatewayKindOf, gatewayLink, gateways, notify, openContainer, statsHistory, type ContainerTab } from '../store';
+import type { DcApiSource, DcContainer, DcContainerDetail, DcStats } from '@shared/types';
+import { API_FRAMEWORKS, WORKER_NAME, api, attempt, bytes, changes, containerTab, databaseOf, dbcatzLink, dialcatzLink, errorText, gatewayKindOf, gatewayLink, gateways, notify, openContainer, statsHistory, type ContainerTab } from '../store';
 import ConfirmDialog from '../components/ConfirmDialog.vue';
 import dbcatzLogo from '../assets/logos/dbcatz.png';
+import dialcatzLogo from '../assets/logos/dialcatz.png';
 import DcNavButtons from './DcNavButtons.vue';
 import LogsPane from './LogsPane.vue';
 import TermPane from './TermPane.vue';
@@ -67,6 +68,18 @@ const copy = (text: string, what: string) => {
 const running = computed(() => c.value.state === 'running');
 /** A database container: its address on this computer and Open in DBCatz (#24). */
 const db = computed(() => databaseOf(c.value.id));
+/**
+ * Open in DialCatz (#25), on the API's own container like Open in DBCatz on a database: a service with a page, built
+ * with an API framework (not a site's front end, a plain image or a Laravel worker), in a project whose routes DialCatz
+ * can read — Laravel's route list, an OpenAPI file, or one the app serves.
+ */
+const apiFrom = ref<DcApiSource | null>(null);
+watch(
+  () => [c.value.project, c.value.framework?.framework],
+  async ([project]) => (apiFrom.value = project ? await api.apiSource(project as string).catch(() => null) : null),
+  { immediate: true },
+);
+const dialcatz = computed(() => !!apiFrom.value && !!c.value.project && !!c.value.url && !c.value.inner && !gatewayKind.value && API_FRAMEWORKS.has(c.value.framework?.framework ?? '') && !WORKER_NAME.test(c.value.service ?? ''));
 
 // The domain's name (before .docatz.<tld>): editable, the ending stays as Settings → Domains says.
 const editingName = ref(false);
@@ -136,6 +149,7 @@ const memPct = computed(() => (props.stats && props.stats.memLimit ? (props.stat
         <a v-for="t in TABS" :key="t.id" role="tab" class="seg-item" :class="{ 'is-active': containerTab === t.id }" @click="containerTab = t.id">{{ t.label }}</a>
       </div>
       <span class="flex-1" />
+      <button v-if="dialcatz" class="btn btn-sm shrink-0 gap-2" :title="`Open in DialCatz: an environment with ${c.url} as baseUrl, and the routes from ${apiFrom!.detail} as requests`" @click="dialcatzLink(c.project!, c.service)"><img :src="dialcatzLogo" alt="" class="size-5 drop-shadow-sm" draggable="false" />Open in DialCatz</button>
       <button v-if="db" class="btn btn-sm shrink-0 gap-2" :title="`Open in DBCatz: ${db.engine} on ${db.host}:${db.port}${db.user ? ` as ${db.user}` : ''}, with the password the container was started with`" @click="dbcatzLink(db.id)"><img :src="dbcatzLogo" alt="" class="size-5 drop-shadow-sm" draggable="false" />Open in DBCatz</button>
     </div>
 

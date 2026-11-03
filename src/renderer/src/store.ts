@@ -96,12 +96,17 @@ export async function gatewayLink(kind: string): Promise<boolean> {
   if (ok === false) siblingAsk.value = { which: 'devcatz', link };
   return ok === true;
 }
+/** Frameworks that make an API (the container gets Open in DialCatz when its project has routes to import), not a site's front end. */
+export const API_FRAMEWORKS = new Set(['nestjs', 'express', 'node', 'go', 'rust', 'laravel', 'codeigniter', 'yii', 'symfony', 'cakephp', 'slim', 'php', 'django', 'flask', 'fastapi', 'litestar', 'python']);
+/** Laravel's and others' background containers (no requests to send them). */
+export const WORKER_NAME = /^(scheduler?|schedule|queue|worker|workers|horizon|cron|reverb|jobs?)(-|_|\d|$)/i;
 /**
- * A compose project in DialCatz (#25): dialcatz://open?docatz=<project> shows DialCatz's Import from DoCatz for it —
+ * A compose project in DialCatz (#25): dialcatz://open?docatz=<project>[&service=<api service>] shows DialCatz's Import from DoCatz for it —
  * an environment with the project's HTTP services, and their routes. Nothing is imported without the user's click there.
  */
-export async function dialcatzLink(project: string): Promise<boolean> {
-  const link = `dialcatz://open?docatz=${encodeURIComponent(project)}`;
+export async function dialcatzLink(project: string, service?: string | null): Promise<boolean> {
+  // `service`: the API container it was opened from, DialCatz's baseUrl
+  const link = `dialcatz://open?docatz=${encodeURIComponent(project)}${service ? `&service=${encodeURIComponent(service)}` : ''}`;
   const ok = await attempt(() => api.openSibling('dialcatz', link));
   if (ok === false) siblingAsk.value = { which: 'dialcatz', link };
   return ok === true;

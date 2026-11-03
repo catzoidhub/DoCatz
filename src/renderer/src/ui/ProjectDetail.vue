@@ -1,10 +1,9 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue';
-import type { DcComposeAction, DcComposeProject, DcContainer, DcStats, DcApiSource } from '@shared/types';
+import type { DcComposeAction, DcComposeProject, DcContainer, DcStats } from '@shared/types';
 import { currentOS } from '@shared/platform';
-import { api, attempt, bytes, changes, composeFile, composeOpen, containerTab, databaseOf, dbcatzLink, dialcatzLink, gatewayKindOf, gatewayLink, gateways, notify, openContainer, isFavorite, openProject, PROJECT_ICON, projectTab, runs, statsHistory, toggleFavorite, token, type ProjectTab } from '../store';
+import { api, attempt, bytes, changes, composeFile, composeOpen, containerTab, databaseOf, dbcatzLink, gatewayKindOf, gatewayLink, gateways, notify, openContainer, isFavorite, openProject, PROJECT_ICON, projectTab, runs, statsHistory, toggleFavorite, token, type ProjectTab } from '../store';
 import devcatzLogo from '../assets/logos/devcatz.png';
-import dialcatzLogo from '../assets/logos/dialcatz.png';
 import dbcatzLogo from '../assets/logos/dbcatz.png';
 import ConfirmDialog from '../components/ConfirmDialog.vue';
 import DcNavButtons from './DcNavButtons.vue';
@@ -46,15 +45,6 @@ const dir = computed(() => info.value?.dir ?? props.containers.find((c) => c.wor
 /** Windows: the project sits on a drive (C:\, D:\ …) the engine reaches through WSL's mount, where file watchers stay quiet. */
 const onWindowsDrive = computed(() => currentOS === 'windows' && /^[A-Za-z]:[\\/]/.test(dir.value ?? ''));
 const running = computed(() => props.containers.filter((c) => c.state === 'running').length);
-/** The services with a page (an HTTP domain, not a database's inner address): what DialCatz makes an environment of (#25). */
-const httpServices = computed(() => [...new Set(props.containers.filter((c) => c.url && !c.inner).map((c) => c.service ?? c.name))]);
-/** Where DialCatz would read the project's routes (Laravel's route list, an OpenAPI file or one the app serves); none: no Open in DialCatz (#25). */
-const apiFrom = ref<DcApiSource | null>(null);
-watch(
-  () => [props.project, props.containers.map((c) => c.framework?.framework ?? '').join(',')],
-  async () => (apiFrom.value = await api.apiSource(props.project).catch(() => null)),
-  { immediate: true },
-);
 /** Every service up: Up has nothing to start (Build & Up still rebuilds); none up: Restart and Stop have nothing to do. */
 const allUp = computed(() => props.containers.length > 0 && running.value === props.containers.length);
 
@@ -173,8 +163,6 @@ const rateText = (v: number) => `${bytes(v)}/s`;
       <div role="tablist" class="seg min-w-0 overflow-x-auto [scrollbar-width:none]">
         <a v-for="t in TABS" :key="t.id" role="tab" class="seg-item" :class="{ 'is-active': projectTab === t.id }" @click="projectTab = t.id">{{ t.label }}</a>
       </div>
-      <span class="flex-1" />
-      <button v-if="httpServices.length && apiFrom && !gateway" class="btn btn-sm shrink-0 gap-2" :title="`Open in DialCatz: an environment with ${httpServices.join(', ')}’s address${httpServices.length > 1 ? 'es' : ''}, and the routes from ${apiFrom.detail} as requests`" @click="dialcatzLink(project)"><img :src="dialcatzLogo" alt="" class="size-5 drop-shadow-sm" draggable="false" />Open in DialCatz</button>
     </div>
 
     <div class="min-h-0 flex-1">
