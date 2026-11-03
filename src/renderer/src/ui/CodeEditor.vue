@@ -49,13 +49,14 @@ const theme = EditorView.theme(
     // Find & Replace, in DoCatz's own look
     '.cm-panels': { backgroundColor: 'oklch(23% 0.016 260)', color: 'oklch(88% 0.01 260)', borderRadius: '12px 12px 0 0' },
     '.cm-panels.cm-panels-top': { borderBottom: '1px solid oklch(100% 0 0 / 0.08)' },
-    '.cm-panel.cm-search': { padding: '8px 10px', fontFamily: 'inherit', fontSize: '12px', display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '6px' },
-    '.cm-panel.cm-search br': { flexBasis: '100%', height: '0' },
-    '.cm-panel.cm-search input.cm-textfield': { backgroundColor: 'oklch(17% 0.012 260)', color: 'inherit', border: '1px solid oklch(100% 0 0 / 0.12)', borderRadius: '8px', padding: '4px 8px', fontSize: '12px', minWidth: '14rem' },
+    // two rows (Find …, then Replace …), as CodeMirror lays them out; the app's own font, not the code's
+    '.cm-panel.cm-search': { padding: '8px 40px 8px 10px', fontFamily: 'system-ui, -apple-system, "Segoe UI", sans-serif', fontSize: '12px', lineHeight: '2.4' },
+    '.cm-panel.cm-search > *': { verticalAlign: 'middle', margin: '0 6px 0 0' },
+    '.cm-panel.cm-search input.cm-textfield': { backgroundColor: 'oklch(17% 0.012 260)', color: 'inherit', border: '1px solid oklch(100% 0 0 / 0.12)', borderRadius: '8px', padding: '3px 8px', fontSize: '12px', width: '16rem', fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Consolas, monospace' },
     '.cm-panel.cm-search input.cm-textfield:focus': { outline: '2px solid color-mix(in oklch, var(--color-primary) 55%, transparent)' },
     '.cm-panel.cm-search button.cm-button': { backgroundImage: 'none', backgroundColor: 'oklch(100% 0 0 / 0.07)', color: 'inherit', border: 'none', borderRadius: '8px', padding: '4px 10px', fontSize: '12px', textTransform: 'capitalize', cursor: 'pointer' },
     '.cm-panel.cm-search button.cm-button:hover': { backgroundColor: 'oklch(100% 0 0 / 0.13)' },
-    '.cm-panel.cm-search label': { display: 'inline-flex', alignItems: 'center', gap: '4px', opacity: '0.8', textTransform: 'capitalize' },
+    '.cm-panel.cm-search label': { display: 'inline-flex', alignItems: 'center', gap: '4px', opacity: '0.8', textTransform: 'capitalize', whiteSpace: 'nowrap' },
     '.cm-panel.cm-search [name=close]': { color: 'inherit', fontSize: '16px', opacity: '0.6', cursor: 'pointer', right: '8px', top: '6px' },
   },
   { dark: true },
