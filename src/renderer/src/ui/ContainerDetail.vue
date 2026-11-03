@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue';
 import type { DcApiSource, DcContainer, DcContainerDetail, DcStats } from '@shared/types';
-import { API_FRAMEWORKS, WORKER_NAME, api, attempt, bytes, changes, containerTab, databaseOf, dbcatzLink, dialcatzLink, errorText, gatewayKindOf, gatewayLink, gateways, notify, openContainer, statsHistory, type ContainerTab } from '../store';
+import { API_FRAMEWORKS, FRONT_END_LIBRARIES, WORKER_NAME, api, attempt, bytes, changes, containerTab, databaseOf, dbcatzLink, dialcatzLink, errorText, gatewayKindOf, gatewayLink, gateways, notify, openContainer, statsHistory, type ContainerTab } from '../store';
 import ConfirmDialog from '../components/ConfirmDialog.vue';
 import dbcatzLogo from '../assets/logos/dbcatz.png';
 import dialcatzLogo from '../assets/logos/dialcatz.png';
@@ -75,11 +75,17 @@ const db = computed(() => databaseOf(c.value.id));
  */
 const apiFrom = ref<DcApiSource | null>(null);
 watch(
-  () => [c.value.project, c.value.framework?.framework],
-  async ([project]) => (apiFrom.value = project ? await api.apiSource(project as string).catch(() => null) : null),
+  () => [c.value.project, c.value.service, c.value.framework?.framework],
+  async ([project, service]) => (apiFrom.value = project ? await api.apiSource(project as string, service as string | null).catch(() => null) : null),
   { immediate: true },
 );
-const dialcatz = computed(() => !!apiFrom.value && !!c.value.project && !!c.value.url && !c.value.inner && !gatewayKind.value && API_FRAMEWORKS.has(c.value.framework?.framework ?? '') && !WORKER_NAME.test(c.value.service ?? ''));
+const dialcatz = computed(() => {
+  const v = c.value;
+  if (!apiFrom.value || !v.project || !v.url || v.inner || gatewayKind.value || WORKER_NAME.test(v.service ?? '')) return false;
+  // its own OpenAPI file: an API whatever it runs (a plain image too); else an API framework, not a front end
+  if (apiFrom.value.own) return true;
+  return API_FRAMEWORKS.has(v.framework?.framework ?? '') && !FRONT_END_LIBRARIES.has((v.framework?.library ?? '').toLowerCase());
+});
 
 // The domain's name (before .docatz.<tld>): editable, the ending stays as Settings → Domains says.
 const editingName = ref(false);

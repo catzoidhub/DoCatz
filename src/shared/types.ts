@@ -220,6 +220,8 @@ export interface DcApiSource {
   how: 'laravel' | 'file' | 'served';
   /** In words: "Laravel’s route list", "docs/openapi.yaml", "the OpenAPI document the app serves (apps/api/package.json)". */
   detail: string;
+  /** The OpenAPI file sits in this service's own folder (it counts even for a plain image). */
+  own?: boolean;
 }
 /** The engines DBCatz opens (its DbEngine, without SQLite). */
 export type DcDbEngine = 'mysql' | 'mariadb' | 'postgresql' | 'redis' | 'valkey' | 'mongodb' | 'elasticsearch';
@@ -625,7 +627,7 @@ export interface DoCatzApi {
   migrateRun(source: DcMigrateSourceId, images: string[], volumes: string[]): Promise<string[]>;
   migrateCancel(): Promise<void>;
   /** The routes DialCatz can import for a compose project, or null (no Open in DialCatz then). */
-  apiSource(project: string): Promise<DcApiSource | null>;
+  apiSource(project: string, service?: string | null): Promise<DcApiSource | null>;
   /** Each sibling's installed version and the newest the Catzoid site has for this computer (#60); null when unknown. */
   siblingVersions(): Promise<Record<SiblingApp, { installed: string | null; latest: string | null }>>;
   /** Windows: DevCatz's Docker gateways from its bridge.json, installed or not ([] elsewhere, or without DevCatz). */

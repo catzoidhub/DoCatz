@@ -13,7 +13,7 @@ import { composeEnvironmentKeys, envCreate, ownServices, envRead, envRemove, env
 import { writeBridge } from './bridge';
 import { listDatabases, updateDatabases } from './dbservices';
 import { migrate, migrateInventory, migrateSources } from './migrate';
-import { apiSource } from './apisource';
+import { apiSource, serviceSpec } from './apisource';
 import { removeContext, setPath as setCliPath } from './cli';
 import { findCatzoidApp, installCatzoidApp, installedVersion, installSteps, openCatzoidApp, platformId, siteAsset } from './companion';
 import { DockerError } from './docker/client';
@@ -300,9 +300,12 @@ function api(): DoCatzApi {
       return true;
     },
 
-    apiSource: async (project) => {
+    apiSource: async (project, service) => {
       const list = containers.filter((c) => c.project === project);
-      return apiSource(list.find((c) => c.workingDir)?.workingDir ?? null, list.map((c) => c.framework?.framework).filter((f): f is NonNullable<typeof f> => !!f));
+      const dir = list.find((c) => c.workingDir)?.workingDir ?? null;
+      const own = serviceSpec(dir, service ?? null);
+      if (own) return { how: 'file', detail: own, own: true };
+      return apiSource(dir, list.map((c) => c.framework?.framework).filter((f): f is NonNullable<typeof f> => !!f));
     },
     migrateSources: () => migrateSources(),
     migrateInventory: (source) => needEngine(() => migrateInventory(source)),

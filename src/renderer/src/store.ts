@@ -99,7 +99,9 @@ export async function gatewayLink(kind: string): Promise<boolean> {
 /** Frameworks that make an API (the container gets Open in DialCatz when its project has routes to import), not a site's front end. */
 export const API_FRAMEWORKS = new Set(['nestjs', 'express', 'node', 'go', 'rust', 'laravel', 'codeigniter', 'yii', 'symfony', 'cakephp', 'slim', 'php', 'django', 'flask', 'fastapi', 'litestar', 'python']);
 /** Laravel's and others' background containers (no requests to send them). */
-export const WORKER_NAME = /^(scheduler?|schedule|queue|worker|workers|horizon|cron|reverb|jobs?)(-|_|\d|$)/i;
+export const WORKER_NAME = /^(scheduler?|schedule|queue|worker|workers|horizon|cron|reverb|supervisor|jobs?)(-|_|\d|$)/i;
+/** Libraries that make a site's front end even when its language makes APIs too (a Rust app with Leptos …). */
+export const FRONT_END_LIBRARIES = new Set(['leptos', 'yew', 'dioxus', 'sycamore', 'perseus']);
 /**
  * A compose project in DialCatz (#25): dialcatz://open?docatz=<project>[&service=<api service>] shows DialCatz's Import from DoCatz for it —
  * an environment with the project's HTTP services, and their routes. Nothing is imported without the user's click there.

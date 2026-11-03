@@ -27,6 +27,26 @@ const ALWAYS = new Set(['fastapi', 'litestar']);
 
 const cache = new Map<string, { at: number; v: DcApiSource | null }>();
 
+/**
+ * An OpenAPI file in the service's own folder — <dir>/<service>, apps/<service>, services/<service>, or their docs/
+ * (as DialCatz's Import from DoCatz looks): such a service has routes even when it runs a plain image.
+ */
+export function serviceSpec(dir: string | null, service: string | null): string | null {
+  if (!dir || !service || !/^[a-z0-9][a-z0-9_.-]{0,62}$/.test(service)) return null;
+  for (const base of [service, `apps/${service}`, `services/${service}`]) {
+    for (const sub of ['', 'docs']) {
+      const d = join(dir, base, sub);
+      try {
+        const hit = readdirSync(d).find((n) => SPEC.test(n));
+        if (hit) return relative(dir, join(d, hit));
+      } catch {
+        /* no such folder */
+      }
+    }
+  }
+  return null;
+}
+
 /** The project's API for DialCatz, or null. `frameworks`: what its services are built from (container marks). */
 export function apiSource(dir: string | null, frameworks: string[]): DcApiSource | null {
   if (frameworks.includes('laravel')) return { how: 'laravel', detail: 'Laravel’s route list' };
