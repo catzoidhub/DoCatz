@@ -3,10 +3,15 @@ import { computed, onMounted, ref } from 'vue';
 import type { DcAiPreview, DcComposeAction, DcFileAnswer } from '@shared/types';
 import { aiOn, api, attempt, composeFile, engineUp, errorText, notify, runs, token } from '../store';
 import RunPanel from './RunPanel.vue';
+import CodeEditor from './CodeEditor.vue';
+import CatMood from './CatMood.vue';
+import { keyLabel } from '@shared/platform';
 
 /**
  * A compose file (DoCatz TODO #17): open it (File → Open Compose File…, or a docatz://compose link — which only opens
- * it here, never runs it), edit and save it, then Up / Restart / Stop / Down / Pull / Build with the output below.
+ * it here, never runs it), edit it in a code editor (YAML colours, line numbers, Find & Replace) and save it — the
+ * project's own file — then Up / Restart / Stop / Down / Pull / Build with the output below; a run saves first, so it
+ * always uses what the editor shows. Closing with unsaved changes asks first.
  * With AI on, "Write with AI" drafts or fixes the file (TODO #20); the draft is shown next to the file and only
  * replaces it on "Use this".
  */
@@ -17,6 +22,22 @@ const saved = ref('');
 const dirty = computed(() => text.value !== saved.value);
 const runToken = ref<string | null>(null);
 const run = computed(() => (runToken.value ? runs.value[runToken.value] : null));
+const editor = ref<InstanceType<typeof CodeEditor> | null>(null);
+/** Closing with changes not saved: Save, Discard or keep editing. */
+const leaving = ref(false);
+function close() {
+  if (dirty.value) leaving.value = true;
+  else emit('close');
+}
+function onEsc(e: KeyboardEvent) {
+  // Escape first closes the editor's Find & Replace (CodeMirror handled it: defaultPrevented), then the dialog
+  if (e.defaultPrevented || editor.value?.searching()) return;
+  close();
+}
+async function saveAndClose() {
+  await save();
+  if (!dirty.value) emit('close');
+}
 
 async function load(path: string) {
   try {
@@ -73,15 +94,18 @@ const name = computed(() => file.value?.split(/[\\/]/).slice(-2).join('/') ?? ''
 </script>
 
 <template>
-  <dialog open class="modal modal-open" @keydown.esc="emit('close')">
+  <dialog open class="modal modal-open" @keydown.esc="onEsc">
     <div class="modal-box flex h-[86vh] w-[64rem] max-w-[96vw] flex-col gap-3 p-0">
       <div class="flex items-center gap-2 border-b border-base-300/60 px-5 py-3">
         <h3 class="text-base font-semibold tracking-tight">Compose</h3>
         <button v-if="file" class="btn btn-ghost btn-xs font-mono" :title="file" @click="api.reveal(file)">{{ name }}</button>
         <span v-if="dirty" class="badge badge-warning badge-soft badge-sm">not saved</span>
         <span class="flex-1" />
+        <button v-if="file" class="btn btn-ghost btn-sm gap-1.5" :title="`Find & Replace (${keyLabel('mod+F')})`" @click="editor?.find()">
+          <svg viewBox="0 0 20 20" class="size-4" fill="currentColor"><path fill-rule="evenodd" d="M9 3.5a5.5 5.5 0 1 0 0 11 5.5 5.5 0 0 0 0-11ZM2 9a7 7 0 1 1 12.45 4.39l3.08 3.08a.75.75 0 1 1-1.06 1.06l-3.08-3.08A7 7 0 0 1 2 9Z" clip-rule="evenodd" /></svg>Find &amp; Replace
+        </button>
         <button class="btn btn-ghost btn-sm" @click="pick">Open…</button>
-        <button class="btn btn-ghost btn-sm btn-square" title="Close (Esc)" @click="emit('close')">✕</button>
+        <button class="btn btn-ghost btn-sm btn-square" title="Close (Esc)" @click="close">✕</button>
       </div>
 
       <div v-if="!file" class="grid flex-1 place-items-center p-8 text-center">
@@ -92,7 +116,7 @@ const name = computed(() => file.value?.split(/[\\/]/).slice(-2).join('/') ?? ''
       </div>
       <template v-else>
         <div class="flex min-h-0 flex-1 gap-3 px-5">
-          <textarea v-model="text" class="textarea selectable min-h-0 flex-1 resize-none font-mono text-[12px] leading-snug" spellcheck="false" @keydown.meta.s.prevent="save" @keydown.ctrl.s.prevent="save" />
+          <div class="min-h-0 min-w-0 flex-1"><CodeEditor ref="editor" v-model="text" @save="save" /></div>
           <aside v-if="aiAllowed && (asking || draft)" class="flex w-[26rem] shrink-0 flex-col gap-2">
             <div class="flex items-center gap-2"><span class="label-caps flex-1">AI draft</span><button v-if="asking" class="btn btn-ghost btn-xs" @click="api.aiCancel(aiToken)">Stop</button></div>
             <p v-if="asking" class="text-sm opacity-60">Writing…</p>
@@ -109,7 +133,8 @@ const name = computed(() => file.value?.split(/[\\/]/).slice(-2).join('/') ?? ''
           <button class="btn btn-sm" :disabled="asking || (!prompt.trim() && !run?.error)">✦ {{ run?.error && !prompt.trim() ? 'Fix with AI' : 'Write with AI' }}</button>
         </form>
         <div class="flex items-center gap-1 px-5">
-          <button class="btn btn-sm" :disabled="!dirty" @click="save">Save</button>
+          <button class="btn btn-sm" :disabled="!dirty" :title="`Save to the project's file (${keyLabel('mod+S')})`" @click="save">Save</button>
+          <span class="ml-2 text-xs opacity-50">{{ dirty ? 'Up, Build and the rest save it first.' : 'Saved in the project’s folder.' }}</span>
           <span class="flex-1" />
           <span v-if="!engineUp" class="mr-2 text-xs opacity-60">Start the engine to run it.</span>
           <button class="btn btn-sm" :disabled="!engineUp || (run !== null && !run.done)" @click="act('pull')">Pull</button>
@@ -122,7 +147,25 @@ const name = computed(() => file.value?.split(/[\\/]/).slice(-2).join('/') ?? ''
         <div v-else class="h-2" />
       </template>
     </div>
-    <div class="modal-backdrop" @click="emit('close')" />
+    <div class="modal-backdrop" @click="close" />
+
+    <dialog v-if="leaving" open class="modal modal-open z-[1000]" @keydown.esc.stop.prevent="leaving = false">
+      <div class="modal-box w-[28rem] max-w-[95vw] space-y-3">
+        <div class="flex items-start gap-3">
+          <span class="grid size-10 shrink-0 place-items-center rounded-xl bg-primary/10"><CatMood mood="question" class="size-8" /></span>
+          <div class="min-w-0">
+            <h3 class="text-lg font-semibold tracking-tight">Save the changes?</h3>
+            <p class="text-sm opacity-70">{{ name }} has changes that are not saved yet. Up and Build use the file as it is saved.</p>
+          </div>
+        </div>
+        <div class="modal-action">
+          <button class="btn btn-ghost btn-sm" @click="leaving = false">Keep editing</button>
+          <button class="btn btn-ghost btn-sm text-error" @click="emit('close')">Discard</button>
+          <button class="btn btn-primary btn-sm" @click="saveAndClose">Save</button>
+        </div>
+      </div>
+      <div class="modal-backdrop" @click="leaving = false" />
+    </dialog>
 
     <dialog v-if="preview" open class="modal modal-open" @keydown.esc.stop="preview = null">
       <div class="modal-box w-[46rem] max-w-[95vw] space-y-3">
