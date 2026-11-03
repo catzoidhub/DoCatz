@@ -12,6 +12,7 @@ import { buildDetail, buildLogs, listBuilds, removeBuild } from './builds';
 import { composeEnvironmentKeys, envCreate, ownServices, envRead, envRemove, envSetLocked, envState, envWrite, expectedEnv } from './envs';
 import { writeBridge } from './bridge';
 import { listDatabases, updateDatabases } from './dbservices';
+import { migrate, migrateInventory, migrateSources } from './migrate';
 import { removeContext, setPath as setCliPath } from './cli';
 import { findCatzoidApp, installCatzoidApp, installedVersion, installSteps, openCatzoidApp, platformId, siteAsset } from './companion';
 import { DockerError } from './docker/client';
@@ -218,6 +219,7 @@ const siblingInfo: Record<SiblingApp, [string, string, string]> = {
 /** Where each sibling's releases are (Download & Install), and the one install that may run at a time. */
 const SIBLING_REPO: Record<SiblingApp, string> = { devcatz: 'catzoidhub/DevCatz', dbcatz: 'catzoidhub/DBCatz', dialcatz: 'catzoidhub/DialCatz' };
 let siblingTask: TaskProgress | null = null;
+let migrateAbort: AbortController | null = null;
 let siblingLatest: { at: number; latest: Record<SiblingApp, string | null> } | null = null;
 let siblingAbort: AbortController | null = null;
 
@@ -297,6 +299,29 @@ function api(): DoCatzApi {
       return true;
     },
 
+    migrateSources: () => migrateSources(),
+    migrateInventory: (source) => needEngine(() => migrateInventory(source)),
+    migrateRun: async (source, images, volumes) => {
+      if (migrateAbort) throw new Error('A move is already running');
+      migrateAbort = new AbortController();
+      const items = [...images.map((i) => `Image ${i}`), ...volumes.map((v) => `Volume ${v}`)];
+      let task: TaskProgress = { kind: 'migrate', title: 'Moving to DoCatz', steps: items, step: 0 };
+      const set = (p: Partial<TaskProgress>) => send('app:migrate', (task = { ...task, ...p }));
+      set({});
+      try {
+        const failed = await needEngine(() => migrate(source, images, volumes, set, migrateAbort!.signal));
+        set({ step: items.length, done: true, error: failed.length ? `${failed.length} could not be moved:\n${failed.join('\n')}` : undefined });
+        void refresh();
+        return failed;
+      } catch (e) {
+        const cancelled = migrateAbort.signal.aborted;
+        set({ done: true, cancelled, error: cancelled ? 'Cancelled' : (e as Error).message });
+        throw e;
+      } finally {
+        migrateAbort = null;
+      }
+    },
+    migrateCancel: async () => migrateAbort?.abort(),
     siblingVersions: async () => {
       // the site's answer is kept 10 minutes (About opens often; a release does not land that often)
       if (!siblingLatest || Date.now() - siblingLatest.at > 600_000) {

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue';
-import type { DcDiskUsage, DcPruneKind, EngineConfig } from '@shared/types';
+import type { DcDiskUsage, DcMigrateSource, DcPruneKind, EngineConfig } from '@shared/types';
 import { words } from '@shared/platform';
 import { api, attempt, bytes, changes, engine, engineUp, notify } from '../store';
 import CatMood from './CatMood.vue';
@@ -8,6 +8,7 @@ import DcNavButtons from './DcNavButtons.vue';
 import PruneDialog from './PruneDialog.vue';
 import TaskSteps from './TaskSteps.vue';
 import WslSetup from './WslSetup.vue';
+import MigrateDialog from './MigrateDialog.vue';
 
 /**
  * Engine (DoCatz TODO #5 / #6 / #7): the VM's state and Start / Stop / Restart, its CPUs, memory, disk and Rosetta,
@@ -23,6 +24,13 @@ async function run(name: string, fn: () => Promise<unknown>, done?: string) {
   await attempt(fn, done);
   busy.value = '';
 }
+/** Docker Desktop, OrbStack, Colima or Rancher Desktop on this computer (#11): looked at once the engine runs. */
+const others = ref<DcMigrateSource[]>([]);
+const moving = ref<DcMigrateSource | null>(null);
+async function lookAgain() {
+  others.value = await api.migrateSources().catch(() => []);
+}
+watch(engineUp, (up) => up && void lookAgain(), { immediate: true });
 const STATUS: Record<string, string> = { running: 'Running', stopped: 'Stopped', starting: 'Starting…', stopping: 'Stopping…', missing: 'Not set up', error: 'Needs attention', unsupported: 'Not available' };
 
 async function set(patch: Partial<EngineConfig>) {
@@ -202,6 +210,24 @@ const copy = (t: string) => {
           </div>
         </div>
 
+        <!-- move from another Docker (#11) -->
+        <div v-if="others.length" class="card">
+          <div class="card-body gap-2">
+            <h2>Move from another Docker</h2>
+            <p class="text-xs opacity-60">Copy images and volumes onto DoCatz’s engine. The other one keeps them, so both can stay side by side.</p>
+            <ul class="divide-y divide-base-300/50">
+              <li v-for="o in others" :key="o.id" class="flex items-center gap-3 py-2">
+                <span class="min-w-0 flex-1">
+                  <span class="block text-sm font-medium">{{ o.name }}</span>
+                  <span class="block text-xs opacity-55">{{ o.running ? `Running · Docker ${o.version}` : 'Installed, not running — start it to move from it' }}</span>
+                </span>
+                <button v-if="o.running" class="btn btn-sm" @click="moving = o">Choose what to move…</button>
+                <button v-else class="btn btn-ghost btn-sm" @click="lookAgain">Look again</button>
+              </li>
+            </ul>
+          </div>
+        </div>
+
         <!-- details -->
         <div class="card">
           <div class="card-body gap-2">
@@ -249,5 +275,6 @@ const copy = (t: string) => {
       <div class="modal-backdrop" @click="resetting = false" />
     </dialog>
     <PruneDialog v-if="pruning" :kind="pruning" @close="pruning = null" />
+    <MigrateDialog v-if="moving" :source="moving" @close="moving = null" />
   </section>
 </template>
