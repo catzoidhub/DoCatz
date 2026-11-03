@@ -115,8 +115,15 @@ export class Engine {
     };
   }
 
+  /**
+   * Tells the window. Several can run at once (a step, the end of a start) and state() takes a while (the VM manager,
+   * a ping): only the newest one's answer goes out, so an older "starting" never lands after "running".
+   */
+  private changeSeq = 0;
   private async changed(): Promise<void> {
-    this.onChange(await this.state());
+    const n = ++this.changeSeq;
+    const s = await this.state();
+    if (n === this.changeSeq) this.onChange(s);
   }
 
   private progress(patch: Partial<TaskProgress>): void {

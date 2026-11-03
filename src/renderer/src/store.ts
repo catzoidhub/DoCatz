@@ -244,13 +244,18 @@ export async function init(): Promise<void> {
   });
   api.onUpdateOpen(() => (updateOpen.value = true));
   api.onReportsAsk(() => (reportsAsk.value = true));
-  engine.value = await api.engineState();
-  await loadProjectPrefs();
+  // listen first, then ask: a change that lands while the first answer is on its way is not lost, and an answer
+  // older than an event already received does not overwrite it
+  let heard = false;
   api.onEngine((s) => {
+    heard = true;
     const wasUp = engineUp.value;
     engine.value = s;
     if (wasUp !== engineUp.value) void refreshContainers();
   });
+  const first = await api.engineState();
+  if (!heard) engine.value = first;
+  await loadProjectPrefs();
   api.onChanged(() => {
     changes.value++;
     void refreshContainers();
