@@ -167,7 +167,7 @@ const rateText = (v: number) => `${bytes(v)}/s`;
         <a v-for="t in TABS" :key="t.id" role="tab" class="seg-item" :class="{ 'is-active': projectTab === t.id }" @click="projectTab = t.id">{{ t.label }}</a>
       </div>
       <span class="flex-1" />
-      <button v-if="httpServices.length" class="btn btn-sm shrink-0 gap-2" :title="`Open in DialCatz: an environment with ${httpServices.join(', ')}’s address${httpServices.length > 1 ? 'es' : ''}, and their routes as requests`" @click="dialcatzLink(project)"><img :src="dialcatzLogo" alt="" class="size-5 drop-shadow-sm" draggable="false" />Open in DialCatz</button>
+      <button v-if="httpServices.length && !gateway" class="btn btn-sm shrink-0 gap-2" :title="`Open in DialCatz: an environment with ${httpServices.join(', ')}’s address${httpServices.length > 1 ? 'es' : ''}, and their routes as requests`" @click="dialcatzLink(project)"><img :src="dialcatzLogo" alt="" class="size-5 drop-shadow-sm" draggable="false" />Open in DialCatz</button>
     </div>
 
     <div class="min-h-0 flex-1">
