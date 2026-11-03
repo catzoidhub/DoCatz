@@ -215,6 +215,12 @@ export interface DcContainer {
   /** Built from source: the framework found in its build folder (its mark in the list); null for an image. */
   framework: DcFramework | null;
 }
+/** Where DialCatz finds a project's routes (#25): Laravel's route list, an OpenAPI file, or one the app serves. */
+export interface DcApiSource {
+  how: 'laravel' | 'file' | 'served';
+  /** In words: "Laravel’s route list", "docs/openapi.yaml", "the OpenAPI document the app serves (apps/api/package.json)". */
+  detail: string;
+}
 /** The engines DBCatz opens (its DbEngine, without SQLite). */
 export type DcDbEngine = 'mysql' | 'mariadb' | 'postgresql' | 'redis' | 'valkey' | 'mongodb' | 'elasticsearch';
 /** A database container as DoCatz hands it to DBCatz (#24): its local address and the user its image was started with. */
@@ -618,6 +624,8 @@ export interface DoCatzApi {
   /** Copies the picked images and volumes onto DoCatz's engine (the other keeps them); steps via onMigrate; the items that failed. */
   migrateRun(source: DcMigrateSourceId, images: string[], volumes: string[]): Promise<string[]>;
   migrateCancel(): Promise<void>;
+  /** The routes DialCatz can import for a compose project, or null (no Open in DialCatz then). */
+  apiSource(project: string): Promise<DcApiSource | null>;
   /** Each sibling's installed version and the newest the Catzoid site has for this computer (#60); null when unknown. */
   siblingVersions(): Promise<Record<SiblingApp, { installed: string | null; latest: string | null }>>;
   /** Windows: DevCatz's Docker gateways from its bridge.json, installed or not ([] elsewhere, or without DevCatz). */
@@ -737,7 +745,7 @@ export interface DoCatzApi {
 
 /** Every method of the bridge, registered as `docatz:<name>` IPC handlers. */
 export const API_METHODS: (keyof DoCatzApi)[] = [
-  'appInfo', 'aboutInfo', 'updateState', 'updateCheck', 'updateDownload', 'updateCancel', 'updateSkip', 'updateInstall', 'updateConfigure', 'reportPreview', 'reportSend', 'captureWindow', 'reportError', 'reportSettings', 'reportConfigure', 'uninstallPlan', 'uninstallRun', 'settings', 'setSettings', 'setAiKey', 'aiModels', 'aiProbe', 'aiTest', 'aiCancel', 'aiAsk', 'aiPreviewAsk', 'aiExplainLog', 'aiPreviewLog', 'aiFile', 'aiPreviewFile', 'openUrl', 'reveal', 'openSibling', 'siblingVersions', 'migrateSources', 'migrateInventory', 'migrateRun', 'migrateCancel', 'devcatzGateways', 'databases', 'siblingInstall', 'siblingInstallCancel', 'runInTerminal',
+  'appInfo', 'aboutInfo', 'updateState', 'updateCheck', 'updateDownload', 'updateCancel', 'updateSkip', 'updateInstall', 'updateConfigure', 'reportPreview', 'reportSend', 'captureWindow', 'reportError', 'reportSettings', 'reportConfigure', 'uninstallPlan', 'uninstallRun', 'settings', 'setSettings', 'setAiKey', 'aiModels', 'aiProbe', 'aiTest', 'aiCancel', 'aiAsk', 'aiPreviewAsk', 'aiExplainLog', 'aiPreviewLog', 'aiFile', 'aiPreviewFile', 'openUrl', 'reveal', 'openSibling', 'apiSource', 'siblingVersions', 'migrateSources', 'migrateInventory', 'migrateRun', 'migrateCancel', 'devcatzGateways', 'databases', 'siblingInstall', 'siblingInstallCancel', 'runInTerminal',
   'engineState', 'engineStart', 'engineStop', 'engineRestart', 'engineReset', 'engineConfigure', 'engineCancel', 'engineSetupWsl', 'restartComputer', 'engineLog', 'contextSet', 'cliInstall', 'cliPath', 'diskUsage',
   'containers', 'container', 'containerEnv', 'containerAction', 'containerRemove', 'stats', 'logsFollow', 'logsStop', 'termOpen', 'termInput', 'termResize', 'termClose', 'files', 'fileSave', 'projects', 'composePick', 'composeRun', 'composeProject', 'runCancel', 'readText', 'writeText',
   'images', 'imageRemove', 'imagePull', 'volumes', 'volumeRemove', 'networks', 'networkRemove', 'prunePreview', 'prune',
