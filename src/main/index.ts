@@ -367,7 +367,7 @@ function api(): DoCatzApi {
       const dir = list.find((c) => c.workingDir)?.workingDir ?? null;
       const own = serviceSpec(dir, service ?? null);
       if (own) return { how: 'file', detail: own, own: true };
-      return apiSource(dir, list.map((c) => c.framework?.framework).filter((f): f is NonNullable<typeof f> => !!f));
+      return apiSource(dir, list.flatMap((c) => [c.framework?.framework, c.framework?.library]).filter((f): f is NonNullable<typeof f> => !!f));
     },
     migrateSources: () => migrateSources(),
     migrateInventory: (source) => needEngine(() => migrateInventory(source)),

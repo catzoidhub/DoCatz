@@ -109,9 +109,10 @@ describe('what the app shows', () => {
     expect(frameworkTag('go', 'goravel').icon.title).toBe('Goravel');
     expect(frameworkTag('static').icon.title).toBe('HTML5');
   });
-  test('Goravel and plain projects offer no API source unless they carry a document', () => {
+  test('Goravel offers its route list; a plain project no API source unless it carries a document', () => {
     const go = project({ 'go.mod': `${GOMOD}require github.com/goravel/framework v1.15.0\n` });
-    expect(apiSource(go, ['go'])).toBeNull();
+    expect(apiSource(go, ['go', 'goravel'])?.how).toBe('goravel');
+    expect(apiSource(project({ 'go.mod': GOMOD }), ['go'])).toBeNull();
     const doc = project({ 'go.mod': GOMOD, 'openapi.yaml': 'openapi: 3.0.0\n' });
     expect(apiSource(doc, ['go'])).not.toBeNull();
   });

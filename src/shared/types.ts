@@ -297,7 +297,7 @@ export interface DcContainer {
 }
 /** Where DialCatz finds a project's routes (#25): Laravel's route list, an OpenAPI file, or one the app serves. */
 export interface DcApiSource {
-  how: 'laravel' | 'file' | 'served';
+  how: 'laravel' | 'goravel' | 'file' | 'served';
   /** In words: "Laravel’s route list", "docs/openapi.yaml", "the OpenAPI document the app serves (apps/api/package.json)". */
   detail: string;
   /** The OpenAPI file sits in this service's own folder (it counts even for a plain image). */
