@@ -117,7 +117,7 @@ export function detectFramework(dir: string): DcFramework | null {
  * (`dockerfile: apps/web/Dockerfile`), so the Dockerfile's folder is looked at first — the root package.json of a bun /
  * npm workspace names no framework. Then the folders between it and the context, then the context itself.
  */
-function detectBuild(context: string, dockerfile?: string): DcFramework | null {
+export function detectBuild(context: string, dockerfile?: string): DcFramework | null {
   const df = dockerfile ? (isAbsolute(dockerfile) ? dockerfile : join(context, dockerfile)) : null;
   const dirs: string[] = [];
   for (let d = df ? dirname(df) : context; d.startsWith(context) && d.length >= context.length; d = dirname(d)) {
@@ -127,7 +127,7 @@ function detectBuild(context: string, dockerfile?: string): DcFramework | null {
   if (!dirs.includes(context)) dirs.push(context);
   const found = dirs.map((d) => detectFramework(d)).filter((f): f is DcFramework => f !== null);
   // A specific framework wins over a bare language (node, php, python) found higher up.
-  return found.find((f) => !['node', 'php', 'python'].includes(f.framework) || f.library) ?? found[0] ?? null;
+  return found.find((f) => !['node', 'php', 'python', 'static'].includes(f.framework) || f.library) ?? found[0] ?? null;
 }
 
 /**
