@@ -1,4 +1,4 @@
-import { app, dialog, ipcMain, shell } from 'electron';
+import { app, clipboard, dialog, ipcMain, shell } from 'electron';
 import { execFile, spawn } from 'node:child_process';
 import { binDir } from './paths';
 import { isWin } from './platform';
@@ -10,6 +10,9 @@ import { API_METHODS, type DcContainer, type DoCatzApi, type SiblingApp, type Ta
 import { AskAi } from './ai';
 import { buildDetail, buildLogs, listBuilds, removeBuild } from './builds';
 import { composeEnvironmentKeys, envCreate, ownServices, envRead, envRemove, envSetLocked, envState, envWrite, expectedEnv } from './envs';
+import { MCATZP_TARGETS } from '@catzoid/mcatzp-host';
+import { Mcatzp } from './mcatzp';
+import * as mcatzpSetup from './mcatzp/install';
 import { writeBridge } from './bridge';
 import { listDatabases, updateDatabases } from './dbservices';
 import { migrate, migrateInventory, migrateSources } from './migrate';
@@ -195,6 +198,7 @@ app.on('activate', () => openWindow());
 // The engine and the menu bar stay when the window closes; Quit ends DoCatz (macOS keeps the VM running).
 app.on('window-all-closed', () => undefined);
 app.on('before-quit', () => {
+  mcatzp?.quit();
   for (const stop of follows.values()) stop();
   for (const t of terms.values()) t.socket.destroy();
   stopEvents?.();
@@ -223,6 +227,13 @@ let siblingTask: TaskProgress | null = null;
 let migrateAbort: AbortController | null = null;
 let siblingLatest: { at: number; latest: Record<SiblingApp, string | null> } | null = null;
 let siblingAbort: AbortController | null = null;
+let mcatzp: Mcatzp;
+let mcatzpInstalling: AbortController | null = null;
+const mcatzpClient = (id: unknown) => {
+  const known = MCATZP_TARGETS.find((t) => t === id);
+  if (!known) throw new Error('Unknown client');
+  return known;
+};
 
 function api(): DoCatzApi {
   const win = () => mainWindow() ?? undefined;
@@ -258,11 +269,52 @@ function api(): DoCatzApi {
         await engine.reset('reset').catch((e) => console.warn('uninstall: VM not removed:', (e as Error).message));
         removeContext();
         await setCliPath(false).catch(() => undefined);
+        await mcatzp.set(false).catch(() => undefined);
         await domains.uninstall(withShared);
         domains.stop();
       }),
     settings: async () => settings(),
-    setSettings: async (patch) => setSettings(patch),
+    setSettings: async (patch) => {
+      const next = setSettings(patch);
+      if (patch.mcatzp) {
+        if (patch.mcatzp.on !== undefined) await mcatzp.set(next.mcatzp.on);
+        mcatzp.scopesChanged();
+      }
+      return next;
+    },
+    mcatzpActivity: async () => mcatzp.activity.list(),
+    mcatzpClearActivity: async () => mcatzp.activity.clear(),
+    mcatzpRevoke: (name) => mcatzp.revoke(String(name)),
+    mcatzpSetup: (askSite) => mcatzpSetup.setupState(askSite !== false),
+    mcatzpInstall: async () => {
+      if (mcatzpInstalling) throw new Error('MCatzP is being installed');
+      mcatzpInstalling = new AbortController();
+      const report = (p: Parameters<Parameters<typeof mcatzpSetup.install>[0]>[0] | null) => send('app:mcatzpInstalling', p);
+      try {
+        report({ phase: 'download', received: 0, total: 0 });
+        await mcatzpSetup.install(report, mcatzpInstalling.signal);
+      } catch (e) {
+        // Cancel is an answer, not a failure.
+        if (!mcatzpInstalling?.signal.aborted) throw e;
+      } finally {
+        mcatzpInstalling = null;
+        report(null);
+      }
+      return mcatzpSetup.setupState();
+    },
+    mcatzpInstallCancel: async () => mcatzpInstalling?.abort(),
+    mcatzpTargets: () => mcatzpSetup.targets(),
+    mcatzpAddToClient: async (id) => {
+      await mcatzpSetup.addToClient(mcatzpClient(id));
+      return mcatzpSetup.targets();
+    },
+    mcatzpRemoveFromClient: async (id) => {
+      await mcatzpSetup.removeFromClient(mcatzpClient(id));
+      return mcatzpSetup.targets();
+    },
+    mcatzpPending: async () => mcatzp.pending(),
+    mcatzpAnswer: async (id, answer, typed) => mcatzp.answer(String(id), answer === 'once' || answer === 'session' ? answer : 'deny', typeof typed === 'string' ? typed : undefined),
+    copyText: async (text) => clipboard.writeText(String(text)),
     setAiKey: async (provider, key) => setAiKey(provider, key),
     aiModels: (provider) => ai.models(provider),
     aiProbe: (provider, models) => ai.probe(provider, models),
@@ -536,6 +588,18 @@ app.whenReady().then(async () => {
   reporter.start();
   updater.start();
   applySettings((s) => send('app:settings', s));
+  mcatzp = new Mcatzp(
+    api(),
+    {
+      show: (ask) => {
+        if (ask) openWindow();
+        send('app:mcatzpAsk', ask);
+      },
+      settingsChanged: () => send('app:settings', settings()),
+    },
+    { databasePasswords: () => listDatabases().map((d) => d.password), logsTail: (id, tail) => ops.logsTail(id, tail) },
+  );
+  void mcatzp.set(settings().mcatzp.on).catch(() => undefined);
   void migrateToShared().catch((e) => console.warn('Shared settings migration:', (e as Error).message));
   applyMenu();
   tray.start();

@@ -19,6 +19,7 @@ import DcUpdateDialog from './DcUpdateDialog.vue';
 import DcReportDialog from './DcReportDialog.vue';
 import DcWelcome from './DcWelcome.vue';
 import SiblingInstall from './SiblingInstall.vue';
+import McatzpPairDialog from './McatzpPairDialog.vue';
 import { back, forward } from './nav';
 
 /**
@@ -242,6 +243,7 @@ function openAppMenu(e: MouseEvent) {
     <DcReportDialog v-if="ready && reportOpen" :kind="reportOpen" @close="reportOpen = null" />
     <DcWelcome v-if="ready" />
     <SiblingInstall />
+    <McatzpPairDialog />
 
     <!-- Asked once, after the first error: send crash reports? (Catzoid #65) -->
     <dialog v-if="reportsAsk" open class="modal modal-open">

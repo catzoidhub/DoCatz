@@ -226,6 +226,31 @@ export async function followLogs(id: string, tail: number, token: string, emit: 
   return () => res.destroy();
 }
 
+/** The last `tail` lines of a container's log, once (for MCatzP): the same reading as followLogs, without following. */
+export async function logsTail(id: string, tail: number, signal?: AbortSignal): Promise<{ stream: 'stdout' | 'stderr'; time: string; text: string }[]> {
+  const i = await inspect(id);
+  const res: IncomingMessage = await docker.stream('GET', `/containers/${encodeURIComponent(id)}/logs`, { query: { follow: false, stdout: true, stderr: true, timestamps: true, tail } });
+  const lines: { stream: 'stdout' | 'stderr'; time: string; text: string }[] = [];
+  const partial: Record<'stdout' | 'stderr', string> = { stdout: '', stderr: '' };
+  const add = (stream: 'stdout' | 'stderr', data: Buffer) => {
+    const parts = (partial[stream] + data.toString('utf8')).split('\n');
+    partial[stream] = parts.pop() ?? '';
+    for (const l of parts) {
+      const sp = l.indexOf(' ');
+      lines.push({ stream, time: sp > 0 ? l.slice(0, sp) : '', text: (sp > 0 ? l.slice(sp + 1) : l).replace(/\r$/, '') });
+    }
+  };
+  const feed = i.Config.Tty ? (c: Buffer) => add('stdout', c) : demuxer(add);
+  signal?.addEventListener('abort', () => res.destroy(), { once: true });
+  await new Promise<void>((done, fail) => {
+    res.on('data', feed);
+    res.on('end', done);
+    res.on('close', done);
+    res.on('error', fail);
+  });
+  return lines.slice(-tail);
+}
+
 // ---------------------------------------------------------------- exec
 
 /** Runs a command in a container without a terminal and returns its output. */

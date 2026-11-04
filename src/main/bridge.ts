@@ -1,6 +1,7 @@
 import { app } from 'electron';
 import { chmodSync, existsSync, mkdirSync, renameSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
+import type { BridgeEntry } from '@catzoid/mcatzp-host';
 import type { DcContainer } from '@shared/types';
 
 /**
@@ -15,9 +16,22 @@ import type { DcContainer } from '@shared/types';
 export const bridgeFile = () => process.env.DOCATZ_BRIDGE_FILE || join(app.getPath('userData'), 'bridge.json');
 
 let last = '';
+let lastContainers: DcContainer[] = [];
+let lastEngine: 'running' | 'stopped' = 'stopped';
+let lastProxy = { httpsPort: 0, httpPort: 0 };
+let mcatzp: BridgeEntry | null = null;
+
+/** The MCatzP entry (protocol version, on / off, channel), so MCatzP finds DoCatz; written at once, whatever else changed. */
+export function setBridgeMcatzp(entry: BridgeEntry): void {
+  mcatzp = entry;
+  writeBridge(lastContainers, lastEngine, lastProxy);
+}
 
 /** `proxy`: DoCatz's proxy ports, so DevCatz's proxy can hand *.docatz.<tld> on when :443 points at it (#61). */
 export function writeBridge(containers: DcContainer[], engine: 'running' | 'stopped', proxy: { httpsPort: number; httpPort: number }): void {
+  lastContainers = containers;
+  lastEngine = engine;
+  lastProxy = proxy;
   const list = containers.map((c) => ({
     id: c.id.slice(0, 12),
     name: c.name,
@@ -34,14 +48,14 @@ export function writeBridge(containers: DcContainer[], engine: 'running' | 'stop
     framework: c.framework?.framework ?? null,
     library: c.framework?.library ?? null,
   }));
-  const body = JSON.stringify({ engine, list, proxy });
+  const body = JSON.stringify({ engine, list, proxy, mcatzp });
   if (body === last) return;
   try {
     const file = bridgeFile();
     const dir = join(file, '..');
     if (!existsSync(dir)) mkdirSync(dir, { recursive: true, mode: 0o700 });
     else chmodSync(dir, 0o700);
-    const doc = { schema: 1, app: 'DoCatz', version: app.getVersion(), updatedAt: Date.now(), engine, proxy, containers: list };
+    const doc = { schema: 1, app: 'DoCatz', version: app.getVersion(), updatedAt: Date.now(), engine, proxy, containers: list, ...(mcatzp ? { mcatzp } : {}) };
     const tmp = `${file}.${process.pid}.tmp`;
     writeFileSync(tmp, JSON.stringify(doc, null, 2) + '\n', { mode: 0o600 });
     renameSync(tmp, file);

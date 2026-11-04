@@ -8,6 +8,7 @@ import DcModelPicker from './DcModelPicker.vue';
 import AboutCard from './AboutCard.vue';
 import DomainsCard from './DomainsCard.vue';
 import DcUpdates from './DcUpdates.vue';
+import McatzpSettings from './McatzpSettings.vue';
 
 /**
  * Settings (the rail's last item, ⌘,): General (the theme; Privacy: crash reports), Domains (shared with DevCatz,
@@ -19,6 +20,7 @@ const TABS = [
   { id: 'general', label: 'General' },
   { id: 'domains', label: 'Domains' },
   { id: 'ai', label: 'AI' },
+  { id: 'mcatzp', label: 'MCatzP' },
   { id: 'updates', label: 'Updates' },
   { id: 'about', label: 'About' },
 ] as const;
@@ -280,6 +282,7 @@ onMounted(async () => (site.value = (await api.appInfo().catch(() => null))?.sit
         </template>
 
         <!-- Updates -->
+        <McatzpSettings v-if="tab === 'mcatzp'" />
         <DcUpdates v-if="tab === 'updates'" />
 
         <!-- Domains -->
