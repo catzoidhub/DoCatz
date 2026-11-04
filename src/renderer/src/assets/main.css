@@ -2430,3 +2430,32 @@ html.is-win .dc-top-btn {
 .lg-debug { color: oklch(64% 0.02 260); }
 .lg-warn { color: oklch(83% 0.15 85); font-weight: 600; }
 .lg-error { color: oklch(70% 0.19 25); font-weight: 600; }
+
+/* MCatzP has an update: the colours of its arrow in the pairing dialog, MCatzP's pink to DoCatz's blue. */
+.mcatzp-pill {
+  display: inline-block;
+  margin-left: 0.375rem;
+  border-radius: 999px;
+  background: linear-gradient(90deg, #ff8dbe, #6cc4ff);
+  color: #1b1330;
+  font-size: 0.625rem;
+  font-weight: 700;
+  line-height: 1;
+  padding: 0.1875rem 0.4375rem;
+  vertical-align: 0.0625rem;
+}
+.mcatzp-dot {
+  width: 0.625rem;
+  height: 0.625rem;
+  border-radius: 999px;
+  background: linear-gradient(135deg, #ff8dbe, #6cc4ff);
+}
+.btn.mcatzp-update {
+  border: 0;
+  background: linear-gradient(90deg, #ff8dbe, #6cc4ff);
+  color: #1b1330;
+  font-weight: 700;
+}
+.btn.mcatzp-update:hover {
+  filter: brightness(1.08);
+}

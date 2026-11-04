@@ -133,6 +133,8 @@ export const siblingTask = ref<TaskProgress | null>(null);
 export const mcatzpAsk = ref<McatzpAsk | null>(null);
 /** Install MCatzP running in Settings. */
 export const mcatzpInstalling = ref<McatzpInstallProgress | null>(null);
+/** The MCatzP version to update to, for the badges in Settings. */
+export const mcatzpUpdate = ref<string | null>(null);
 
 /** Stats samples per container (the list polls every 5 s), the last 10 minutes — the Monitoring charts read them. */
 export const HISTORY_SAMPLES = 120;
@@ -267,6 +269,8 @@ export async function init(): Promise<void> {
   api.onSiblingTask((t) => (siblingTask.value = t));
   api.onMcatzpAsk((a) => (mcatzpAsk.value = a));
   api.onMcatzpInstalling((p) => (mcatzpInstalling.value = p));
+  api.onMcatzpUpdate((v) => (mcatzpUpdate.value = v));
+  void api.mcatzpUpdate().then((v) => (mcatzpUpdate.value = v));
   mcatzpAsk.value = await api.mcatzpPending();
   api.onRun((r) => {
     runs.value = { ...runs.value, [r.token]: r };

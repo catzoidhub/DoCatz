@@ -49,6 +49,7 @@ export const MCATZP_COVERAGE: Record<keyof DoCatzApi, string> = {
   mcatzpTargets: 'never: a client does not install itself',
   mcatzpAddToClient: 'never: a client does not install itself',
   mcatzpRemoveFromClient: 'never: a client does not install itself',
+  mcatzpUpdate: 'not a tool: the badges in Settings; get_app_info does not need it, a client does not install itself',
   mcatzpPending: 'not a tool: the dialog\'s own',
   mcatzpAnswer: 'never: a client does not answer its own question',
   copyText: 'not a tool: the window\'s own',

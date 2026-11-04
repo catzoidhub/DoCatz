@@ -25,6 +25,11 @@ function loginEnv(): Promise<NodeJS.ProcessEnv> {
 const options = async (): Promise<SetupOptions> => ({ site: siteBase(), env: await loginEnv() });
 
 export const setupState = async (askSite = true): Promise<McatzpSetup> => state(await options(), askSite);
+/** The version to update to: only a copy these apps installed, a Homebrew or npm copy updates its own way. Null when up to date. */
+export async function availableUpdate(): Promise<string | null> {
+  const { source, version, latest } = await setupState();
+  return source === 'catzoid' && version && latest && version.localeCompare(latest, undefined, { numeric: true }) < 0 ? latest : null;
+}
 export const install = async (progress: (p: McatzpInstallProgress) => void, signal: AbortSignal): Promise<void> => run(await options(), progress, signal);
 /** Where each client is approved, from every Catzoid app's bridge.json. Approvals stay per app: this only reads them. */
 export const approvals = async (): Promise<McatzpApproval[]> => approvalsAcrossApps(await options());

@@ -238,6 +238,15 @@ let siblingLatest: { at: number; latest: Record<SiblingApp, string | null> } | n
 let siblingAbort: AbortController | null = null;
 let mcatzp: Mcatzp;
 let mcatzpInstalling: AbortController | null = null;
+/** Settings' MCatzP badge: asked once a day while the switch is on, and whenever the page or an install has news. */
+const MCATZP_UPDATE_EVERY_MS = 24 * 3600_000;
+let mcatzpUpdate: string | null = null;
+async function checkMcatzpUpdate(): Promise<void> {
+  const next = settings().mcatzp.on ? await mcatzpSetup.availableUpdate().catch(() => mcatzpUpdate) : null;
+  if (next === mcatzpUpdate) return;
+  mcatzpUpdate = next;
+  send('app:mcatzpUpdate', next);
+}
 const mcatzpClient = (id: unknown) => {
   const known = MCATZP_TARGETS.find((t) => t === id);
   if (!known) throw new Error('Unknown client');
@@ -286,7 +295,10 @@ function api(): DoCatzApi {
     setSettings: async (patch) => {
       const next = setSettings(patch);
       if (patch.mcatzp) {
-        if (patch.mcatzp.on !== undefined) await mcatzp.set(next.mcatzp.on);
+        if (patch.mcatzp.on !== undefined) {
+          await mcatzp.set(next.mcatzp.on);
+          void checkMcatzpUpdate();
+        }
         mcatzp.scopesChanged();
       }
       return next;
@@ -294,7 +306,11 @@ function api(): DoCatzApi {
     mcatzpActivity: async () => mcatzp.activity.list(),
     mcatzpClearActivity: async () => mcatzp.activity.clear(),
     mcatzpRevoke: (name) => mcatzp.revoke(String(name)),
-    mcatzpSetup: (askSite) => mcatzpSetup.setupState(askSite !== false),
+    mcatzpSetup: async (askSite) => {
+      if (askSite !== false) void checkMcatzpUpdate();
+      return mcatzpSetup.setupState(askSite !== false);
+    },
+    mcatzpUpdate: async () => mcatzpUpdate,
     mcatzpInstall: async () => {
       if (mcatzpInstalling) throw new Error('MCatzP is being installed');
       mcatzpInstalling = new AbortController();
@@ -309,6 +325,7 @@ function api(): DoCatzApi {
         mcatzpInstalling = null;
         report(null);
       }
+      void checkMcatzpUpdate();
       return mcatzpSetup.setupState();
     },
     mcatzpInstallCancel: async () => mcatzpInstalling?.abort(),
@@ -618,6 +635,8 @@ app.whenReady().then(async () => {
     { databasePasswords: () => listDatabases().map((d) => d.password), logsTail: (id, tail) => ops.logsTail(id, tail), run: (token) => recentRuns.get(token) ?? null, runs: () => [...recentRuns.values()].reverse(), tasks: () => ({ migrate: migrateTask, sibling: siblingTask }) },
   );
   void mcatzp.set(settings().mcatzp.on).catch(() => undefined);
+  setTimeout(() => void checkMcatzpUpdate(), 30_000);
+  setInterval(() => void checkMcatzpUpdate(), MCATZP_UPDATE_EVERY_MS);
   void migrateToShared().catch((e) => console.warn('Shared settings migration:', (e as Error).message));
   applyMenu();
   tray.start();

@@ -38,6 +38,8 @@ const bridge = {
   onMcatzpAsk: (cb: (ask: McatzpAsk | null) => void) => on('app:mcatzpAsk', cb),
   /** Install MCatzP running in Settings. */
   onMcatzpInstalling: (cb: (p: McatzpInstallProgress | null) => void) => on('app:mcatzpInstalling', cb),
+  /** The MCatzP version to update to changed (null: up to date). */
+  onMcatzpUpdate: (cb: (version: string | null) => void) => on('app:mcatzpUpdate', cb),
   /** Moving images and volumes from another Docker (#11), as it goes. */
   onMigrate: (cb: (t: TaskProgress | null) => void) => on('app:migrate', cb),
   /** The settings changed outside the window (another Catzoid app changed the shared theme / AI connection). */

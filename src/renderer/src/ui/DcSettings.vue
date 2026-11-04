@@ -2,7 +2,7 @@
 import { keyLabel, words } from '@shared/platform';
 import { computed, onMounted, ref, watch } from 'vue';
 import { aiProvider, DC_AI_FEATURES, DC_AI_PROVIDERS, type DcAiFeature, type DcAiProvider, type DcReportSettings, type Theme } from '@shared/types';
-import { api, attempt, notify, saveSettings, settings, settingsTab } from '../store';
+import { api, attempt, mcatzpUpdate, notify, saveSettings, settings, settingsTab } from '../store';
 import DcNavButtons from './DcNavButtons.vue';
 import DcModelPicker from './DcModelPicker.vue';
 import AboutCard from './AboutCard.vue';
@@ -155,7 +155,7 @@ onMounted(async () => (site.value = (await api.appInfo().catch(() => null))?.sit
       <div class="flex items-center gap-3">
         <h1 class="text-lg font-semibold tracking-tight">Settings</h1>
         <div role="tablist" class="no-drag seg ml-3">
-          <button v-for="t in TABS" :key="t.id" role="tab" class="seg-item normal-case" :class="{ 'is-active': tab === t.id }" :aria-selected="tab === t.id" @click="tab = t.id">{{ t.label }}</button>
+          <button v-for="t in TABS" :key="t.id" role="tab" class="seg-item normal-case" :class="{ 'is-active': tab === t.id }" :aria-selected="tab === t.id" @click="tab = t.id">{{ t.label }}<span v-if="t.id === 'mcatzp' && mcatzpUpdate" class="mcatzp-pill" :title="`MCatzP ${mcatzpUpdate} is available`">Update</span></button>
         </div>
       </div>
     </header>
