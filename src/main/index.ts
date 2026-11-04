@@ -303,6 +303,7 @@ function api(): DoCatzApi {
       return mcatzpSetup.setupState();
     },
     mcatzpInstallCancel: async () => mcatzpInstalling?.abort(),
+    mcatzpApprovals: () => mcatzpSetup.approvals(),
     mcatzpTargets: () => mcatzpSetup.targets(),
     mcatzpAddToClient: async (id) => {
       await mcatzpSetup.addToClient(mcatzpClient(id));

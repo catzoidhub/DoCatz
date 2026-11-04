@@ -46,6 +46,7 @@ export const MCATZP_COVERAGE: Record<keyof DoCatzApi, string> = {
   mcatzpSetup: 'never: a client does not install itself',
   mcatzpInstall: 'never: a client does not install itself',
   mcatzpInstallCancel: 'never: a client does not install itself',
+  mcatzpApprovals: "never: what runs a client on this computer is the user's to install",
   mcatzpTargets: 'never: a client does not install itself',
   mcatzpAddToClient: 'never: a client does not install itself',
   mcatzpRemoveFromClient: 'never: a client does not install itself',

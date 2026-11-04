@@ -44,8 +44,11 @@ export class Mcatzp {
         // Several sessions of one client connect at once and share one answer: it is still one client.
         if (settings().mcatzp.clients.some((c) => c.name === name)) return;
         setMcatzpClients([...settings().mcatzp.clients, { name, approvedAt: new Date().toISOString() }]);
+        // The other Catzoid apps show where a client is approved, from bridge.json.
+        setBridgeMcatzp(this.host.entry());
         this.win.settingsChanged();
       },
+      approved: () => settings().mcatzp.clients.map((c) => c.name),
       pair: (client) => this.ask({ id: randomUUID(), kind: 'pair', client: client.name, version: client.version ?? null }, PAIR_WAIT_MS).then((a) => a !== 'deny'),
       // Only reads so far (the change tier comes with TODO #94): nothing can ask yet.
       confirm: async () => 'deny',
@@ -97,6 +100,7 @@ export class Mcatzp {
   /** Forgets a client and closes every connection (a new token): the others reconnect, this one asks again. */
   revoke(name: string): Promise<void> {
     setMcatzpClients(settings().mcatzp.clients.filter((c) => c.name !== name));
+    setBridgeMcatzp(this.host.entry());
     this.win.settingsChanged();
     const next = this.queue.then(async () => {
       if (!this.host.running) return;
