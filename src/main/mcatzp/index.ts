@@ -1,4 +1,4 @@
-import { type ActionDef, type ConfirmAnswer, McatzpHost } from '@catzoid/mcatzp-host';
+import { type ActionDef, type BridgeEntry, type ConfirmAnswer, McatzpHost } from '@catzoid/mcatzp-host';
 import { randomUUID } from 'node:crypto';
 import { join } from 'node:path';
 import { app } from 'electron';
@@ -125,11 +125,15 @@ export class Mcatzp {
     return next;
   }
 
-  /** The app is quitting and will not wait: bridge.json says off now, the socket closes as far as it gets. */
+  /**
+   * The app is quitting and will not wait: bridge.json says off now, the socket closes as far as it gets. `closed` tells
+   * MCatzP the switch is still on, so a client is told to open DoCatz, not to turn MCatzP on. The next start writes a fresh
+   * entry without it; the protocol package on npm has no such field yet, hence the cast.
+   */
   quit(): void {
     if (!this.host.running) return;
     const { channel: _c, tokenFile: _t, ...entry } = this.host.entry();
-    setBridgeMcatzp({ ...entry, enabled: false });
+    setBridgeMcatzp({ ...entry, enabled: false, closed: true } as BridgeEntry);
     void this.host.stop().catch(() => undefined);
   }
 
