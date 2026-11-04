@@ -41,6 +41,8 @@ export class Mcatzp {
       actions: () => this.actions(),
       isPaired: (name) => settings().mcatzp.clients.some((c) => c.name === name),
       onPaired: (name) => {
+        // Several sessions of one client connect at once and share one answer: it is still one client.
+        if (settings().mcatzp.clients.some((c) => c.name === name)) return;
         setMcatzpClients([...settings().mcatzp.clients, { name, approvedAt: new Date().toISOString() }]);
         this.win.settingsChanged();
       },

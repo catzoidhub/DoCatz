@@ -24,7 +24,7 @@ type Stored = Omit<DoCatzSettings, 'ai'> & { ai: Omit<DoCatzSettings['ai'], 'key
 
 const names = (a: unknown) => (Array.isArray(a) ? [...new Set(a.filter((x): x is string => typeof x === 'string' && x.length > 0 && x.length < 300))] : []);
 function mcatzpOf(m: Partial<McatzpSettings> | undefined): McatzpSettings {
-  const clients = Array.isArray(m?.clients) ? m.clients.filter((c) => typeof c?.name === 'string' && typeof c?.approvedAt === 'string') : [];
+  const clients = (Array.isArray(m?.clients) ? m.clients.filter((c) => typeof c?.name === 'string' && typeof c?.approvedAt === 'string') : []).filter((c, i, all) => all.findIndex((x) => x.name === c.name) === i);
   return { on: m?.on === true, all: m?.all === true, projects: names(m?.projects), logs: m?.logs !== false, resources: m?.resources !== false, changes: m?.changes === true, clients };
 }
 
