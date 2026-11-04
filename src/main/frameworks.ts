@@ -28,6 +28,8 @@ const readText = (file: string): string => {
 };
 
 const GO_LIBS: [RegExp, string][] = [
+  // First: Goravel requires Gin (and others) itself.
+  [/github\.com\/goravel\/framework\b/, 'goravel'],
   [/github\.com\/gin-gonic\/gin\b/, 'gin'],
   [/github\.com\/labstack\/echo\b/, 'echo'],
   [/github\.com\/gofiber\/fiber\b/, 'fiber'],
@@ -52,6 +54,20 @@ const PHP: [string, DcFrameworkName][] = [
   ['laravel/framework', 'laravel'], ['symfony/framework-bundle', 'symfony'], ['codeigniter4/framework', 'codeigniter'], ['yiisoft/yii2', 'yii'],
   ['cakephp/cakephp', 'cakephp'], ['slim/slim', 'slim'], ['drupal/core', 'drupal'], ['drupal/core-recommended', 'drupal'], ['joomla/joomla-cms', 'joomla'],
 ];
+
+/** Plain projects with no manifest, recognised like DevCatz: the file that serves something. */
+const JS_ENTRIES = ['server', 'index', 'app', 'main'].flatMap((n) => ['js', 'mjs', 'cjs', 'ts'].map((x) => `${n}.${x}`));
+const JS_LISTENS = /\b(?:createServer|Bun\.serve|Deno\.serve)\s*\(|\.listen\s*\(/;
+const PY_ENTRIES = ['main.py', 'app.py', 'server.py', 'run.py'];
+const PY_SERVES = /\b(?:http\.server|socketserver|wsgiref|aiohttp|tornado|bottle)\b|\b(?:from|import)\s+(?:flask|fastapi|uvicorn)\b|\bserve_forever\(/;
+
+function plainProject(dir: string): DcFramework | null {
+  if (PY_ENTRIES.some((f) => PY_SERVES.test(readText(join(dir, f))))) return { framework: 'python', library: null };
+  const js = JS_ENTRIES.map((f) => readText(join(dir, f))).find((t) => JS_LISTENS.test(t));
+  if (js !== undefined) return { framework: 'node', library: /\bDeno\.serve\s*\(/.test(js) ? 'deno' : /\bBun\.serve\s*\(/.test(js) ? 'bun' : null };
+  if (/\bnet\/http\b|\bnet\.Listen\(/.test(readText(join(dir, 'main.go')))) return { framework: 'go', library: null };
+  return existsSync(join(dir, 'index.html')) || existsSync(join(dir, 'index.htm')) ? { framework: 'static', library: null } : null;
+}
 
 /** The framework of the app in `dir` (null: none recognised). */
 export function detectFramework(dir: string): DcFramework | null {
@@ -93,7 +109,7 @@ export function detectFramework(dir: string): DcFramework | null {
     const fw = PY_FRAMEWORKS.find(([n]) => word(n));
     return { framework: fw?.[1] ?? 'python', library: fw ? null : (PY_LIBS.find(word) ?? null) };
   }
-  return null;
+  return plainProject(dir);
 }
 
 /**
@@ -101,7 +117,7 @@ export function detectFramework(dir: string): DcFramework | null {
  * (`dockerfile: apps/web/Dockerfile`), so the Dockerfile's folder is looked at first — the root package.json of a bun /
  * npm workspace names no framework. Then the folders between it and the context, then the context itself.
  */
-function detectBuild(context: string, dockerfile?: string): DcFramework | null {
+export function detectBuild(context: string, dockerfile?: string): DcFramework | null {
   const df = dockerfile ? (isAbsolute(dockerfile) ? dockerfile : join(context, dockerfile)) : null;
   const dirs: string[] = [];
   for (let d = df ? dirname(df) : context; d.startsWith(context) && d.length >= context.length; d = dirname(d)) {
@@ -111,7 +127,7 @@ function detectBuild(context: string, dockerfile?: string): DcFramework | null {
   if (!dirs.includes(context)) dirs.push(context);
   const found = dirs.map((d) => detectFramework(d)).filter((f): f is DcFramework => f !== null);
   // A specific framework wins over a bare language (node, php, python) found higher up.
-  return found.find((f) => !['node', 'php', 'python'].includes(f.framework) || f.library) ?? found[0] ?? null;
+  return found.find((f) => !['node', 'php', 'python', 'static'].includes(f.framework) || f.library) ?? found[0] ?? null;
 }
 
 /**

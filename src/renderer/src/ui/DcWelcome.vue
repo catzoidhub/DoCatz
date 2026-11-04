@@ -103,7 +103,7 @@ const privacy = () => site.value && api.openUrl(`${site.value}/docs/privacy-and-
 
         <div class="shrink-0 space-y-1">
           <p class="label-caps">Three things to know first</p>
-          <p class="text-xs opacity-60">Everything DoCatz downloads goes into one folder (~/.docatz) and is checked against a known checksum.</p>
+          <p class="text-xs opacity-60">Everything DoCatz downloads goes into one folder ({{ words.home }}.docatz) and is checked against a known checksum.</p>
         </div>
 
         <div ref="list" class="-mx-1 min-h-0 flex-1 space-y-3 overflow-y-auto px-1 [scrollbar-width:thin]" :style="fade" @scroll.passive="edges" @toggle.capture="edges">

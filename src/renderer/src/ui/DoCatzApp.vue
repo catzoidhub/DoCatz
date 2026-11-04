@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { currentOS, keyLabel } from '@shared/platform';
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
-import { aiOn, api, askOpen, startStatsPolling, attempt, composeFile, composeOpen, containerTab, containers, engine, findFocus, findText, gatewayFocus, gateways, init, openContainer, openProject, refreshGateways, reportOpen, reportsAsk, section, settingsTab, toast, update, updateOpen, type Section } from '../store';
+import { aiOn, api, askOpen, mcatzpUpdate, startStatsPolling, attempt, composeFile, composeOpen, containerTab, containers, engine, findFocus, findText, gatewayFocus, gateways, init, openContainer, openProject, refreshGateways, reportOpen, reportsAsk, section, settingsTab, toast, update, updateOpen, type Section } from '../store';
 import askMark from '../assets/logos/ask-catzoid.svg';
 import CatMood from './CatMood.vue';
 import ContainersView from './ContainersView.vue';
@@ -19,6 +19,7 @@ import DcUpdateDialog from './DcUpdateDialog.vue';
 import DcReportDialog from './DcReportDialog.vue';
 import DcWelcome from './DcWelcome.vue';
 import SiblingInstall from './SiblingInstall.vue';
+import McatzpPairDialog from './McatzpPairDialog.vue';
 import { back, forward } from './nav';
 
 /**
@@ -72,6 +73,10 @@ function openRoute(route: string) {
       openContainer.value = arg;
       containerTab.value = 'info';
     }
+  } else if (head === 'project') {
+    // After Allow on a client's change: the project's page, where its run shows.
+    section.value = 'containers';
+    if (arg) openProject.value = arg;
   } else if (head === 'compose') {
     // The project started from this file (DevCatz's `<site>-dev` too): its containers in front, the file to Up / rebuild.
     section.value = 'containers';
@@ -217,6 +222,7 @@ function openAppMenu(e: MouseEvent) {
         <span class="rail-icon"><svg class="size-5" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" clip-rule="evenodd" :d="ICONS.cog" /></svg></span>
         Settings
         <span v-if="update?.status === 'available' || update?.status === 'downloaded'" class="absolute top-1.5 right-4 size-2 rounded-full bg-primary ring-2 ring-base-200" :title="`DoCatz ${update.version} is available`" />
+        <span v-else-if="mcatzpUpdate" class="mcatzp-dot absolute top-1.5 right-4 ring-2 ring-base-200" :title="`MCatzP ${mcatzpUpdate} is available`" />
       </button>
     </nav>
 
@@ -242,6 +248,7 @@ function openAppMenu(e: MouseEvent) {
     <DcReportDialog v-if="ready && reportOpen" :kind="reportOpen" @close="reportOpen = null" />
     <DcWelcome v-if="ready" />
     <SiblingInstall />
+    <McatzpPairDialog />
 
     <!-- Asked once, after the first error: send crash reports? (Catzoid #65) -->
     <dialog v-if="reportsAsk" open class="modal modal-open">

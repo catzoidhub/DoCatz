@@ -6,6 +6,7 @@ import EngineGate from './EngineGate.vue';
 import PruneDialog from './PruneDialog.vue';
 import DcNavButtons from './DcNavButtons.vue';
 import CatMood from './CatMood.vue';
+import CopyName from './CopyName.vue';
 
 /** Volumes (DoCatz TODO #14): name, compose project, size, who uses it; remove (typed) and clean up unused. */
 const list = ref<DcVolume[]>([]);
@@ -72,7 +73,7 @@ const pruning = ref(false);
           <div class="min-w-0"><h3 class="text-lg font-semibold tracking-tight">Remove this volume?</h3><p class="text-sm opacity-70">The data inside it is gone for good.</p></div>
         </div>
         <label class="block">
-          <span class="label-caps mb-1 block">Type <span class="font-mono normal-case tracking-normal opacity-100">{{ removing.name }}</span> to remove it</span>
+          <span class="label-caps mb-1 block">Type <CopyName :value="removing.name" /> to remove it</span>
           <input v-model="typed" class="input input-sm w-full font-mono" :placeholder="removing.name" spellcheck="false" autocomplete="off" autofocus />
         </label>
         <div class="modal-action"><button type="button" class="btn btn-ghost btn-sm" @click="removing = null">Cancel</button><button class="btn btn-error btn-sm" :disabled="typed.trim() !== removing.name">Remove</button></div>

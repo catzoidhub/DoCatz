@@ -1,5 +1,5 @@
 import { nativeTheme, safeStorage } from 'electron';
-import { DC_AI_DEFAULTS, DC_AI_FEATURES, DC_AI_PROVIDERS, type DcAiFeature, type DoCatzSettings, type DoCatzSettingsPatch, type DcAiProvider, type Theme } from '@shared/types';
+import { DC_AI_DEFAULTS, DC_AI_FEATURES, DC_AI_PROVIDERS, type DcAiFeature, type DoCatzSettings, type DoCatzSettingsPatch, type McatzpSettings, type DcAiProvider, type Theme } from '@shared/types';
 import { store } from './store';
 import { readShared, setSharedKey, sharedKey, watchShared, writeShared } from './shared';
 
@@ -22,12 +22,20 @@ const FEATURES = DC_AI_FEATURES.map((f) => f.id);
 
 type Stored = Omit<DoCatzSettings, 'ai'> & { ai: Omit<DoCatzSettings['ai'], 'keys'> };
 
+const names = (a: unknown) => (Array.isArray(a) ? [...new Set(a.filter((x): x is string => typeof x === 'string' && x.length > 0 && x.length < 300))] : []);
+const envNamesOf = (a: unknown) => names(a).filter((n) => /^[A-Za-z_][\w.]*$/.test(n));
+function mcatzpOf(m: Partial<McatzpSettings> | undefined): McatzpSettings {
+  const clients = (Array.isArray(m?.clients) ? m.clients.filter((c) => typeof c?.name === 'string' && typeof c?.approvedAt === 'string') : []).filter((c, i, all) => all.findIndex((x) => x.name === c.name) === i);
+  return { on: m?.on === true, all: m?.all === true, projects: names(m?.projects), logs: m?.logs !== false, resources: m?.resources !== false, envValues: m?.envValues !== false, envPublic: envNamesOf(m?.envPublic), envSecret: envNamesOf(m?.envSecret), changes: m?.changes !== false, clients };
+}
+
 /** DoCatz's own copy (config.json): the fallback, and the on / off switch. */
 function local(): Stored {
   const s = store.extra<Partial<Stored>>(KEY) ?? {};
   const ai = { ...DC_AI_DEFAULTS, ...(s.ai ?? {}) };
   return {
     theme: THEMES.includes(s.theme as Theme) ? (s.theme as Theme) : 'system',
+    mcatzp: mcatzpOf(s.mcatzp),
     ai: { enabled: ai.enabled === true, provider: PROVIDERS.includes(ai.provider) ? ai.provider : 'anthropic', models: ai.models ?? {}, baseUrls: ai.baseUrls ?? {}, off: Array.isArray(ai.off) ? ai.off.filter((f): f is DcAiFeature => FEATURES.includes(f)) : [] },
   };
 }
@@ -39,6 +47,7 @@ function stored(): Stored {
   const provider = sh.ai?.provider ?? s.ai.provider;
   return {
     theme: sh.theme && THEMES.includes(sh.theme) ? sh.theme : s.theme,
+    mcatzp: s.mcatzp,
     ai: { enabled: s.ai.enabled, provider: PROVIDERS.includes(provider) ? provider : 'anthropic', models: sh.ai?.models ?? s.ai.models, baseUrls: sh.ai?.baseUrls ?? s.ai.baseUrls, off: s.ai.off },
   };
 }
@@ -52,6 +61,13 @@ export function settings(): DoCatzSettings {
   const mine = encryptedKeys();
   const shared = new Set(readShared().ai?.keys ?? []);
   return { ...s, ai: { ...s.ai, keys: PROVIDERS.filter((p) => shared.has(p) || mine[p]) } };
+}
+
+/** Approved MCatzP clients: only the main process changes them (a pairing answered, Revoke). */
+export function setMcatzpClients(clients: McatzpSettings['clients']): void {
+  const s = stored();
+  s.mcatzp.clients = clients;
+  store.setExtra(KEY, s);
 }
 
 /** Only known fields, of the right type; model ids and URLs are trimmed and bounded. */
@@ -82,6 +98,18 @@ export function setSettings(patch: DoCatzSettingsPatch): DoCatzSettings {
       if (url) s.ai.baseUrls[p as DcAiProvider] = url.slice(0, 500);
       else delete s.ai.baseUrls[p as DcAiProvider];
     }
+  }
+  const m = patch.mcatzp;
+  if (m) {
+    if (m.on !== undefined) s.mcatzp.on = m.on === true;
+    if (m.all !== undefined) s.mcatzp.all = m.all === true;
+    if (m.logs !== undefined) s.mcatzp.logs = m.logs === true;
+    if (m.resources !== undefined) s.mcatzp.resources = m.resources === true;
+    if (m.changes !== undefined) s.mcatzp.changes = m.changes === true;
+    if (m.envValues !== undefined) s.mcatzp.envValues = m.envValues === true;
+    if (m.envPublic !== undefined) s.mcatzp.envPublic = envNamesOf(m.envPublic);
+    if (m.envSecret !== undefined) s.mcatzp.envSecret = envNamesOf(m.envSecret);
+    if (m.projects !== undefined) s.mcatzp.projects = names(m.projects);
   }
   store.setExtra(KEY, s);
   // The theme and the connection are shared with DevCatz; Ask AI on / off is not.

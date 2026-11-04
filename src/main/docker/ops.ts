@@ -28,7 +28,7 @@ interface ApiContainer {
   Labels: Record<string, string>;
   NetworkSettings?: { Networks?: Record<string, { IPAddress?: string }> };
   HostConfig?: { NetworkMode?: string };
-  Mounts?: { Type: string; Name?: string }[];
+  Mounts?: { Type: string; Name?: string; Source?: string }[];
 }
 
 const PROJECT = 'com.docker.compose.project';
@@ -83,6 +83,12 @@ export async function listContainers(urlFor: UrlFor): Promise<DcContainer[]> {
   const list = await docker.get<ApiContainer[]>('/containers/json', { all: true });
   // DoCatz's own router (domains for containers without a published port) is not one of the user's containers.
   return list.filter((c) => !c.Labels?.['com.mrcatz.docatz.router']).map((c) => shape(c, urlFor)).sort((a, b) => (a.project ?? '￿').localeCompare(b.project ?? '￿') || a.name.localeCompare(b.name));
+}
+
+/** The folders and files on the computer that running containers mount. */
+export async function bindMounts(): Promise<string[]> {
+  const list = await docker.get<ApiContainer[]>('/containers/json');
+  return list.flatMap((c) => (c.Mounts ?? []).filter((m) => m.Type === 'bind' && m.Source).map((m) => m.Source!));
 }
 
 /** Raw labels of every container (compose projects and their files). */
@@ -224,6 +230,31 @@ export async function followLogs(id: string, tail: number, token: string, emit: 
   });
   res.on('error', (e) => emit({ token, lines: [], ended: true, error: e.message }));
   return () => res.destroy();
+}
+
+/** The last `tail` lines of a container's log, once (for MCatzP): the same reading as followLogs, without following. */
+export async function logsTail(id: string, tail: number, signal?: AbortSignal): Promise<{ stream: 'stdout' | 'stderr'; time: string; text: string }[]> {
+  const i = await inspect(id);
+  const res: IncomingMessage = await docker.stream('GET', `/containers/${encodeURIComponent(id)}/logs`, { query: { follow: false, stdout: true, stderr: true, timestamps: true, tail } });
+  const lines: { stream: 'stdout' | 'stderr'; time: string; text: string }[] = [];
+  const partial: Record<'stdout' | 'stderr', string> = { stdout: '', stderr: '' };
+  const add = (stream: 'stdout' | 'stderr', data: Buffer) => {
+    const parts = (partial[stream] + data.toString('utf8')).split('\n');
+    partial[stream] = parts.pop() ?? '';
+    for (const l of parts) {
+      const sp = l.indexOf(' ');
+      lines.push({ stream, time: sp > 0 ? l.slice(0, sp) : '', text: (sp > 0 ? l.slice(sp + 1) : l).replace(/\r$/, '') });
+    }
+  };
+  const feed = i.Config.Tty ? (c: Buffer) => add('stdout', c) : demuxer(add);
+  signal?.addEventListener('abort', () => res.destroy(), { once: true });
+  await new Promise<void>((done, fail) => {
+    res.on('data', feed);
+    res.on('end', done);
+    res.on('close', done);
+    res.on('error', fail);
+  });
+  return lines.slice(-tail);
 }
 
 // ---------------------------------------------------------------- exec

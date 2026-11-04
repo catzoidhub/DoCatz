@@ -5,7 +5,8 @@ import type { DcApiSource } from '@shared/types';
 /**
  * Whether a compose project has routes DialCatz can import (#25; user 2026-11-03: "hanya untuk projek yang memiliki API
  * … kecuali misal laravel yang sudah punya route list"), so Open in DialCatz shows only there:
- * - a Laravel service (DialCatz runs `php artisan route:list` in its container);
+ * - a Laravel service (DialCatz runs `php artisan route:list` in its container), or a Goravel one (its own program's
+ *   `artisan route:list`);
  * - an OpenAPI / Swagger file in the project's folder;
  * - a framework that serves its own OpenAPI document (FastAPI and Litestar always; NestJS with @nestjs/swagger,
  *   Express / Fastify / Hono with their OpenAPI packages, Django with drf-spectacular or drf-yasg, Flask with
@@ -50,6 +51,7 @@ export function serviceSpec(dir: string | null, service: string | null): string 
 /** The project's API for DialCatz, or null. `frameworks`: what its services are built from (container marks). */
 export function apiSource(dir: string | null, frameworks: string[]): DcApiSource | null {
   if (frameworks.includes('laravel')) return { how: 'laravel', detail: 'Laravel’s route list' };
+  if (frameworks.includes('goravel')) return { how: 'goravel', detail: 'Goravel’s route list' };
   const always = frameworks.find((f) => ALWAYS.has(f));
   if (always) return { how: 'served', detail: `${always === 'fastapi' ? 'FastAPI' : 'Litestar'}’s OpenAPI document` };
   if (!dir) return null;

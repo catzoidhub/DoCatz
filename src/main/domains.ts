@@ -539,7 +539,7 @@ export class Domains {
         // DevCatz may already answer on that address: then DoCatz needs no DNS of its own.
         if (!this.dns.running && !(await this.devcatzDns())) throw new Error(this.dns.error ?? `The local DNS could not start on port ${DNS_PORT}`);
         step(1, isWin ? 'Add-DnsClientNrptRule, through one administrator prompt' : 'One password prompt');
-        const r = await installResolver(tld, DNS_HOST, DNS_PORT, `DoCatz wants to resolve ${names} to this Mac.`);
+        const r = await installResolver(tld, DNS_HOST, DNS_PORT, `DoCatz wants to resolve ${names} to this ${isWin ? 'PC' : 'Mac'}.`);
         if (!r.ok) throw new Error(cancelled(r) ? 'Cancelled' : r.message);
         step(2);
         for (let i = 0; i < 8 && !(await this.resolves()); i++) await new Promise((res) => setTimeout(res, 500));

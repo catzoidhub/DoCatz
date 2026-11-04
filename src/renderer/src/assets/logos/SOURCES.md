@@ -142,3 +142,4 @@ Rust frameworks (Simple Icons 13.21.0 for Rust, Actix, Rocket, Tauri, Leptos, Be
 - silo.svg — https://github.com/pgsty/silo/blob/main/.github/silo.svg (the SILO emblem from its repository)
 - sonic.png — https://valeriansaliou.github.io/sonic/images/banner.jpg (Sonic's mascot, cropped from the project banner; copied from DevCatz)
 - sockudo.png — https://github.com/sockudo.png (Sockudo's GitHub organisation avatar; copied from DevCatz)
+- goravel.svg — https://www.goravel.dev/logo.svg (the Goravel logo from its site)

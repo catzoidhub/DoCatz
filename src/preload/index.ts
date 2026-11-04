@@ -1,5 +1,5 @@
 import { contextBridge, ipcRenderer } from 'electron';
-import { API_METHODS, type DcDomains, type DcLogChunk, type DcRun, type DcTermData, type DcUpdateState, type DoCatzApi, type DoCatzSettings, type EngineState, type TaskProgress } from '@shared/types';
+import { API_METHODS, type DcDomains, type DcLogChunk, type DcRun, type DcTermData, type DcUpdateState, type DoCatzApi, type DoCatzSettings, type EngineState, type McatzpAsk, type McatzpInstallProgress, type TaskProgress } from '@shared/types';
 
 const api = Object.fromEntries(API_METHODS.map((m) => [m, (...args: unknown[]) => ipcRenderer.invoke(`docatz:${m}`, ...args)])) as unknown as DoCatzApi;
 
@@ -34,6 +34,12 @@ const bridge = {
   onRun: (cb: (r: DcRun) => void) => on('app:run', cb),
   /** A sibling app's Download & Install as it goes (null: none). */
   onSiblingTask: (cb: (t: TaskProgress | null) => void) => on('app:siblingTask', cb),
+  /** A question from an MCP client waiting for the user (null: none left). */
+  onMcatzpAsk: (cb: (ask: McatzpAsk | null) => void) => on('app:mcatzpAsk', cb),
+  /** Install MCatzP running in Settings. */
+  onMcatzpInstalling: (cb: (p: McatzpInstallProgress | null) => void) => on('app:mcatzpInstalling', cb),
+  /** The MCatzP version to update to changed (null: up to date). */
+  onMcatzpUpdate: (cb: (version: string | null) => void) => on('app:mcatzpUpdate', cb),
   /** Moving images and volumes from another Docker (#11), as it goes. */
   onMigrate: (cb: (t: TaskProgress | null) => void) => on('app:migrate', cb),
   /** The settings changed outside the window (another Catzoid app changed the shared theme / AI connection). */

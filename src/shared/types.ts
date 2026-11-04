@@ -11,6 +11,7 @@ export type Theme = 'system' | 'light' | 'dark';
 export interface DoCatzSettings {
   theme: Theme;
   ai: DcAiSettings;
+  mcatzp: McatzpSettings;
 }
 
 // ------------------------------------------------------------ AI (Catzoid family #58)
@@ -61,7 +62,86 @@ export const DC_AI_FEATURES: { id: DcAiFeature; label: string; hint: string; sen
   { id: 'logs', label: 'Explain with AI in Logs', hint: 'Explains why a container fails or keeps restarting from the log lines you pick, and what to change.', sends: 'the log lines you pick (obvious secrets masked), the container’s image, state, exit code and restart count' },
   { id: 'compose', label: 'Write and fix compose files and Dockerfiles', hint: 'A compose file or Dockerfile from plain words, or a fix for one that fails — always shown before anything is saved.', sends: 'the file open in the editor (obvious secrets masked) and your request' },
 ];
-export type DoCatzSettingsPatch = { theme?: Theme; ai?: Partial<Omit<DcAiSettings, 'keys'>> };
+export type DoCatzSettingsPatch = { theme?: Theme; ai?: Partial<Omit<DcAiSettings, 'keys'>>; mcatzp?: Partial<Omit<McatzpSettings, 'clients'>> };
+
+/** Settings → MCatzP: the local channel an AI client reaches DoCatz through. DoCatz's own, per computer. */
+export interface McatzpSettings {
+  /** The switch. Off by default. */
+  on: boolean;
+  /** Every compose project and loose container is shared, new ones too. */
+  all: boolean;
+  /** Compose projects shared one by one. */
+  projects: string[];
+  /** Container and engine logs go out too, with secrets masked (they can hold personal data). */
+  logs: boolean;
+  /** Images, volumes, networks, builds and disk use, which belong to the engine and not to one project. */
+  resources: boolean;
+  /** Values of environment variables whose names are not secret. Off: only names. */
+  envValues: boolean;
+  /** Corrections to telling secrets by the name: these are not secret, these are. */
+  envPublic: string[];
+  envSecret: string[];
+  /** Clients may ask for changes, each confirmed in a dialog. Off: they only read. */
+  changes: boolean;
+  /** Approved clients, until Revoke. Set by the main process only. */
+  clients: { name: string; approvedAt: string }[];
+}
+
+export interface McatzpActivity {
+  time: string;
+  client: string;
+  method: string;
+  action?: string;
+  tier?: 'read' | 'change' | 'destructive';
+  outcome: 'ok' | 'refused' | 'declined' | 'failed';
+  reason?: string;
+}
+
+/** `pair`: may this client connect at all? `change`: may it do this (built from the real parameters)? */
+export type McatzpAsk =
+  | { id: string; kind: 'pair'; client: string; version: string | null }
+  | { id: string; kind: 'change'; client: string; title: string; facts: { label: string; value: string }[]; allowSession: boolean; /** Destructive: this must be typed to allow it. */ typeName?: string };
+
+/** Who is approved in one Catzoid app (each app's bridge.json). */
+export interface McatzpApproval {
+  id: 'devcatz' | 'dbcatz' | 'dialcatz' | 'docatz';
+  name: string;
+  clients: string[];
+}
+
+/** The MCatzP program on this computer and what the site offers it (Settings → MCatzP). */
+export interface McatzpSetup {
+  path: string | null;
+  version: string | null;
+  /** `catzoid`: installed from here, updated from here. Others update their own way (Homebrew, npm). */
+  source: 'catzoid' | 'homebrew' | 'other' | null;
+  latest: string | null;
+  /** The site has no build for this computer. */
+  noBuild: boolean;
+  /** The site could not be asked. */
+  error: string | null;
+  /** The site was asked; until then latest and noBuild say nothing. */
+  checked: boolean;
+}
+/** An AI assistant MCatzP can be added to. */
+export interface McatzpTarget {
+  id: McatzpTargetId;
+  label: string;
+  /** It is on this computer. */
+  found: boolean;
+  /** What its mcatzp entry runs; null when it has none. */
+  command: string | null;
+  /** The entry runs the copy in use. */
+  current: boolean;
+  /** The account signed in to it, when the assistant keeps that on this computer. */
+  account?: string;
+}
+export type McatzpTargetId = 'claude-code' | 'zcode' | 'claude-desktop' | 'cursor' | 'windsurf' | 'vscode' | 'cline' | 'gemini' | 'codex' | 'opencode' | 'copilot' | 'kiro' | 'antigravity' | 'qwen' | 'lmstudio' | 'roo' | 'amp' | 'warp';
+export interface McatzpInstallProgress {
+  phase: 'download' | 'install';
+  received: number;
+  total: number;
+}
 
 /** A turn of an AI conversation. */
 export interface DcAiTurn {
@@ -170,7 +250,7 @@ export interface EngineState {
 
 /** The framework a service is built from (the same names as DevCatz's), for its mark. */
 export type DcFrameworkName =
-  | 'nuxt' | 'next' | 'vite-vue' | 'vite-react' | 'vite-svelte' | 'tanstack-start' | 'vite' | 'astro' | 'sveltekit' | 'angular' | 'nestjs' | 'express' | 'node'
+  | 'nuxt' | 'next' | 'vite-vue' | 'vite-react' | 'vite-svelte' | 'tanstack-start' | 'vite' | 'astro' | 'sveltekit' | 'angular' | 'nestjs' | 'express' | 'node' | 'static'
   | 'go' | 'rust'
   | 'laravel' | 'codeigniter' | 'yii' | 'symfony' | 'cakephp' | 'wordpress' | 'drupal' | 'joomla' | 'slim' | 'php'
   | 'django' | 'flask' | 'fastapi' | 'litestar' | 'python';
@@ -217,7 +297,7 @@ export interface DcContainer {
 }
 /** Where DialCatz finds a project's routes (#25): Laravel's route list, an OpenAPI file, or one the app serves. */
 export interface DcApiSource {
-  how: 'laravel' | 'file' | 'served';
+  how: 'laravel' | 'goravel' | 'file' | 'served';
   /** In words: "Laravel’s route list", "docs/openapi.yaml", "the OpenAPI document the app serves (apps/api/package.json)". */
   detail: string;
   /** The OpenAPI file sits in this service's own folder (it counts even for a plain image). */
@@ -329,7 +409,7 @@ export interface DcTermData {
   data: string;
   exited?: boolean;
 }
-export type DcComposeAction = 'up' | 'build-up' | 'down' | 'restart' | 'stop' | 'pull' | 'build';
+export type DcComposeAction = 'up' | 'build-up' | 'down' | 'down-volumes' | 'restart' | 'stop' | 'pull' | 'build';
 /** A compose run (up / down / restart / pull / build) or an image pull as it goes (#17). */
 export interface DcRun {
   token: string;
@@ -628,6 +708,26 @@ export interface DoCatzApi {
   migrateCancel(): Promise<void>;
   /** The routes DialCatz can import for a compose project, or null (no Open in DialCatz then). */
   apiSource(project: string, service?: string | null): Promise<DcApiSource | null>;
+  mcatzpActivity(): Promise<McatzpActivity[]>;
+  mcatzpClearActivity(): Promise<void>;
+  /** Forgets a client and closes every connection (a new token). */
+  mcatzpRevoke(name: string): Promise<void>;
+  /** The program on this computer; `askSite` false answers at once from the disk. */
+  mcatzpSetup(askSite?: boolean): Promise<McatzpSetup>;
+  mcatzpInstall(): Promise<McatzpSetup>;
+  mcatzpInstallCancel(): Promise<void>;
+  /** Where each client is approved, across the Catzoid apps. */
+  mcatzpApprovals(): Promise<McatzpApproval[]>;
+  mcatzpTargets(): Promise<McatzpTarget[]>;
+  mcatzpAddToClient(id: McatzpTargetId): Promise<McatzpTarget[]>;
+  mcatzpRemoveFromClient(id: McatzpTargetId): Promise<McatzpTarget[]>;
+  /** A question waiting when the window opens. */
+  /** The MCatzP version to update to, for the badges in Settings; null when up to date. */
+  mcatzpUpdate(): Promise<string | null>;
+  mcatzpPending(): Promise<McatzpAsk | null>;
+  mcatzpAnswer(id: string, answer: 'deny' | 'once' | 'session', typed?: string): Promise<void>;
+  /** The system clipboard, through the main process (navigator.clipboard can say Copied with nothing copied). */
+  copyText(text: string): Promise<void>;
   /** Each sibling's installed version and the newest the Catzoid site has for this computer (#60); null when unknown. */
   siblingVersions(): Promise<Record<SiblingApp, { installed: string | null; latest: string | null }>>;
   /** Windows: DevCatz's Docker gateways from its bridge.json, installed or not ([] elsewhere, or without DevCatz). */
@@ -747,7 +847,7 @@ export interface DoCatzApi {
 
 /** Every method of the bridge, registered as `docatz:<name>` IPC handlers. */
 export const API_METHODS: (keyof DoCatzApi)[] = [
-  'appInfo', 'aboutInfo', 'updateState', 'updateCheck', 'updateDownload', 'updateCancel', 'updateSkip', 'updateInstall', 'updateConfigure', 'reportPreview', 'reportSend', 'captureWindow', 'reportError', 'reportSettings', 'reportConfigure', 'uninstallPlan', 'uninstallRun', 'settings', 'setSettings', 'setAiKey', 'aiModels', 'aiProbe', 'aiTest', 'aiCancel', 'aiAsk', 'aiPreviewAsk', 'aiExplainLog', 'aiPreviewLog', 'aiFile', 'aiPreviewFile', 'openUrl', 'reveal', 'openSibling', 'apiSource', 'siblingVersions', 'migrateSources', 'migrateInventory', 'migrateRun', 'migrateCancel', 'devcatzGateways', 'databases', 'siblingInstall', 'siblingInstallCancel', 'runInTerminal',
+  'appInfo', 'aboutInfo', 'updateState', 'updateCheck', 'updateDownload', 'updateCancel', 'updateSkip', 'updateInstall', 'updateConfigure', 'reportPreview', 'reportSend', 'captureWindow', 'reportError', 'reportSettings', 'reportConfigure', 'uninstallPlan', 'uninstallRun', 'settings', 'setSettings', 'setAiKey', 'aiModels', 'aiProbe', 'aiTest', 'aiCancel', 'aiAsk', 'aiPreviewAsk', 'aiExplainLog', 'aiPreviewLog', 'aiFile', 'aiPreviewFile', 'openUrl', 'reveal', 'openSibling', 'mcatzpActivity', 'mcatzpClearActivity', 'mcatzpRevoke', 'mcatzpSetup', 'mcatzpInstall', 'mcatzpInstallCancel', 'mcatzpApprovals', 'mcatzpTargets', 'mcatzpAddToClient', 'mcatzpRemoveFromClient', 'mcatzpUpdate', 'mcatzpPending', 'mcatzpAnswer', 'copyText', 'apiSource', 'siblingVersions', 'migrateSources', 'migrateInventory', 'migrateRun', 'migrateCancel', 'devcatzGateways', 'databases', 'siblingInstall', 'siblingInstallCancel', 'runInTerminal',
   'engineState', 'engineStart', 'engineStop', 'engineRestart', 'engineReset', 'engineConfigure', 'engineCancel', 'engineSetupWsl', 'restartComputer', 'engineLog', 'contextSet', 'cliInstall', 'cliPath', 'diskUsage',
   'containers', 'container', 'containerEnv', 'containerAction', 'containerRemove', 'stats', 'logsFollow', 'logsStop', 'termOpen', 'termInput', 'termResize', 'termClose', 'files', 'fileSave', 'projects', 'composePick', 'composeRun', 'composeProject', 'runCancel', 'readText', 'writeText',
   'images', 'imageRemove', 'imagePull', 'volumes', 'volumeRemove', 'networks', 'networkRemove', 'prunePreview', 'prune',

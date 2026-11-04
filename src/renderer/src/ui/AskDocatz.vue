@@ -22,6 +22,7 @@ import { api, bytes, openContainer, section, settings } from '../store';
 import CatMood from './CatMood.vue';
 import askMark from '../assets/logos/ask-catzoid.svg';
 import { askConsequence, askDetail, askRisk, askWord, runAsk } from './ask';
+import CopyName from './CopyName.vue';
 
 /**
  * Ask DoCatz (the ✦ button, ⌘K; DoCatz TODO #20, after DevCatz's Ask DevCatz): say in plain words what DoCatz should
@@ -252,7 +253,7 @@ onMounted(() => {
           <li v-for="it in prunePreview?.items ?? []" :key="it.id" class="flex gap-2"><span class="min-w-0 flex-1 truncate">{{ it.name }}</span><span v-if="it.size !== null" class="opacity-50">{{ bytes(it.size) }}</span></li>
         </ul>
         <label class="block">
-          <span class="label-caps mb-1 block">Type <span class="font-mono normal-case tracking-normal opacity-100">{{ askWord(reviewing.a) }}</span> to go ahead</span>
+          <span class="label-caps mb-1 block">Type <CopyName :value="askWord(reviewing.a)" /> to go ahead</span>
           <input v-model="typed" class="input input-sm w-full font-mono" :placeholder="askWord(reviewing.a)" spellcheck="false" autocomplete="off" autofocus />
         </label>
         <div class="modal-action">

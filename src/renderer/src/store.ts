@@ -1,5 +1,5 @@
 import { computed, ref, watch } from 'vue';
-import type { DcAiFeature, DcContainer, DcDatabase, DcGateway, DcProjectPrefs, DcStats, DcReportKind, DcRun, DcUpdateState, DoCatzSettings, DoCatzSettingsPatch, EngineState, SiblingApp, TaskProgress, Theme } from '@shared/types';
+import type { DcAiFeature, DcContainer, DcDatabase, DcGateway, DcProjectPrefs, DcStats, DcReportKind, DcRun, DcUpdateState, DoCatzSettings, DoCatzSettingsPatch, EngineState, McatzpAsk, McatzpInstallProgress, SiblingApp, TaskProgress, Theme } from '@shared/types';
 import { currentOS } from '@shared/platform';
 
 /** The preload bridge (see src/preload/index.ts). */
@@ -49,7 +49,7 @@ export const PROJECT_ICON = 'M3.196 12.87l-.825.483a.75.75 0 0 0 0 1.294l7.25 4.
 /** A compose file open in the compose dialog. */
 export const composeFile = ref<string | null>(null);
 export const composeOpen = ref(false);
-export const settingsTab = ref<'general' | 'domains' | 'ai' | 'updates' | 'about'>('general');
+export const settingsTab = ref<'general' | 'domains' | 'ai' | 'mcatzp' | 'updates' | 'about'>('general');
 export const findText = ref('');
 export const findFocus = ref(0);
 
@@ -129,6 +129,12 @@ export async function dbcatzLink(id: string): Promise<boolean> {
 /** Another Catzoid app is not installed and a link wants it: the Download & Install dialog, and that install's steps. */
 export const siblingAsk = ref<{ which: SiblingApp; link: string } | null>(null);
 export const siblingTask = ref<TaskProgress | null>(null);
+/** A question from an MCP client waiting for the user (the pairing and change dialog). */
+export const mcatzpAsk = ref<McatzpAsk | null>(null);
+/** Install MCatzP running in Settings. */
+export const mcatzpInstalling = ref<McatzpInstallProgress | null>(null);
+/** The MCatzP version to update to, for the badges in Settings. */
+export const mcatzpUpdate = ref<string | null>(null);
 
 /** Stats samples per container (the list polls every 5 s), the last 10 minutes — the Monitoring charts read them. */
 export const HISTORY_SAMPLES = 120;
@@ -261,6 +267,11 @@ export async function init(): Promise<void> {
     void refreshContainers();
   });
   api.onSiblingTask((t) => (siblingTask.value = t));
+  api.onMcatzpAsk((a) => (mcatzpAsk.value = a));
+  api.onMcatzpInstalling((p) => (mcatzpInstalling.value = p));
+  api.onMcatzpUpdate((v) => (mcatzpUpdate.value = v));
+  void api.mcatzpUpdate().then((v) => (mcatzpUpdate.value = v));
+  mcatzpAsk.value = await api.mcatzpPending();
   api.onRun((r) => {
     runs.value = { ...runs.value, [r.token]: r };
   });

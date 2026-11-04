@@ -1,4 +1,4 @@
-import { app, dialog, ipcMain, shell } from 'electron';
+import { app, clipboard, dialog, ipcMain, shell } from 'electron';
 import { execFile, spawn } from 'node:child_process';
 import { binDir } from './paths';
 import { isWin } from './platform';
@@ -6,10 +6,13 @@ import { createWriteStream, readFileSync, statSync, writeFileSync } from 'node:f
 import { basename, join } from 'node:path';
 import { pipeline } from 'node:stream/promises';
 import type { Duplex } from 'node:stream';
-import { API_METHODS, type DcContainer, type DoCatzApi, type SiblingApp, type TaskProgress } from '@shared/types';
+import { API_METHODS, type DcContainer, type DcRun, type DoCatzApi, type SiblingApp, type TaskProgress } from '@shared/types';
 import { AskAi } from './ai';
 import { buildDetail, buildLogs, listBuilds, removeBuild } from './builds';
 import { composeEnvironmentKeys, envCreate, ownServices, envRead, envRemove, envSetLocked, envState, envWrite, expectedEnv } from './envs';
+import { MCATZP_TARGETS } from '@catzoid/mcatzp-host';
+import { Mcatzp } from './mcatzp';
+import * as mcatzpSetup from './mcatzp/install';
 import { writeBridge } from './bridge';
 import { listDatabases, updateDatabases } from './dbservices';
 import { migrate, migrateInventory, migrateSources } from './migrate';
@@ -76,6 +79,7 @@ async function refresh(): Promise<void> {
     } catch {
       containers = [];
     }
+    if (engine.backend.watchMounts) engine.backend.watchMounts(containers.length ? await ops.bindMounts().catch(() => []) : []);
     const streams = await updateDatabases(containers).catch((e) => (console.warn('databases:', (e as Error).message), []));
     await domains.setRoutes(containers, streams).catch((e) => console.warn('routes:', (e as Error).message));
     // Frameworks of services built from source (their marks): learnt per project in the background.
@@ -142,7 +146,14 @@ engine.onUp = () => {
 };
 domains.onChange = () => void refresh();
 domains.onState = (d) => send('app:domains', d);
-runs.onChange = (r) => send('app:run', r);
+/** The latest compose runs and pulls, for MCatzP's list_runs. */
+const recentRuns = new Map<string, DcRun>();
+runs.onChange = (r) => {
+  recentRuns.delete(r.token);
+  recentRuns.set(r.token, r);
+  if (recentRuns.size > 20) recentRuns.delete(recentRuns.keys().next().value!);
+  send('app:run', r);
+};
 
 // ---------------------------------------------------------------- logs and terminals
 
@@ -195,6 +206,7 @@ app.on('activate', () => openWindow());
 // The engine and the menu bar stay when the window closes; Quit ends DoCatz (macOS keeps the VM running).
 app.on('window-all-closed', () => undefined);
 app.on('before-quit', () => {
+  mcatzp?.quit();
   for (const stop of follows.values()) stop();
   for (const t of terms.values()) t.socket.destroy();
   stopEvents?.();
@@ -221,8 +233,25 @@ const siblingInfo: Record<SiblingApp, [string, string, string]> = {
 const SIBLING_REPO: Record<SiblingApp, string> = { devcatz: 'catzoidhub/DevCatz', dbcatz: 'catzoidhub/DBCatz', dialcatz: 'catzoidhub/DialCatz' };
 let siblingTask: TaskProgress | null = null;
 let migrateAbort: AbortController | null = null;
+let migrateTask: TaskProgress | null = null;
 let siblingLatest: { at: number; latest: Record<SiblingApp, string | null> } | null = null;
 let siblingAbort: AbortController | null = null;
+let mcatzp: Mcatzp;
+let mcatzpInstalling: AbortController | null = null;
+/** Settings' MCatzP badge: asked once a day while the switch is on, and whenever the page or an install has news. */
+const MCATZP_UPDATE_EVERY_MS = 24 * 3600_000;
+let mcatzpUpdate: string | null = null;
+async function checkMcatzpUpdate(): Promise<void> {
+  const next = settings().mcatzp.on ? await mcatzpSetup.availableUpdate().catch(() => mcatzpUpdate) : null;
+  if (next === mcatzpUpdate) return;
+  mcatzpUpdate = next;
+  send('app:mcatzpUpdate', next);
+}
+const mcatzpClient = (id: unknown) => {
+  const known = MCATZP_TARGETS.find((t) => t === id);
+  if (!known) throw new Error('Unknown client');
+  return known;
+};
 
 function api(): DoCatzApi {
   const win = () => mainWindow() ?? undefined;
@@ -258,11 +287,61 @@ function api(): DoCatzApi {
         await engine.reset('reset').catch((e) => console.warn('uninstall: VM not removed:', (e as Error).message));
         removeContext();
         await setCliPath(false).catch(() => undefined);
+        await mcatzp.set(false).catch(() => undefined);
         await domains.uninstall(withShared);
         domains.stop();
       }),
     settings: async () => settings(),
-    setSettings: async (patch) => setSettings(patch),
+    setSettings: async (patch) => {
+      const next = setSettings(patch);
+      if (patch.mcatzp) {
+        if (patch.mcatzp.on !== undefined) {
+          await mcatzp.set(next.mcatzp.on);
+          void checkMcatzpUpdate();
+        }
+        mcatzp.scopesChanged();
+      }
+      return next;
+    },
+    mcatzpActivity: async () => mcatzp.activity.list(),
+    mcatzpClearActivity: async () => mcatzp.activity.clear(),
+    mcatzpRevoke: (name) => mcatzp.revoke(String(name)),
+    mcatzpSetup: async (askSite) => {
+      if (askSite !== false) void checkMcatzpUpdate();
+      return mcatzpSetup.setupState(askSite !== false);
+    },
+    mcatzpUpdate: async () => mcatzpUpdate,
+    mcatzpInstall: async () => {
+      if (mcatzpInstalling) throw new Error('MCatzP is being installed');
+      mcatzpInstalling = new AbortController();
+      const report = (p: Parameters<Parameters<typeof mcatzpSetup.install>[0]>[0] | null) => send('app:mcatzpInstalling', p);
+      try {
+        report({ phase: 'download', received: 0, total: 0 });
+        await mcatzpSetup.install(report, mcatzpInstalling.signal);
+      } catch (e) {
+        // Cancel is an answer, not a failure.
+        if (!mcatzpInstalling?.signal.aborted) throw e;
+      } finally {
+        mcatzpInstalling = null;
+        report(null);
+      }
+      void checkMcatzpUpdate();
+      return mcatzpSetup.setupState();
+    },
+    mcatzpInstallCancel: async () => mcatzpInstalling?.abort(),
+    mcatzpApprovals: () => mcatzpSetup.approvals(),
+    mcatzpTargets: () => mcatzpSetup.targets(),
+    mcatzpAddToClient: async (id) => {
+      await mcatzpSetup.addToClient(mcatzpClient(id));
+      return mcatzpSetup.targets();
+    },
+    mcatzpRemoveFromClient: async (id) => {
+      await mcatzpSetup.removeFromClient(mcatzpClient(id));
+      return mcatzpSetup.targets();
+    },
+    mcatzpPending: async () => mcatzp.pending(),
+    mcatzpAnswer: async (id, answer, typed) => mcatzp.answer(String(id), answer === 'once' || answer === 'session' ? answer : 'deny', typeof typed === 'string' ? typed : undefined),
+    copyText: async (text) => clipboard.writeText(String(text)),
     setAiKey: async (provider, key) => setAiKey(provider, key),
     aiModels: (provider) => ai.models(provider),
     aiProbe: (provider, models) => ai.probe(provider, models),
@@ -305,7 +384,7 @@ function api(): DoCatzApi {
       const dir = list.find((c) => c.workingDir)?.workingDir ?? null;
       const own = serviceSpec(dir, service ?? null);
       if (own) return { how: 'file', detail: own, own: true };
-      return apiSource(dir, list.map((c) => c.framework?.framework).filter((f): f is NonNullable<typeof f> => !!f));
+      return apiSource(dir, list.flatMap((c) => [c.framework?.framework, c.framework?.library]).filter((f): f is NonNullable<typeof f> => !!f));
     },
     migrateSources: () => migrateSources(),
     migrateInventory: (source) => needEngine(() => migrateInventory(source)),
@@ -314,7 +393,7 @@ function api(): DoCatzApi {
       migrateAbort = new AbortController();
       const items = [...images.map((i) => `Image ${i}`), ...volumes.map((v) => `Volume ${v}`)];
       let task: TaskProgress = { kind: 'migrate', title: 'Moving to DoCatz', steps: items, step: 0 };
-      const set = (p: Partial<TaskProgress>) => send('app:migrate', (task = { ...task, ...p }));
+      const set = (p: Partial<TaskProgress>) => send('app:migrate', (migrateTask = task = { ...task, ...p }));
       set({});
       try {
         const failed = await needEngine(() => migrate(source, images, volumes, set, migrateAbort!.signal));
@@ -468,7 +547,13 @@ function api(): DoCatzApi {
     networks: () => needEngine(() => ops.listNetworks()),
     networkRemove: (id) => needEngine(() => ops.networkRemove(id)),
     prunePreview: (kind) => needEngine(() => ops.prunePreview(kind)),
-    prune: (kind) => needEngine(() => ops.prune(kind)),
+    prune: (kind) =>
+      needEngine(async () => {
+        const r = await ops.prune(kind);
+        // The space goes back to the computer at once; the answer does not wait for it.
+        void engine.backend.trim?.().catch((e) => console.warn('trim:', (e as Error).message));
+        return r;
+      }),
 
     projectPrefs: async () => projectPrefs(),
     setProjectPrefs: async (p) => setProjectPrefs(p),
@@ -536,6 +621,22 @@ app.whenReady().then(async () => {
   reporter.start();
   updater.start();
   applySettings((s) => send('app:settings', s));
+  mcatzp = new Mcatzp(
+    api(),
+    {
+      show: (ask) => {
+        if (ask) openWindow();
+        send('app:mcatzpAsk', ask);
+      },
+      settingsChanged: () => send('app:settings', settings()),
+      open: (route) => openWindow(route),
+      refresh: () => void refresh(),
+    },
+    { databasePasswords: () => listDatabases().map((d) => d.password), logsTail: (id, tail) => ops.logsTail(id, tail), run: (token) => recentRuns.get(token) ?? null, runs: () => [...recentRuns.values()].reverse(), tasks: () => ({ migrate: migrateTask, sibling: siblingTask }) },
+  );
+  void mcatzp.set(settings().mcatzp.on).catch(() => undefined);
+  setTimeout(() => void checkMcatzpUpdate(), 30_000);
+  setInterval(() => void checkMcatzpUpdate(), MCATZP_UPDATE_EVERY_MS);
   void migrateToShared().catch((e) => console.warn('Shared settings migration:', (e as Error).message));
   applyMenu();
   tray.start();
