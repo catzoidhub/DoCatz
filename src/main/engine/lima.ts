@@ -1,4 +1,6 @@
+import { spawn } from 'node:child_process';
 import { existsSync, lstatSync, mkdirSync, readFileSync, readlinkSync, rmSync, symlinkSync, unlinkSync, writeFileSync } from 'node:fs';
+import { homedir } from 'node:os';
 import { join } from 'node:path';
 import type { EngineConfig } from '@shared/types';
 import { limaPackage, VERSIONS } from '../components';
@@ -6,6 +8,7 @@ import { fetchPinned } from '../download';
 import { docatzDir, DOCATZ_HOME, socketPath } from '../paths';
 import { lastLine, run } from '../proc';
 import type { Backend, BackendStatus, StepReporter } from './backend';
+import { MountEvents } from './mountevents';
 
 /**
  * macOS: Lima (Apache-2.0) runs one Linux VM on Apple's Virtualization.framework (`vmType: vz`) with virtiofs mounts
@@ -18,6 +21,8 @@ import type { Backend, BackendStatus, StepReporter } from './backend';
 const NAME = 'docatz';
 const limaDir = () => docatzDir('lima');
 const limaHome = () => docatzDir('vm');
+/** Inside the VM: a time and a path per change; setting the file's own time raises the event there. */
+const TOUCH_LOOP = 'while IFS= read -r t && IFS= read -r p; do touch -c -m -d "@$t" -- "$p" 2>/dev/null; done';
 const limactl = () => join(limaDir(), 'bin', 'limactl');
 const vmDir = () => join(limaHome(), NAME);
 const forwarded = () => join(vmDir(), 'sock', 'docker.sock');
@@ -46,7 +51,7 @@ cpus: ${c.cpus}
 memory: ${c.memoryGiB}GiB
 disk: ${c.diskGiB}GiB
 mountType: virtiofs
-mountInotify: true
+mountInotify: false
 mounts:
 - location: "~"
   writable: true
@@ -147,11 +152,34 @@ export class LimaBackend implements Backend {
       const c = await run(limactl(), ['create', `--name=${NAME}`, '--tty=false', file], { env: env(), signal: r.signal, onLine: (l) => r.detail(lastLine(l)) });
       if (c.code !== 0) throw new Error(`The VM could not be created: ${lastLine(c.stderr) || `limactl exited ${c.code}`}`);
     }
+    await this.lateEventsOff();
     r.step(2, 'The first start downloads Ubuntu and installs Docker inside — a few minutes.');
     const s = await run(limactl(), ['start', '--tty=false', '--timeout=15m', NAME], { env: env(), signal: r.signal, onLine: (l) => r.detail(lastLine(l)) });
     if (s.code !== 0) throw new Error(`The VM did not start: ${lastLine(s.stderr) || `limactl exited ${s.code}`}`);
     r.step(3);
     this.linkSocket();
+  }
+
+  /** A VM made before DoCatz raised file events itself: Lima's own come 7 to 16 s late and watch the whole home folder. */
+  private async lateEventsOff(): Promise<void> {
+    if (!/^mountInotify:\s*true/m.test(readFileSync(join(vmDir(), 'lima.yaml'), 'utf8'))) return;
+    const r = await run(limactl(), ['edit', '--tty=false', '--set=.mountInotify = false', NAME], { env: env(), timeout: 60_000 });
+    if (r.code !== 0) console.warn('mountInotify:', lastLine(r.stderr));
+  }
+
+  private events = new MountEvents(
+    (onExit) => {
+      const sh = spawn(limactl(), ['shell', '--workdir=/', NAME, 'sudo', 'sh', '-c', TOUCH_LOOP], { env: env(), stdio: ['pipe', 'ignore', 'ignore'] });
+      sh.on('exit', onExit);
+      sh.on('error', onExit);
+      sh.stdin.on('error', () => undefined);
+      return { write: (text) => void sh.stdin.write(text), stop: () => void sh.kill() };
+    },
+    () => [homedir(), '/tmp/docatz'],
+  );
+
+  watchMounts(folders: string[]): void {
+    this.events.sync(folders);
   }
 
   /** ~/.docatz/run/docker.sock → the socket Lima forwards (a short, stable path for the context and the CLIs). */
@@ -180,6 +208,10 @@ export class LimaBackend implements Backend {
     rmSync(socketPath(), { force: true });
   }
 
+  async trim(): Promise<void> {
+    await run(limactl(), ['shell', NAME, 'sudo', 'fstrim', '-a'], { env: env(), timeout: 120_000 });
+  }
+
   async configure(c: EngineConfig): Promise<void> {
     if (!(await this.instance())) {
       writeFileSync(join(DOCATZ_HOME, 'docatz.yaml'), yaml(c));
@@ -201,6 +233,7 @@ export class LimaBackend implements Backend {
   }
 
   dispose(): void {
-    /* Lima's host agent runs on its own: the engine keeps running when DoCatz quits, like a menu bar app's engine. */
+    // Lima's host agent runs on its own: the engine keeps running when DoCatz quits. Only the events stop with DoCatz.
+    this.events.stop();
   }
 }

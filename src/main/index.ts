@@ -79,6 +79,7 @@ async function refresh(): Promise<void> {
     } catch {
       containers = [];
     }
+    if (engine.backend.watchMounts) engine.backend.watchMounts(containers.length ? await ops.bindMounts().catch(() => []) : []);
     const streams = await updateDatabases(containers).catch((e) => (console.warn('databases:', (e as Error).message), []));
     await domains.setRoutes(containers, streams).catch((e) => console.warn('routes:', (e as Error).message));
     // Frameworks of services built from source (their marks): learnt per project in the background.
@@ -529,7 +530,13 @@ function api(): DoCatzApi {
     networks: () => needEngine(() => ops.listNetworks()),
     networkRemove: (id) => needEngine(() => ops.networkRemove(id)),
     prunePreview: (kind) => needEngine(() => ops.prunePreview(kind)),
-    prune: (kind) => needEngine(() => ops.prune(kind)),
+    prune: (kind) =>
+      needEngine(async () => {
+        const r = await ops.prune(kind);
+        // The space goes back to the computer at once; the answer does not wait for it.
+        void engine.backend.trim?.().catch((e) => console.warn('trim:', (e as Error).message));
+        return r;
+      }),
 
     projectPrefs: async () => projectPrefs(),
     setProjectPrefs: async (p) => setProjectPrefs(p),

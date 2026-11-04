@@ -38,6 +38,10 @@ export interface Backend {
   stop(): Promise<void>;
   /** Deletes the VM and its disk. */
   reset(): Promise<void>;
+  /** Hands the disk space the VM freed back to the computer, now rather than at the VM's weekly trim. */
+  trim?(): Promise<void>;
+  /** Raises file events inside the VM for these folders (the mounts of the running containers). */
+  watchMounts?(folders: string[]): void;
   /** Applies CPU / memory / disk / Rosetta to a stopped VM (some need a restart, the window says which). */
   configure(config: EngineConfig): Promise<void>;
   /** Installs what the computer needs first (Windows: WSL, through one administrator prompt). */

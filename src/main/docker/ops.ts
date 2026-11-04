@@ -28,7 +28,7 @@ interface ApiContainer {
   Labels: Record<string, string>;
   NetworkSettings?: { Networks?: Record<string, { IPAddress?: string }> };
   HostConfig?: { NetworkMode?: string };
-  Mounts?: { Type: string; Name?: string }[];
+  Mounts?: { Type: string; Name?: string; Source?: string }[];
 }
 
 const PROJECT = 'com.docker.compose.project';
@@ -83,6 +83,12 @@ export async function listContainers(urlFor: UrlFor): Promise<DcContainer[]> {
   const list = await docker.get<ApiContainer[]>('/containers/json', { all: true });
   // DoCatz's own router (domains for containers without a published port) is not one of the user's containers.
   return list.filter((c) => !c.Labels?.['com.mrcatz.docatz.router']).map((c) => shape(c, urlFor)).sort((a, b) => (a.project ?? '￿').localeCompare(b.project ?? '￿') || a.name.localeCompare(b.name));
+}
+
+/** The folders and files on the computer that running containers mount. */
+export async function bindMounts(): Promise<string[]> {
+  const list = await docker.get<ApiContainer[]>('/containers/json');
+  return list.flatMap((c) => (c.Mounts ?? []).filter((m) => m.Type === 'bind' && m.Source).map((m) => m.Source!));
 }
 
 /** Raw labels of every container (compose projects and their files). */
