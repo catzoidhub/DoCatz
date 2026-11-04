@@ -170,7 +170,7 @@ export interface EngineState {
 
 /** The framework a service is built from (the same names as DevCatz's), for its mark. */
 export type DcFrameworkName =
-  | 'nuxt' | 'next' | 'vite-vue' | 'vite-react' | 'vite-svelte' | 'tanstack-start' | 'vite' | 'astro' | 'sveltekit' | 'angular' | 'nestjs' | 'express' | 'node'
+  | 'nuxt' | 'next' | 'vite-vue' | 'vite-react' | 'vite-svelte' | 'tanstack-start' | 'vite' | 'astro' | 'sveltekit' | 'angular' | 'nestjs' | 'express' | 'node' | 'static'
   | 'go' | 'rust'
   | 'laravel' | 'codeigniter' | 'yii' | 'symfony' | 'cakephp' | 'wordpress' | 'drupal' | 'joomla' | 'slim' | 'php'
   | 'django' | 'flask' | 'fastapi' | 'litestar' | 'python';

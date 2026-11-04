@@ -32,6 +32,7 @@ const TAGS: Record<string, [string, string]> = {
   vite: ['Vite', 'vite'],
   express: ['Express', 'express'],
   node: ['Node.js', 'nodedotjs'],
+  static: ['HTML', 'html5'],
   django: ['Django', 'django'],
   flask: ['Flask', 'flask'],
   fastapi: ['FastAPI', 'fastapi'],
@@ -42,6 +43,7 @@ const TAGS: Record<string, [string, string]> = {
 
 /** Web frameworks of Go, Rust, Python and Node apps (DcFramework.library). */
 const LIBRARIES: Record<string, [string, string]> = {
+  goravel: ['Goravel', 'goravel'],
   gin: ['Gin', 'gin'],
   echo: ['Echo', 'echo'],
   fiber: ['Fiber', 'fiber'],
@@ -88,6 +90,8 @@ const LIBRARIES: Record<string, [string, string]> = {
   hono: ['Hono', 'hono'],
   koa: ['Koa', 'koa'],
   express: ['Express', 'express'],
+  bun: ['Bun', 'bun'],
+  deno: ['Deno', 'deno'],
 };
 
 /** The name and mark of a framework; a Go / Python app's own web framework (`library`) wins when known. */
