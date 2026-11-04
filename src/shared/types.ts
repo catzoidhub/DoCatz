@@ -76,6 +76,11 @@ export interface McatzpSettings {
   logs: boolean;
   /** Images, volumes, networks, builds and disk use, which belong to the engine and not to one project. */
   resources: boolean;
+  /** Values of environment variables whose names are not secret. Off: only names. */
+  envValues: boolean;
+  /** Corrections to telling secrets by the name: these are not secret, these are. */
+  envPublic: string[];
+  envSecret: string[];
   /** Clients may ask for changes, each confirmed in a dialog. Off: they only read. */
   changes: boolean;
   /** Approved clients, until Revoke. Set by the main process only. */
@@ -404,7 +409,7 @@ export interface DcTermData {
   data: string;
   exited?: boolean;
 }
-export type DcComposeAction = 'up' | 'build-up' | 'down' | 'restart' | 'stop' | 'pull' | 'build';
+export type DcComposeAction = 'up' | 'build-up' | 'down' | 'down-volumes' | 'restart' | 'stop' | 'pull' | 'build';
 /** A compose run (up / down / restart / pull / build) or an image pull as it goes (#17). */
 export interface DcRun {
   token: string;

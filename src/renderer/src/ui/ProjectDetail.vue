@@ -65,6 +65,14 @@ async function compose(action: DcComposeAction) {
   if (!run.value) doing.value = null;
 }
 watch(() => run.value?.done, (done) => done && (doing.value = null));
+// A run a client started through MCatzP shows here too, as if started from this page (token mcatzp:<project>:…).
+watch(
+  () => Object.keys(runs.value).filter((t) => t.startsWith(`mcatzp:${props.project}:`)).at(-1),
+  (t) => {
+    if (t && !doing.value) runToken.value = t;
+  },
+  { immediate: true },
+);
 /** Stops the running compose; what it already started or stopped stays so (compose does not roll back). */
 const cancel = () => runToken.value && attempt(() => api.runCancel(runToken.value!));
 function editCompose(file: string) {

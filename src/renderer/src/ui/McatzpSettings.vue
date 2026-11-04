@@ -27,6 +27,7 @@ async function save(patch: Partial<Omit<McatzpSettings, 'clients'>>) {
   const next = await attempt(() => api.setSettings({ mcatzp: patch }));
   if (next) settings.value = next;
 }
+const saveNames = (key: 'envPublic' | 'envSecret', text: string) => save({ [key]: text.split(/[\s,]+/).filter((n) => /^[A-Za-z_][\w.]*$/.test(n)) });
 function toggleProject(id: string, yes: boolean) {
   const next = new Set(shared.value);
   if (yes) next.add(id);
@@ -301,7 +302,26 @@ const groups = computed(() => {
             <input type="checkbox" class="checkbox checkbox-sm mt-0.5" :checked="s.resources" @change="save({ resources: ($event.target as HTMLInputElement).checked })" />
             <span>Images, volumes, networks and builds<span class="block text-xs opacity-60">They belong to the engine, not to one project: names, sizes and what uses them, whichever projects you share. Never what is inside a volume.</span></span>
           </label>
-          <p class="text-xs opacity-60">Environment variables: clients see their names, never their values.</p>
+          <label class="flex cursor-pointer items-start gap-2 text-sm">
+            <input type="checkbox" class="checkbox checkbox-sm mt-0.5" :checked="s.changes" @change="save({ changes: ($event.target as HTMLInputElement).checked })" />
+            <span>Let clients ask for changes<span class="block text-xs opacity-60">Up, stop, build and pull, start and stop a container, the engine, a project's environment, its compose file. DoCatz shows you each one first; for what cannot be undone you type a name. There is no terminal: a client never runs a command of its own. Off: clients can only read.</span></span>
+          </label>
+        </div>
+
+        <div class="space-y-2 border-t border-base-300/50 pt-3">
+          <span class="label-caps block">Environment variables</span>
+          <label class="flex cursor-pointer items-start gap-2 text-sm">
+            <input type="checkbox" class="checkbox checkbox-sm mt-0.5" :checked="s.envValues" @change="save({ envValues: ($event.target as HTMLInputElement).checked })" />
+            <span>Values that are not secret<span class="block text-xs opacity-60">Names are always readable in shared projects. A secret's value only goes out one at a time, after you allow it. DoCatz tells them apart by the name; correct it below.</span></span>
+          </label>
+          <label class="flex items-center gap-2 text-xs">
+            <span class="w-20 shrink-0 opacity-70">Not secret</span>
+            <input class="input input-sm min-w-0 flex-1 font-mono text-xs" :value="s.envPublic.join(', ')" placeholder="SESSION_DRIVER, TOKEN_TTL" spellcheck="false" @change="saveNames('envPublic', ($event.target as HTMLInputElement).value)" />
+          </label>
+          <label class="flex items-center gap-2 text-xs">
+            <span class="w-20 shrink-0 opacity-70">Secret</span>
+            <input class="input input-sm min-w-0 flex-1 font-mono text-xs" :value="s.envSecret.join(', ')" placeholder="INTERNAL_URL, LICENSE" spellcheck="false" @change="saveNames('envSecret', ($event.target as HTMLInputElement).value)" />
+          </label>
         </div>
         </div>
 

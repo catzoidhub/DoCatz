@@ -6,7 +6,7 @@ import { createWriteStream, readFileSync, statSync, writeFileSync } from 'node:f
 import { basename, join } from 'node:path';
 import { pipeline } from 'node:stream/promises';
 import type { Duplex } from 'node:stream';
-import { API_METHODS, type DcContainer, type DoCatzApi, type SiblingApp, type TaskProgress } from '@shared/types';
+import { API_METHODS, type DcContainer, type DcRun, type DoCatzApi, type SiblingApp, type TaskProgress } from '@shared/types';
 import { AskAi } from './ai';
 import { buildDetail, buildLogs, listBuilds, removeBuild } from './builds';
 import { composeEnvironmentKeys, envCreate, ownServices, envRead, envRemove, envSetLocked, envState, envWrite, expectedEnv } from './envs';
@@ -145,7 +145,14 @@ engine.onUp = () => {
 };
 domains.onChange = () => void refresh();
 domains.onState = (d) => send('app:domains', d);
-runs.onChange = (r) => send('app:run', r);
+/** The latest compose runs and pulls, for MCatzP's list_runs. */
+const recentRuns = new Map<string, DcRun>();
+runs.onChange = (r) => {
+  recentRuns.delete(r.token);
+  recentRuns.set(r.token, r);
+  if (recentRuns.size > 20) recentRuns.delete(recentRuns.keys().next().value!);
+  send('app:run', r);
+};
 
 // ---------------------------------------------------------------- logs and terminals
 
@@ -597,8 +604,10 @@ app.whenReady().then(async () => {
         send('app:mcatzpAsk', ask);
       },
       settingsChanged: () => send('app:settings', settings()),
+      open: (route) => openWindow(route),
+      refresh: () => void refresh(),
     },
-    { databasePasswords: () => listDatabases().map((d) => d.password), logsTail: (id, tail) => ops.logsTail(id, tail) },
+    { databasePasswords: () => listDatabases().map((d) => d.password), logsTail: (id, tail) => ops.logsTail(id, tail), run: (token) => recentRuns.get(token) ?? null, runs: () => [...recentRuns.values()].reverse() },
   );
   void mcatzp.set(settings().mcatzp.on).catch(() => undefined);
   void migrateToShared().catch((e) => console.warn('Shared settings migration:', (e as Error).message));

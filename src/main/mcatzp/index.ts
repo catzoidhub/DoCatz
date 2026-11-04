@@ -7,14 +7,22 @@ import { setBridgeMcatzp } from '../bridge';
 import { setMcatzpClients, settings } from '../settings';
 import { type EngineReads, readActions, type Scopes } from './actions';
 import { ActivityLog } from './activity';
+import { type ChangeAction, changeActions } from './changes';
+import { destructiveActions } from './destructive';
+import { SECRET_NAME } from './mask';
 
-/** An unanswered question lapses before MCatzP stops waiting (3 minutes), so a late Allow never runs for nobody. */
+/** Unanswered questions lapse before MCatzP stops waiting (3 and 10 minutes), so a late Allow never runs for nobody. */
 const PAIR_WAIT_MS = 150_000;
+const CHANGE_WAIT_MS = 9 * 60_000;
 
 /** What it needs from the window. */
 export interface McatzpWindow {
   show(ask: McatzpAsk | null): void;
   settingsChanged(): void;
+  /** After Allow: the page of what was asked (a route of openWindow's). */
+  open(route: string): void;
+  /** A change ran: the window reloads what it shows. */
+  refresh(): void;
 }
 
 /**
@@ -50,21 +58,54 @@ export class Mcatzp {
       },
       approved: () => settings().mcatzp.clients.map((c) => c.name),
       pair: (client) => this.ask({ id: randomUUID(), kind: 'pair', client: client.name, version: client.version ?? null }, PAIR_WAIT_MS).then((a) => a !== 'deny'),
-      // Only reads so far (the change tier comes with TODO #94): nothing can ask yet.
-      confirm: async () => 'deny',
+      confirm: async (req) => {
+        const change = this.changes().find((c) => c.name === req.action.name);
+        if (!change) return 'deny';
+        if (change.noDialog) return 'once';
+        // If this throws, the action never runs: its error goes to the client instead of a question.
+        const { page, ...question } = await change.preview(req.args);
+        const answer = await this.ask({ id: randomUUID(), kind: 'change', client: req.client, allowSession: req.allowSession && !question.typeName, ...question }, CHANGE_WAIT_MS, req.signal);
+        // The user is right here and just said yes: take them to what is happening. Not for allowed-for-the-session calls.
+        if (answer !== 'deny' && !req.signal.aborted && page) this.win.open(page);
+        return answer;
+      },
       log: (e) => this.activity.add(e),
     });
     setBridgeMcatzp(this.host.entry());
   }
 
   private actions(): ActionDef[] {
-    return readActions(this.api, this.scopes(), this.reads);
+    // The window follows what a client changed, as if it was done there.
+    const changes = this.changes().map((c) => ({
+      ...c,
+      run: async (args: Record<string, unknown>, ctx: Parameters<ChangeAction['run']>[1]) => {
+        const out = await c.run(args, ctx);
+        this.win.refresh();
+        return out;
+      },
+    }));
+    return [...readActions(this.api, this.scopes(), this.reads), ...changes];
+  }
+
+  private changes(): ChangeAction[] {
+    return [...changeActions(this.api, this.scopes(), this.reads), ...destructiveActions(this.api, this.scopes(), this.reads)];
   }
 
   private scopes(): Scopes {
     const s = settings().mcatzp;
     const shared = new Set(s.projects);
-    return { project: (name) => s.all || shared.has(name), loose: s.all, logs: s.logs, resources: s.resources, changes: s.changes };
+    const plain = new Set(s.envPublic);
+    const secret = new Set(s.envSecret);
+    return {
+      project: (name) => s.all || shared.has(name),
+      loose: s.all,
+      logs: s.logs,
+      resources: s.resources,
+      envValues: s.envValues,
+      secretName: (name) => secret.has(name) || (!plain.has(name) && SECRET_NAME.test(name)),
+      changes: s.changes,
+      all: s.all,
+    };
   }
 
   /** The switch: opens or closes the channel and tells bridge.json. */

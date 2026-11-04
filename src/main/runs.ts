@@ -18,6 +18,7 @@ const ARGS: Record<DcComposeAction, string[]> = {
   // Build & Up: rebuild the images, then recreate what changed (a changed .env included).
   'build-up': ['up', '--detach', '--build', '--remove-orphans'],
   down: ['down'],
+  'down-volumes': ['down', '--volumes'],
   restart: ['restart'],
   stop: ['stop'],
   pull: ['pull'],

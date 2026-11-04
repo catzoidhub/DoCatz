@@ -73,6 +73,10 @@ function openRoute(route: string) {
       openContainer.value = arg;
       containerTab.value = 'info';
     }
+  } else if (head === 'project') {
+    // After Allow on a client's change: the project's page, where its run shows.
+    section.value = 'containers';
+    if (arg) openProject.value = arg;
   } else if (head === 'compose') {
     // The project started from this file (DevCatz's `<site>-dev` too): its containers in front, the file to Up / rebuild.
     section.value = 'containers';

@@ -12,8 +12,28 @@ test('every tool the coverage file names exists', () => {
   }
 });
 
-test('every method is placed in a known way', () => {
-  expect(Object.entries(MCATZP_COVERAGE).filter(([, place]) => !/^(tool: |later: (change|destructive)|not a tool|never: |ask the user)/.test(place))).toEqual([]);
+test('nothing is left for later', () => {
+  expect(Object.entries(MCATZP_COVERAGE).filter(([, place]) => !/^(tool: |not a tool|never: )/.test(place))).toEqual([]);
+});
+
+test('a destructive tool never offers "allow for this session"', () => {
+  for (const a of allActions()) if (a.tier === 'destructive') expect(`${a.name}: ${!!a.allowSession}`).toBe(`${a.name}: false`);
+});
+
+// "Allow for this session" holds per tool, whatever the call.
+test('what edits a file, shows a secret or runs new code always asks', () => {
+  for (const name of ['env_show_secret', 'env_write', 'edit_compose_file', 'compose_up', 'compose_build_up', 'compose_build', 'pull_image', 'migrate_run', 'install_catzoid_app', 'set_domains', 'configure_engine']) expect(`${name}: ${!!allActions().find((a) => a.name === name)?.allowSession}`).toBe(`${name}: false`);
+});
+
+test('a client never names a path on this computer', () => {
+  for (const a of allActions()) {
+    if (a.name === 'list_container_files' || a.name === 'save_container_file') continue; // a path inside the container
+    expect(`${a.name}: ${Object.keys((a.input as { properties: object }).properties).filter((p) => /path|folder|dir/.test(p))}`).toBe(`${a.name}: `);
+  }
+});
+
+test('there is no terminal and no free command', () => {
+  for (const a of allActions()) expect(a.name).not.toMatch(/exec|shell|terminal|command/);
 });
 
 test('tool names are unique and every input refuses unknown fields', () => {
@@ -23,5 +43,5 @@ test('tool names are unique and every input refuses unknown fields', () => {
 });
 
 test('secret values never have a read tool', () => {
-  for (const [method, place] of Object.entries(MCATZP_COVERAGE)) if (['containerEnv', 'envRead', 'setAiKey', 'termOpen', 'termInput'].includes(method)) expect(`${method}: ${place.startsWith('tool:')}`).toBe(`${method}: false`);
+  for (const [method, place] of Object.entries(MCATZP_COVERAGE)) if (['setAiKey', 'termOpen', 'termInput', 'runInTerminal'].includes(method)) expect(`${method}: ${place.startsWith('tool:')}`).toBe(`${method}: false`);
 });

@@ -23,9 +23,10 @@ const FEATURES = DC_AI_FEATURES.map((f) => f.id);
 type Stored = Omit<DoCatzSettings, 'ai'> & { ai: Omit<DoCatzSettings['ai'], 'keys'> };
 
 const names = (a: unknown) => (Array.isArray(a) ? [...new Set(a.filter((x): x is string => typeof x === 'string' && x.length > 0 && x.length < 300))] : []);
+const envNamesOf = (a: unknown) => names(a).filter((n) => /^[A-Za-z_][\w.]*$/.test(n));
 function mcatzpOf(m: Partial<McatzpSettings> | undefined): McatzpSettings {
   const clients = (Array.isArray(m?.clients) ? m.clients.filter((c) => typeof c?.name === 'string' && typeof c?.approvedAt === 'string') : []).filter((c, i, all) => all.findIndex((x) => x.name === c.name) === i);
-  return { on: m?.on === true, all: m?.all === true, projects: names(m?.projects), logs: m?.logs !== false, resources: m?.resources !== false, changes: m?.changes === true, clients };
+  return { on: m?.on === true, all: m?.all === true, projects: names(m?.projects), logs: m?.logs !== false, resources: m?.resources !== false, envValues: m?.envValues !== false, envPublic: envNamesOf(m?.envPublic), envSecret: envNamesOf(m?.envSecret), changes: m?.changes !== false, clients };
 }
 
 /** DoCatz's own copy (config.json): the fallback, and the on / off switch. */
@@ -105,6 +106,9 @@ export function setSettings(patch: DoCatzSettingsPatch): DoCatzSettings {
     if (m.logs !== undefined) s.mcatzp.logs = m.logs === true;
     if (m.resources !== undefined) s.mcatzp.resources = m.resources === true;
     if (m.changes !== undefined) s.mcatzp.changes = m.changes === true;
+    if (m.envValues !== undefined) s.mcatzp.envValues = m.envValues === true;
+    if (m.envPublic !== undefined) s.mcatzp.envPublic = envNamesOf(m.envPublic);
+    if (m.envSecret !== undefined) s.mcatzp.envSecret = envNamesOf(m.envSecret);
     if (m.projects !== undefined) s.mcatzp.projects = names(m.projects);
   }
   store.setExtra(KEY, s);

@@ -52,7 +52,7 @@ test('container_logs masks secrets of projects not shared, and refuses what is n
     envRead: async () => ({ content: 'MAIL_PASSWORD=from-dotenv-file\n', mtime: 0 }),
   } as unknown as DoCatzApi;
   const line = 'x own-password y private-token-value z from-dotenv-file db-pass-value';
-  const tools = readActions(api, { project: (n) => n === 'shared', loose: false, logs: true, resources: true, changes: false }, { databasePasswords: () => ['db-pass-value'], logsTail: async () => [{ stream: 'stdout', time: 't', text: line }] });
+  const tools = readActions(api, { project: (n) => n === 'shared', loose: false, logs: true, resources: true, envValues: true, secretName: () => false, changes: false, all: false }, { databasePasswords: () => ['db-pass-value'], logsTail: async () => [{ stream: 'stdout', time: 't', text: line }], run: () => null, runs: () => [] });
   const logs = tools.find((t) => t.name === 'container_logs')!;
   const ctx = { client: 'test', signal: new AbortController().signal };
   const out = (await logs.run({ container: 'a' }, ctx)).text;
@@ -61,10 +61,10 @@ test('container_logs masks secrets of projects not shared, and refuses what is n
 });
 
 test('logs off: refused, naming where to turn them on', async () => {
-  const tools = readActions({ containers: async () => [] } as unknown as DoCatzApi, { project: () => true, loose: true, logs: false, resources: true, changes: false }, { databasePasswords: () => [], logsTail: async () => [] });
+  const tools = readActions({ containers: async () => [] } as unknown as DoCatzApi, { project: () => true, loose: true, logs: false, resources: true, envValues: true, secretName: () => false, changes: false, all: true }, { databasePasswords: () => [], logsTail: async () => [], run: () => null, runs: () => [] });
   await expect(tools.find((t) => t.name === 'container_logs')!.run({ container: 'a' }, { client: 't', signal: new AbortController().signal }) as Promise<unknown>).rejects.toThrow(/Settings → MCatzP/);
 });
 
-test('no read tool takes a path on this computer or returns an env value by its shape', () => {
-  for (const a of allActions()) expect(a.tier).toBe('read');
+test('every tool is a known tier', () => {
+  for (const a of allActions()) expect(['read', 'change', 'destructive']).toContain(a.tier);
 });
