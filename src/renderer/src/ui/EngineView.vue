@@ -8,6 +8,7 @@ import DcNavButtons from './DcNavButtons.vue';
 import PruneDialog from './PruneDialog.vue';
 import TaskSteps from './TaskSteps.vue';
 import WslSetup from './WslSetup.vue';
+import CopyName from './CopyName.vue';
 import MigrateDialog from './MigrateDialog.vue';
 
 /**
@@ -267,7 +268,7 @@ const copy = (t: string) => {
           <div class="min-w-0"><h3 class="text-lg font-semibold tracking-tight">Reset the engine?</h3><p class="text-sm opacity-70">Every container, image and volume in DoCatz goes. The next start sets the engine up fresh.</p></div>
         </div>
         <label class="block">
-          <span class="label-caps mb-1 block">Type <span class="font-mono normal-case tracking-normal opacity-100">reset</span> to go ahead</span>
+          <span class="label-caps mb-1 block">Type <CopyName value="reset" /> to go ahead</span>
           <input v-model="resetTyped" class="input input-sm w-full font-mono" placeholder="reset" spellcheck="false" autocomplete="off" autofocus />
         </label>
         <div class="modal-action"><button type="button" class="btn btn-ghost btn-sm" @click="resetting = false">Cancel</button><button class="btn btn-error btn-sm" :disabled="resetTyped.trim().toLowerCase() !== 'reset'">Reset</button></div>

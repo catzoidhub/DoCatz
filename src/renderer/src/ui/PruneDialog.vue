@@ -3,6 +3,7 @@ import { computed, onMounted, ref } from 'vue';
 import type { DcPruneKind, DcPrunePreview } from '@shared/types';
 import { api, bytes, errorText, notify } from '../store';
 import CatMood from './CatMood.vue';
+import CopyName from './CopyName.vue';
 
 /** Clean up with a preview (DoCatz TODO #14): exactly what goes is listed first, then one click removes it. */
 const props = defineProps<{ kind: DcPruneKind }>();
@@ -61,7 +62,7 @@ async function go() {
           </ul>
         </div>
         <label v-if="needsWord && preview.items.length" class="block">
-          <span class="label-caps mb-1 block">Type <span class="font-mono normal-case tracking-normal opacity-100">delete</span> to remove the data</span>
+          <span class="label-caps mb-1 block">Type <CopyName value="delete" /> to remove the data</span>
           <input v-model="typed" class="input input-sm w-full font-mono" placeholder="delete" spellcheck="false" autocomplete="off" />
         </label>
       </template>
