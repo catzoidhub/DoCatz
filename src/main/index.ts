@@ -232,6 +232,7 @@ const siblingInfo: Record<SiblingApp, [string, string, string]> = {
 const SIBLING_REPO: Record<SiblingApp, string> = { devcatz: 'catzoidhub/DevCatz', dbcatz: 'catzoidhub/DBCatz', dialcatz: 'catzoidhub/DialCatz' };
 let siblingTask: TaskProgress | null = null;
 let migrateAbort: AbortController | null = null;
+let migrateTask: TaskProgress | null = null;
 let siblingLatest: { at: number; latest: Record<SiblingApp, string | null> } | null = null;
 let siblingAbort: AbortController | null = null;
 let mcatzp: Mcatzp;
@@ -374,7 +375,7 @@ function api(): DoCatzApi {
       migrateAbort = new AbortController();
       const items = [...images.map((i) => `Image ${i}`), ...volumes.map((v) => `Volume ${v}`)];
       let task: TaskProgress = { kind: 'migrate', title: 'Moving to DoCatz', steps: items, step: 0 };
-      const set = (p: Partial<TaskProgress>) => send('app:migrate', (task = { ...task, ...p }));
+      const set = (p: Partial<TaskProgress>) => send('app:migrate', (migrateTask = task = { ...task, ...p }));
       set({});
       try {
         const failed = await needEngine(() => migrate(source, images, volumes, set, migrateAbort!.signal));
@@ -607,7 +608,7 @@ app.whenReady().then(async () => {
       open: (route) => openWindow(route),
       refresh: () => void refresh(),
     },
-    { databasePasswords: () => listDatabases().map((d) => d.password), logsTail: (id, tail) => ops.logsTail(id, tail), run: (token) => recentRuns.get(token) ?? null, runs: () => [...recentRuns.values()].reverse() },
+    { databasePasswords: () => listDatabases().map((d) => d.password), logsTail: (id, tail) => ops.logsTail(id, tail), run: (token) => recentRuns.get(token) ?? null, runs: () => [...recentRuns.values()].reverse(), tasks: () => ({ migrate: migrateTask, sibling: siblingTask }) },
   );
   void mcatzp.set(settings().mcatzp.on).catch(() => undefined);
   void migrateToShared().catch((e) => console.warn('Shared settings migration:', (e as Error).message));

@@ -62,12 +62,13 @@ export function destructiveActions(api: DoCatzApi, scopes: Scopes, reads: Engine
         const p = await projectOf(a.project);
         const token = `mcatzp:${p.name}:${randomUUID()}`;
         let failed: string | null = null;
+        const known = await knownSecrets(api, reads).catch(() => []);
         void api.composeProject(p.name, a.volumes === true ? 'down-volumes' : 'down', token).catch((e: Error) => (failed = e.message));
         const r = await follow(ctx, () => {
           if (failed) return { message: failed, done: true, error: failed };
           const run = reads.run(token);
-          return run ? { message: run.lines.at(-1)?.slice(0, 200) ?? run.title, done: run.done, error: run.error } : null;
-        }, `Still going: list_runs shows it (${token}).`);
+          return run ? { message: run.lines.at(-1) ?? run.title, done: run.done, error: run.error } : null;
+        }, `Still going: list_runs shows it (${token}).`, known);
         if (r.done && r.error) throw new Error(maskText(r.error, await knownSecrets(api, reads)));
         return ok(r.done ? { project: p.name, down: true } : { project: p.name, down: false, run: token, note: r.error });
       },

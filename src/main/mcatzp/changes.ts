@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import type { ActionDef, ActionContext, CallResult } from '@catzoid/mcatzp-host';
-import type { DcComposeAction, DcContainer, DoCatzApi, McatzpAsk, SiblingApp } from '@shared/types';
+import type { DcComposeAction, DcContainer, DoCatzApi, McatzpAsk, SiblingApp, TaskProgress } from '@shared/types';
 import { type EngineReads, envNames, knownSecrets, projectFiles, reply, type Scopes } from './actions';
 import { MASK, maskText } from './mask';
 
@@ -34,16 +34,35 @@ const MASKED = `holds a masked value (${MASK}): that would replace the real one`
 
 export const NOT_SHARED = (what: string) => `${what} is not shared: the user chooses in DoCatz, Settings → MCatzP.`;
 
+interface FollowLine {
+  message: string;
+  percent?: number;
+  done: boolean;
+  error?: string;
+}
+
+/** What a client may read of a line of long work: masked first, no path on this computer, then cut. */
+export const progressLine = (line: string, known: string[]) =>
+  maskText(line, known)
+    .replace(/(?<![\w.:/-])\/(?:[^\s/:"']+\/)+[^\s/:"']*/g, '…')
+    .replace(/\b[A-Za-z]:\\[^\s"']+/g, '…')
+    .slice(0, 200);
+
+/** A task of the app as a line: the percent is the whole job, so it never goes down. */
+const taskLine = (t: TaskProgress | null): FollowLine | null =>
+  t ? { message: [t.title, t.steps[t.step], t.detail].filter(Boolean).join(': '), percent: Math.round(((t.step + (t.fraction ?? 0)) / Math.max(1, t.steps.length)) * 100), done: false } : null;
+
 /** Waits for long work while the client can follow it; then answers and the work goes on. */
-export async function follow(ctx: ActionContext, line: () => { message: string; percent?: number; done: boolean; error?: string } | null, still: string): Promise<{ done: boolean; error?: string }> {
+export async function follow(ctx: ActionContext, line: () => FollowLine | null | Promise<FollowLine | null>, still: string, known: string[] = []): Promise<{ done: boolean; error?: string }> {
   const until = Date.now() + (ctx.progress ? 50_000 : 1_500);
   let last = '';
   for (;;) {
-    const s = line();
+    const s = await line();
     if (s?.done) return { done: true, error: s.error };
-    if (s && ctx.progress && s.message !== last) {
-      ctx.progress({ message: s.message, ...(s.percent !== undefined ? { percent: s.percent } : {}) });
-      last = s.message;
+    const message = s && ctx.progress ? progressLine(s.message, known) : '';
+    if (s && ctx.progress && message !== last) {
+      ctx.progress({ message, ...(s.percent !== undefined ? { percent: s.percent } : {}) });
+      last = message;
     }
     if (Date.now() >= until || ctx.signal.aborted) return { done: false, error: still };
     await new Promise((r) => setTimeout(r, ctx.progress ? 1000 : 150));
@@ -53,6 +72,11 @@ export async function follow(ctx: ActionContext, line: () => { message: string; 
 export function changeActions(api: DoCatzApi, scopes: Scopes, reads: EngineReads): ChangeAction[] {
   if (!scopes.changes) return [];
   const shared = (c: Pick<DcContainer, 'project'>) => (c.project ? scopes.project(c.project) : scopes.loose);
+  const followEngine = (ctx: ActionContext, work: Promise<unknown>, still: string) => {
+    let end: FollowLine | null = null;
+    work.then(() => (end = { message: '', done: true }), (e: Error) => (end = { message: '', done: true, error: e.message }));
+    return follow(ctx, async () => end ?? taskLine((await api.engineState()).task ?? null), still);
+  };
   const containerOf = async (ref: unknown): Promise<DcContainer> => {
     const r = String(ref).trim();
     const hit = (await api.containers()).find((c) => c.name === r || c.id === r || (r.length >= 6 && c.id.startsWith(r)));
@@ -95,13 +119,14 @@ export function changeActions(api: DoCatzApi, scopes: Scopes, reads: EngineReads
         const p = await projectOf(a.project);
         const token = `mcatzp:${p.name}:${randomUUID()}`;
         let failed: string | null = null;
+        const known = await knownSecrets(api, reads).catch(() => []);
         void api.composeProject(p.name, action, token).catch((e: Error) => (failed = e.message));
         ctx.signal.addEventListener('abort', () => ctx.signal.reason === 'cancelled' && void api.runCancel(token), { once: true });
         const r = await follow(ctx, () => {
           if (failed) return { message: failed, done: true, error: failed };
           const run = reads.run(token);
-          return run ? { message: run.lines.at(-1)?.slice(0, 200) ?? run.title, done: run.done, error: run.error } : null;
-        }, `Still running: list_runs shows ${p.name}'s run (${token}).`);
+          return run ? { message: run.lines.at(-1) ?? run.title, done: run.done, error: run.error } : null;
+        }, `Still running: list_runs shows ${p.name}'s run (${token}).`, known);
         if (r.done && r.error) throw new Error(maskText(r.error, await knownSecrets(api, reads)));
         return ok(r.done ? { project: p.name, action, finished: true } : { project: p.name, action, finished: false, run: token, note: r.error });
       },
@@ -359,13 +384,14 @@ export function changeActions(api: DoCatzApi, scopes: Scopes, reads: EngineReads
         resources();
         const token = `mcatzp:image:${randomUUID()}`;
         let failed: string | null = null;
+        const known = await knownSecrets(api, reads).catch(() => []);
         void api.imagePull(String(a.image), token).catch((e: Error) => (failed = e.message));
         ctx.signal.addEventListener('abort', () => ctx.signal.reason === 'cancelled' && void api.runCancel(token), { once: true });
         const r = await follow(ctx, () => {
           if (failed) return { message: failed, done: true, error: failed };
           const run = reads.run(token);
-          return run ? { message: run.lines.at(-1)?.slice(0, 200) ?? run.title, done: run.done, error: run.error } : null;
-        }, `Still pulling: list_runs shows it (${token}).`);
+          return run ? { message: run.lines.at(-1) ?? run.title, done: run.done, error: run.error } : null;
+        }, `Still pulling: list_runs shows it (${token}).`, known);
         if (r.done && r.error) throw new Error(r.error);
         return ok(r.done ? { image: a.image, finished: true } : { image: a.image, finished: false, run: token, note: r.error });
       },
@@ -373,9 +399,9 @@ export function changeActions(api: DoCatzApi, scopes: Scopes, reads: EngineReads
 
     // ---- the engine
     change('start_engine', 'Start the engine', 'Starts the Docker engine. It may take a minute: the answer comes as soon as it can; get_engine shows how it goes.', OBJECT(), async () => ({ title: 'Start the engine?', facts: [], page: 'engine' }), async (_a, ctx) => {
-      void api.engineStart().catch(() => undefined);
-      const r = await follow(ctx, () => null, 'Still starting: get_engine shows how it goes.');
-      return ok({ starting: true, note: r.error });
+      const r = await followEngine(ctx, api.engineStart(), 'Still starting: get_engine shows how it goes.');
+      if (r.done && r.error) throw new Error(r.error);
+      return ok(r.done ? { running: true } : { running: false, note: r.error });
     }),
     change('stop_engine', 'Stop the engine', 'Stops the Docker engine: every running container stops with it.', OBJECT(), async () => {
       const running = (await api.containers().catch(() => [])).filter((c) => c.state === 'running').length;
@@ -388,9 +414,9 @@ export function changeActions(api: DoCatzApi, scopes: Scopes, reads: EngineReads
       const e = await api.engineState();
       return { title: 'Restart the engine?', facts: [...fact('Applies', e.pending.join(', ')), ...fact('Then', 'Running containers stop; those set to restart come back')], page: 'engine' };
     }, async (_a, ctx) => {
-      void api.engineRestart().catch(() => undefined);
-      const r = await follow(ctx, () => null, 'Still restarting: get_engine shows how it goes.');
-      return ok({ restarting: true, note: r.error });
+      const r = await followEngine(ctx, api.engineRestart(), 'Still restarting: get_engine shows how it goes.');
+      if (r.done && r.error) throw new Error(r.error);
+      return ok(r.done ? { running: true } : { running: false, note: r.error });
     }),
     stopper('cancel_engine_start', 'Stop starting the engine', 'Stops an engine start that is under way.', OBJECT(), async () => {
       await api.engineCancel();
@@ -486,7 +512,7 @@ export function changeActions(api: DoCatzApi, scopes: Scopes, reads: EngineReads
         let error: string | null = null;
         void api.migrateRun(a.source as Parameters<DoCatzApi['migrateRun']>[0], images, volumes).then((f) => ((failed = f), (done = true)), (e: Error) => ((error = e.message), (done = true)));
         ctx.signal.addEventListener('abort', () => ctx.signal.reason === 'cancelled' && void api.migrateCancel(), { once: true });
-        await follow(ctx, () => (done ? { message: '', done: true } : null), 'Still copying');
+        await follow(ctx, () => (done ? { message: '', done: true } : taskLine(reads.tasks().migrate)), 'Still copying');
         if (error) throw new Error(error);
         return ok(done ? { finished: true, failed } : { finished: false, note: 'Still copying: it shows in DoCatz under Engine; list_images and list_volumes show what has arrived.' });
       },
@@ -549,7 +575,7 @@ export function changeActions(api: DoCatzApi, scopes: Scopes, reads: EngineReads
       const which = a.app as SiblingApp;
       void api.siblingInstall(which, `${which}://open`).then(() => (done = true), (e: Error) => ((error = e.message), (done = true)));
       ctx.signal.addEventListener('abort', () => ctx.signal.reason === 'cancelled' && void api.siblingInstallCancel(), { once: true });
-      await follow(ctx, () => (done ? { message: '', done: true } : null), 'Still installing');
+      await follow(ctx, () => (done ? { message: '', done: true } : taskLine(reads.tasks().sibling)), 'Still installing');
       if (error) throw new Error(error);
       return ok(done ? { installed: true } : { installed: false, note: 'Still installing: the dialog in DoCatz shows it; get_app_info lists it once it is there.' });
     }),
@@ -557,6 +583,21 @@ export function changeActions(api: DoCatzApi, scopes: Scopes, reads: EngineReads
       await api.siblingInstallCancel();
       return ok({ cancelling: true });
     }),
+
+    change('set_theme', 'Change the theme', 'Light, dark or following the system. Shared with Catzoid apps, so they follow.', OBJECT({ theme: { type: 'string', enum: ['system', 'light', 'dark'] } }, ['theme']), async (a) => ({ title: `Use the ${String(a.theme)} theme?`, facts: fact('Also', 'Shared with Catzoid apps'), page: null }), async (a) => {
+      await api.setSettings({ theme: a.theme as 'system' | 'light' | 'dark' });
+      return ok({ theme: a.theme });
+    }, true),
+    change('remove_build', 'Remove a build from the history', "Removes one entry from BuildKit's history. Its image and cache stay.", OBJECT({ ref: S("The build's ref (see list_builds).") }, ['ref']), async (a) => {
+      resources();
+      const b = (await api.builds()).find((x) => x.ref === String(a.ref));
+      if (!b) throw new Error(`No build ${String(a.ref)} (list_builds shows them)`);
+      return { title: `Remove ${b.name} from the history?`, facts: fact('Stays', 'Its image and cache'), page: 'builds' };
+    }, async (a) => {
+      resources();
+      await api.buildRemove(String(a.ref));
+      return ok({ removed: a.ref });
+    }, true),
 
     // ---- DoCatz's own updates
     change('check_for_updates', 'Check for a DoCatz update', 'Asks whether a newer DoCatz is out; get_app_info shows the answer.', OBJECT(), async () => ({ title: 'Check for a DoCatz update?', facts: [], page: null }), async () => {
