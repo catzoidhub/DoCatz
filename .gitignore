@@ -6,3 +6,4 @@ dist-quick/
 *.log
 dist-win/
 TODO.md
+dist-linux

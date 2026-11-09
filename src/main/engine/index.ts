@@ -180,6 +180,16 @@ export class Engine {
     this.abort?.abort();
   }
 
+  /**
+   * Found running at launch, not started by DoCatz: what a start sets up still has to be there — the `docatz` context
+   * (DevCatz runs its gateways through it) and DoCatz's CLIs. Usual on Linux, where the system's Docker Engine starts
+   * with the computer (#101).
+   */
+  async adopt(): Promise<void> {
+    setContext(null);
+    if (!cliInstalled() && !this.task) await this.installCli().catch((e) => console.warn('docker CLI:', (e as Error).message));
+  }
+
   /** Windows: installs WSL (one administrator prompt); the state then asks for a restart. */
   async setupWsl(): Promise<void> {
     if (this.busy || this.task || !this.backend.installPrerequisite) return;

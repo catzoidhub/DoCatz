@@ -649,8 +649,10 @@ app.whenReady().then(async () => {
   if (link) handleLink(link);
   else openWindow();
   // Found running (DoCatz was quit, the VM was not), or set to start with DoCatz.
-  if (await engine.up()) engine.onUp();
-  else {
+  if (await engine.up()) {
+    engine.onUp();
+    void engine.adopt();
+  } else {
     const s = await engine.state();
     if (s.status === 'stopped' && s.config.autoStart) void engine.start().catch((e) => console.warn('engine autostart:', (e as Error).message));
     else tray.update(s, []);
