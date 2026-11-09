@@ -20,7 +20,7 @@ import TimeChart, { type Series } from './TimeChart.vue';
  * before .docatz.<tld>), Containers (each service, opening its own page) and Monitoring (CPU and memory, live).
  */
 const props = defineProps<{ project: string; containers: DcContainer[]; stats: Record<string, DcStats> }>();
-/** A DevCatz service (devcatz-gw-<kind> or devcatz-svc-<kind>, Windows): read-only here, DevCatz runs it. */
+/** A DevCatz service (devcatz-gw-<kind> or devcatz-svc-<kind>): read-only here, DevCatz runs it. */
 const gateway = computed(() => {
   const kind = gatewayKindOf(props.project);
   if (!kind) return null;

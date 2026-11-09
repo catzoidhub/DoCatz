@@ -5,17 +5,22 @@ import type { DcGateway } from '@shared/types';
 import { isWin } from './platform';
 
 /**
- * DevCatz Services on DoCatz (Windows only): what DevCatz runs on DoCatz's engine, in one read-only group.
+ * DevCatz Services on DoCatz (every platform; Windows only until 2026-11-09): what DevCatz runs on DoCatz's engine, in
+ * one read-only group.
  * - Its gateways: Postal, ntfy, Gotify, Jasmin, Telegram Bot API and WAHA, as compose projects `devcatz-gw-<kind>`
  *   (WAHA is the plain container `devcatz-waha`), listed in bridge.json's `gateways`.
- * - Its servers with no Windows build (#62): Typesense, Sonic and Sockudo, as compose projects `devcatz-svc-<kind>`,
+ * - Its servers with no Windows build (#62, Windows): Typesense, Sonic and Sockudo, as compose projects `devcatz-svc-<kind>`,
  *   listed in bridge.json's `services` in the same shape.
  * DevCatz lists every entry, installed or not, with no secrets. DoCatz shows the Docker ones. Their lifecycle stays
  * DevCatz's (its `link`, devcatz://gateways/<kind> or devcatz://services/<kind>, `?install=1`, `?action=…`), as DevCatz
  * keeps `compose up` attached to them. DEVCATZ_BRIDGE points elsewhere, for tests.
  */
 
-const FILE = () => process.env.DEVCATZ_BRIDGE || join(process.env.APPDATA ?? join(homedir(), 'AppData', 'Roaming'), 'DevCatz', 'bridge.json');
+const FILE = () =>
+  process.env.DEVCATZ_BRIDGE ||
+  (isWin
+    ? join(process.env.APPDATA ?? join(homedir(), 'AppData', 'Roaming'), 'DevCatz', 'bridge.json')
+    : join(homedir(), 'Library', 'Application Support', 'DevCatz', 'bridge.json'));
 
 let cache: { mtime: number; list: DcGateway[] } | null = null;
 
@@ -23,7 +28,6 @@ const str = (v: unknown, re: RegExp): string | null => (typeof v === 'string' &&
 
 /** The Docker gateways and services DevCatz lists, checked field by field (another app writes the file); [] without it. */
 export function devcatzGateways(): DcGateway[] {
-  if (!isWin) return [];
   let mtime: number;
   try {
     mtime = statSync(FILE()).mtimeMs;

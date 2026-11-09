@@ -1,6 +1,5 @@
 import { computed, ref, watch } from 'vue';
 import type { DcAiFeature, DcContainer, DcDatabase, DcGateway, DcProjectPrefs, DcStats, DcReportKind, DcRun, DcUpdateState, DoCatzSettings, DoCatzSettingsPatch, EngineState, McatzpAsk, McatzpInstallProgress, SiblingApp, TaskProgress, Theme } from '@shared/types';
-import { currentOS } from '@shared/platform';
 
 /** The preload bridge (see src/preload/index.ts). */
 export const api = window.docatz;
@@ -81,9 +80,9 @@ export async function refreshGateways(): Promise<void> {
   }
   gateways.value = devcatzInstalled.value ? await api.devcatzGateways().catch(() => gateways.value) : [];
 }
-/** A DevCatz service's kind from its compose project (devcatz-gw-<kind>, devcatz-svc-<kind>) — Windows with DevCatz installed, where it puts them on DoCatz. */
+/** A DevCatz service's kind from its compose project (devcatz-gw-<kind>, devcatz-svc-<kind>) — with DevCatz installed, which puts them on DoCatz. */
 export const gatewayKindOf = (project: string | null | undefined): string | null =>
-  currentOS === 'windows' && devcatzInstalled.value ? (/^devcatz-(?:gw|svc)-([a-z0-9-]+)$/.exec(project ?? '')?.[1] ?? null) : null;
+  devcatzInstalled.value ? (/^devcatz-(?:gw|svc)-([a-z0-9-]+)$/.exec(project ?? '')?.[1] ?? null) : null;
 /**
  * Gateways are read-only in DoCatz: DevCatz installs, starts and stops them (it keeps `compose up` attached). DoCatz
  * only opens one there — devcatz://gateways/<kind>.
@@ -172,7 +171,7 @@ export async function refreshContainers(): Promise<void> {
   }
   // DevCatz's gateway list follows the containers (installs and starts show up as engine events too) — read first, so
   // the gateways never show a moment as ordinary projects before moving to their group.
-  if (currentOS === 'windows') await refreshGateways();
+  await refreshGateways();
   try {
     containers.value = await api.containers();
   } catch {

@@ -39,7 +39,7 @@ const byProject = computed(() => {
 /** A project's containers as the list shows them (search and Running only applied). */
 const shownOf = (p: string) => (byProject.value.get(p) ?? []).filter((c) => (!view.value.runningOnly || c.state === 'running') && (matches(c) || p.toLowerCase().includes(q.value)));
 const ordered = computed(() => {
-  // DevCatz's gateways (devcatz-gw-<kind>, Windows) have their own group at the bottom, not among the projects.
+  // DevCatz's gateways (devcatz-gw-<kind>) have their own group at the bottom, not among the projects.
   const names = [...byProject.value.keys()].filter((n) => !gatewayKindOf(n));
   if (view.value.sort === 'name') return names.sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base', numeric: true }));
   const idx = new Map(projectPrefs.value.order.map((n, i) => [n, i]));
@@ -80,8 +80,8 @@ const sections = computed<Section[]>(() => {
 const loose = computed(() => containers.value.filter((c) => !c.project && !gwContainers.value.has(c.name) && (!view.value.runningOnly || c.state === 'running') && matches(c)));
 const nothingShown = computed(() => !sections.value.some((s) => s.projects.length) && !loose.value.length && !gwRows.value.length);
 
-// ---- DevCatz Services (Windows), read-only: DevCatz runs its Docker gateways and its servers with no Windows build
-// (Typesense, Sonic, Sockudo, #62) here and owns them — it installs, starts
+// ---- DevCatz Services, read-only: DevCatz runs its Docker gateways here, and on Windows its servers with no Windows
+// build (Typesense, Sonic, Sockudo, #62) and owns them — it installs, starts
 // and stops them, keeping `compose up` attached; DoCatz lists them last with DevCatz's mark (installed or not) and opens them in DevCatz.
 const gwContainers = computed(() => new Set(gateways.value.map((g) => g.container).filter((n): n is string => !!n)));
 interface GwRow {
@@ -431,7 +431,7 @@ function openCompose() {
           </ul>
         </template>
 
-        <!-- DevCatz Services (Windows): last, with DevCatz's mark; DevCatz installs, starts and stops them -->
+        <!-- DevCatz Services: last, with DevCatz's mark; DevCatz installs, starts and stops them -->
         <template v-if="gwRows.length">
           <div class="group/sec mt-3 mb-1 flex cursor-pointer items-center gap-1.5 rounded-md py-1 pr-2 pl-1.5 text-[11px] font-semibold tracking-wide uppercase text-base-content/55 transition-colors select-none hover:text-base-content/80" :title="gwFolded ? 'Show DevCatz Services' : 'Hide DevCatz Services'" @click="listView.toggle(GW_OPEN)">
             <img :src="devcatzLogo" class="size-3.5 shrink-0 rounded-sm" alt="" />

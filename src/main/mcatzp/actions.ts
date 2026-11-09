@@ -358,10 +358,9 @@ export function readActions(api: DoCatzApi, s: Scopes, more: EngineReads): Actio
       return { tld: d.tld, https: d.https, certificateTrusted: d.ca?.trusted ?? false, namesWithoutPort: d.cleanUrls, httpsPort: d.httpsPort, httpPort: d.httpPort, resolver: d.resolver, devcatz: d.devcatz, task: d.task ? { what: d.task.what, title: d.task.task.title, error: d.task.task.error ?? null } : null };
     }),
     {
-      ...read('list_devcatz_services', 'Windows: what DevCatz runs on DoCatz\'s engine (its gateways, Typesense, Sonic, Sockudo), installed or not. DevCatz controls them; here they are only looked at.', OBJECT(), async () => {
+      ...read('list_devcatz_services', 'What DevCatz runs on DoCatz\'s engine (its gateways; on Windows also Typesense, Sonic, Sockudo), installed or not. DevCatz controls them; here they are only looked at.', OBJECT(), async () => {
         return (await api.devcatzGateways()).map((g) => ({ kind: g.kind, name: g.name, category: g.category, installed: g.installed, status: g.status, version: g.version, project: g.project, container: g.container }));
       }),
-      platforms: ['win32'],
     },
     read('list_migrate_sources', 'Other Docker engines on this computer that images and volumes can be moved from (Docker Desktop, OrbStack, Colima, Rancher Desktop): running or stopped; and how a copy under way goes (check it after migrate_run and tell the user).', OBJECT(), async () => {
       return { sources: (await api.migrateSources()).map((m) => ({ id: m.id, name: m.name, running: m.running, version: m.version })), copying: taskOut(more.tasks().migrate) };
