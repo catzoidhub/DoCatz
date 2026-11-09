@@ -37,7 +37,13 @@ function versionLine(name: string): { text: string; fresh: boolean } | null {
   return { text: v.installed, fresh: false };
 }
 
-const arch = computed(() => (info.value?.arch === 'arm64' ? 'Apple silicon' : info.value?.arch === 'x64' ? (words.os === 'macOS' ? 'Intel' : 'x64') : (info.value?.arch ?? '')));
+/** The build, with its OS: "macOS Apple silicon", "macOS Intel", "Windows x64", "Linux ARM64" — never the architecture alone. */
+const arch = computed(() => {
+  const a = info.value?.arch;
+  if (!a) return '';
+  const name = words.os === 'macOS' ? ({ arm64: 'Apple silicon', x64: 'Intel' } as Record<string, string>)[a] : ({ arm64: 'ARM64', x64: 'x64' } as Record<string, string>)[a];
+  return `${words.os} ${name ?? a}`;
+});
 const host = computed(() => (info.value ? new URL(info.value.site).host : ''));
 const links = computed(() => {
   const site = info.value?.site;
@@ -70,7 +76,7 @@ function checkUpdates() {
 function copyDetails() {
   const i = info.value;
   if (!i) return;
-  void navigator.clipboard.writeText(`DoCatz ${i.version} (${i.arch})\n${words.os} ${i.macos}\nElectron ${i.electron} · Chromium ${i.chrome} · Node.js ${i.node}`);
+  void navigator.clipboard.writeText(`DoCatz ${i.version} (${arch.value || i.arch})\n${words.os} ${i.macos}\nElectron ${i.electron} · Chromium ${i.chrome} · Node.js ${i.node}`);
   notify('success', 'Version details copied');
 }
 const uninstalling = ref(false);
