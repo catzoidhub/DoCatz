@@ -59,7 +59,7 @@ function askUninstall() {
   uninstalling.value = {
     text: `${where.length ? `It is taken out of ${where.join(', ')}. ` : ''}${
       s?.source === 'catzoid' ? `The program (${s.path}) is removed. ` : s?.path ? `Your own copy (${s.path}) stays: remove it the way you installed it. ` : ''
-    }Every Catzoid app shares MCatzP, so they lose it too; DoCatz's MCatzP switch turns off. Install it again any time.`,
+    }Every Catzoid app shares MCatzP, so they lose it too; this app's MCatzP switch turns off. Install it again any time.`,
   };
 }
 async function uninstallMcatzp() {
