@@ -6,11 +6,12 @@ import { cliInstalled, cliVersion, contextState, inPath, installCli, otherDocker
 import { docker } from '../docker/client';
 import { Cancelled } from '../download';
 import { binDir, dockerHost } from '../paths';
-import { isWin } from '../platform';
+import { isLinux, isWin } from '../platform';
 import { store } from '../store';
 import type { Backend, BackendStatus } from './backend';
 import { LimaBackend } from './lima';
 import { WslBackend } from './wsl';
+import { LinuxBackend } from './linux';
 import { machineArch } from '../machine';
 
 /**
@@ -41,7 +42,7 @@ function config(): EngineConfig {
 }
 
 export class Engine {
-  readonly backend: Backend = isWin ? new WslBackend() : new LimaBackend();
+  readonly backend: Backend = isWin ? new WslBackend() : isLinux ? new LinuxBackend() : new LimaBackend();
   private task: TaskProgress | null = null;
   private abort: AbortController | null = null;
   private busy: 'starting' | 'stopping' | null = null;
@@ -70,7 +71,7 @@ export class Engine {
       const answers = await docker.ping();
       if (!answers) {
         status = 'starting';
-        message = 'The VM is up; Docker is not answering yet.';
+        message = isLinux ? 'Docker Engine is up; it is not answering yet.' : 'The VM is up; Docker is not answering yet.';
         this.dockerInfo = null;
       } else if (!this.dockerInfo) {
         try {
@@ -152,7 +153,7 @@ export class Engine {
         if (signal.aborted) throw new Cancelled();
         await new Promise((r) => setTimeout(r, 1000));
       }
-      if (!(await docker.ping())) throw new Error('The VM started, but Docker did not answer — see the engine log');
+      if (!(await docker.ping())) throw new Error(`${isLinux ? 'Docker Engine' : 'The VM'} started, but Docker did not answer — see the engine log`);
       if (!cliInstalled()) {
         this.progress({ step: steps.length - 1, detail: undefined });
         await installCli((text, fraction) => this.progress({ detail: text, fraction }), signal);

@@ -119,8 +119,11 @@ const privacy = () => site.value && api.openUrl(`${site.value}/docs/privacy-and-
               <div class="min-w-0">
                 <p class="font-medium">1 · Set up the engine</p>
                 <p class="mt-1 text-sm opacity-70">
-                  {{ engine?.backend === 'wsl' ? 'A small Linux distro in WSL 2 runs Docker.' : 'A small Linux VM on Apple’s Virtualization framework runs Docker, with fast file sharing for your home folder.' }}
-                  The first start downloads about 1 GB and takes a few minutes; after that it starts in seconds.
+                  <template v-if="engine?.backend === 'system'">Docker Engine from your package manager runs your containers directly, with no VM; DoCatz installs and starts it after one password prompt.</template>
+                  <template v-else>
+                    {{ engine?.backend === 'wsl' ? 'A small Linux distro in WSL 2 runs Docker.' : 'A small Linux VM on Apple’s Virtualization framework runs Docker, with fast file sharing for your home folder.' }}
+                    The first start downloads about 1 GB and takes a few minutes; after that it starts in seconds.
+                  </template>
                 </p>
               </div>
               <button class="btn btn-primary btn-sm shrink-0" :disabled="!!needs" @click="setUp">Set up now</button>

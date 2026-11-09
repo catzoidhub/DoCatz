@@ -18,6 +18,8 @@ import MigrateDialog from './MigrateDialog.vue';
 const s = computed(() => engine.value);
 const c = computed(() => s.value?.config);
 const isMac = computed(() => s.value?.backend === 'lima');
+/** Linux (#101): the system's Docker Engine, no VM — no limits to set and no Reset. */
+const isSystem = computed(() => s.value?.backend === 'system');
 const busy = ref('');
 const wslTask = computed(() => s.value?.task?.title === 'Installing WSL');
 async function run(name: string, fn: () => Promise<unknown>, done?: string) {
@@ -144,6 +146,7 @@ const copy = (t: string) => {
                 <input type="checkbox" class="toggle toggle-sm toggle-primary" :checked="c.rosetta" @change="set({ rosetta: ($event.target as HTMLInputElement).checked })" />
               </label>
             </template>
+            <p v-else-if="isSystem" class="text-sm opacity-70">Docker Engine runs on {{ words.thisComputer }} itself, with no VM in between: containers use its CPUs, memory and disk directly, so there are no limits to set here.</p>
             <p v-else class="text-sm opacity-70">WSL 2 shares one set of limits between every distro: set them in <span class="font-mono">%USERPROFILE%\.wslconfig</span> (memory, processors), then restart the engine.</p>
             <label class="opt-row cursor-pointer">
               <span class="flex flex-col"><span class="label-caps">Start with DoCatz</span><span class="text-xs opacity-50">Starts the engine when DoCatz opens.</span></span>
@@ -180,7 +183,7 @@ const copy = (t: string) => {
             <div v-if="s.cli.installed" class="opt-row">
               <span class="flex min-w-0 flex-col">
                 <span class="label-caps">Add to PATH</span>
-                <span class="text-xs opacity-50">{{ isMac ? 'New terminals find DoCatz’s docker first (a line in .zprofile).' : 'New terminals find DoCatz’s docker (your user Path).' }}{{ s.cli.otherDocker ? ' Leave it off to keep using your own docker binary — the context is enough.' : '' }}</span>
+                <span class="text-xs opacity-50">{{ isMac ? 'New terminals find DoCatz’s docker first (a line in .zprofile).' : isSystem ? 'New terminals find DoCatz’s docker first (a line in .bashrc).' : 'New terminals find DoCatz’s docker (your user Path).' }}{{ s.cli.otherDocker ? ' Leave it off to keep using your own docker binary — the context is enough.' : '' }}</span>
               </span>
               <input type="checkbox" class="toggle toggle-sm toggle-primary" :checked="s.cli.inPath" @change="attempt(() => api.cliPath(($event.target as HTMLInputElement).checked)).then((r) => r && (engine = r))" />
             </div>
@@ -234,14 +237,14 @@ const copy = (t: string) => {
           <div class="card-body gap-2">
             <div class="flex items-center gap-2"><h2>Details</h2><span class="flex-1" /><button class="btn btn-ghost btn-xs" @click="showLog">Engine log</button></div>
             <dl class="selectable grid grid-cols-[8rem_1fr] gap-x-4 gap-y-1.5 text-sm">
-              <dt class="opacity-60">VM</dt><dd>{{ s.vm?.manager ?? '—' }}<template v-if="s.docker"> · kernel {{ s.docker.kernel }} · {{ s.docker.arch }}</template></dd>
+              <dt class="opacity-60">{{ isSystem ? 'Engine' : 'VM' }}</dt><dd>{{ s.vm?.manager ?? '—' }}<template v-if="s.docker"> · kernel {{ s.docker.kernel }} · {{ s.docker.arch }}</template></dd>
               <dt class="opacity-60">Folder</dt><dd class="font-mono text-xs leading-5 break-all"><a v-if="s.vm?.dir" class="link-hover cursor-pointer" @click="api.reveal(s.vm.dir)">{{ s.vm.dir }}</a></dd>
               <dt class="opacity-60">{{ words.os }}</dt><dd>{{ s.host.cpus }} CPUs · {{ s.host.memoryGiB }} GB · {{ s.host.arch }}</dd>
             </dl>
           </div>
         </div>
 
-        <div class="card border-error/25">
+        <div v-if="!isSystem" class="card border-error/25">
           <div class="card-body flex-row items-center gap-3">
             <div class="min-w-0 flex-1">
               <h2 class="font-semibold">Reset the engine</h2>

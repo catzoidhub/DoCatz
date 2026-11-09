@@ -1,8 +1,7 @@
 import { readFileSync, statSync } from 'node:fs';
-import { homedir } from 'node:os';
 import { join } from 'node:path';
 import type { DcGateway } from '@shared/types';
-import { isWin } from './platform';
+import { appDataDir } from './platform';
 
 /**
  * DevCatz Services on DoCatz (every platform; Windows only until 2026-11-09): what DevCatz runs on DoCatz's engine, in
@@ -18,9 +17,7 @@ import { isWin } from './platform';
 
 const FILE = () =>
   process.env.DEVCATZ_BRIDGE ||
-  (isWin
-    ? join(process.env.APPDATA ?? join(homedir(), 'AppData', 'Roaming'), 'DevCatz', 'bridge.json')
-    : join(homedir(), 'Library', 'Application Support', 'DevCatz', 'bridge.json'));
+  join(appDataDir('DevCatz'), 'bridge.json');
 
 let cache: { mtime: number; list: DcGateway[] } | null = null;
 

@@ -5,7 +5,7 @@ import { dirname, join } from 'node:path';
 import { buildxPackage, composePackage, dockerPackage, VERSIONS } from './components';
 import { fetchPinned } from './download';
 import { binDir, DOCATZ_HOME, docatzDir, dockerHost, exe } from './paths';
-import { isWin } from './platform';
+import { isLinux, isWin } from './platform';
 import { lastLine, run } from './proc';
 
 /**
@@ -74,7 +74,9 @@ function addPluginDir(): void {
 export function otherDocker(): string | null {
   const places = isWin
     ? [join(process.env.ProgramFiles ?? 'C:\\Program Files', 'Docker', 'Docker', 'resources', 'bin', 'docker.exe')]
-    : ['/usr/local/bin/docker', '/opt/homebrew/bin/docker', join(homedir(), '.orbstack', 'bin', 'docker')];
+    : isLinux
+      ? ['/usr/bin/docker', '/usr/local/bin/docker']
+      : ['/usr/local/bin/docker', '/opt/homebrew/bin/docker', join(homedir(), '.orbstack', 'bin', 'docker')];
   return places.find(existsSync) ?? null;
 }
 
@@ -82,7 +84,8 @@ export function otherDocker(): string | null {
 
 const MARK_START = '# >>> DoCatz >>>';
 const MARK_END = '# <<< DoCatz <<<';
-const PROFILES = () => [join(homedir(), '.zprofile'), join(homedir(), '.bash_profile')];
+/** macOS terminals are login shells (.zprofile); Linux ones are not (.bashrc, .zshrc). */
+const PROFILES = () => (isLinux ? [join(homedir(), '.bashrc'), join(homedir(), '.zshrc')] : [join(homedir(), '.zprofile'), join(homedir(), '.bash_profile')]);
 
 export async function inPath(): Promise<boolean> {
   if (isWin) {
@@ -92,7 +95,7 @@ export async function inPath(): Promise<boolean> {
   return PROFILES().some((f) => existsSync(f) && readFileSync(f, 'utf8').includes(MARK_START));
 }
 
-/** Puts ~/.docatz/bin first on PATH for new terminals (macOS: .zprofile / .bash_profile; Windows: the user's Path). */
+/** Puts ~/.docatz/bin first on PATH for new terminals (macOS: .zprofile / .bash_profile; Linux: .bashrc / .zshrc; Windows: the user's Path). */
 export async function setPath(on: boolean): Promise<void> {
   if (isWin) {
     const ps = on
@@ -108,8 +111,8 @@ export async function setPath(on: boolean): Promise<void> {
     const without = had.replace(new RegExp(`\\n?${MARK_START}[\\s\\S]*?${MARK_END}\\n?`, 'g'), '\n').replace(/\n{3,}$/, '\n\n');
     if (!on && without === had) continue;
     if (!existsSync(f) && !on) continue;
-    // .bash_profile only when it exists (making one would stop bash from reading .profile).
-    if (on && !existsSync(f) && f.endsWith('.bash_profile')) continue;
+    // .bash_profile only when it exists (making one would stop bash from reading .profile); .zshrc only for zsh users.
+    if (on && !existsSync(f) && (f.endsWith('.bash_profile') || f.endsWith('.zshrc'))) continue;
     writeFileSync(f, on ? `${without.replace(/\n*$/, '\n')}\n${block}` : without);
   }
 }

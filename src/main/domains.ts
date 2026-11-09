@@ -13,7 +13,7 @@ import { findCatzoidApp } from './companion';
 import { DNS_HOST, DNS_PORT, DnsServer } from './dns';
 import { Router, ROUTER_PORT, type RouterTarget } from './docker/router';
 import { isWeb, NOT_WEB } from './webports';
-import { isWin } from './platform';
+import { appDataDir, isWin } from './platform';
 import { lastLine, run } from './proc';
 import { readShared, SHARED_DIR, writeShared, type SharedDomains } from './shared';
 import { dataDir, store } from './store';
@@ -41,7 +41,7 @@ const ME = 'docatz';
 const CA_NAME = 'Catzoid Local CA';
 const HTTPS_KEY = 'domainsHttps';
 const NAMES_KEY = 'domainNames';
-const DEVCATZ_DATA = isWin ? join(process.env.APPDATA ?? join(homedir(), 'AppData', 'Roaming'), 'DevCatz') : join(homedir(), 'Library', 'Application Support', 'DevCatz');
+const DEVCATZ_DATA = appDataDir('DevCatz');
 /** Private ports that usually serve the app (picked first when a container publishes several). */
 const WEB_PORTS = [80, 8080, 3000, 8000, 5173, 4321, 5000, 4200, 8888, 4000, 9000, 443, 8443];
 /** Ports that are never the app (Caddy / FrankenPHP's admin API, metrics, debuggers). */
