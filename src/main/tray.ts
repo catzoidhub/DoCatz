@@ -3,6 +3,9 @@ import { join } from 'node:path';
 import type { DcContainer, EngineState } from '@shared/types';
 import { isWin } from './platform';
 
+/** Windows and Linux: the coloured icon (a black template glyph would vanish on a dark taskbar or panel). */
+const colour = process.platform !== 'darwin';
+
 /**
  * The menu bar / system tray (DoCatz TODO #16): the engine's state, Start / Stop, the running containers (grouped by
  * compose project) with their URL and Open in DoCatz, and the window. Rebuilt when the engine or the list changes.
@@ -23,9 +26,9 @@ export class DocatzTray {
   constructor(private actions: TrayActions) {}
 
   start(): void {
-    const icon = nativeImage.createFromPath(join(app.isPackaged ? process.resourcesPath : join(app.getAppPath(), 'resources'), isWin ? 'tray.png' : 'trayTemplate.png'));
+    const icon = nativeImage.createFromPath(join(app.isPackaged ? process.resourcesPath : join(app.getAppPath(), 'resources'), colour ? 'tray.png' : 'trayTemplate.png'));
     this.tray = new Tray(icon.isEmpty() ? nativeImage.createEmpty() : icon);
-    if (icon.isEmpty() && !isWin) this.tray.setTitle('🐳');
+    if (icon.isEmpty() && !colour) this.tray.setTitle('🐳');
     this.tray.setToolTip('DoCatz');
     this.update(null, []);
   }

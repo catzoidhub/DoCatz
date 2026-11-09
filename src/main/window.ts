@@ -1,10 +1,14 @@
 import { app, BrowserWindow, Menu, nativeTheme, type MenuItemConstructorOptions } from 'electron';
 import { join } from 'node:path';
-import { isWin } from './platform';
+import { isLinux, isWin } from './platform';
+
+/** Windows and Linux: the page draws its own title strip with the system buttons over its right end (no traffic lights). */
+const overlay = isWin || isLinux;
 
 /**
  * The DoCatz window (one) and the app menu. Menu items reach the window as `app:command`. On Windows the window has
  * no menu bar (title bar overlay): the ☰ button opens the same menu and unhandled shortcuts run its items (as DBCatz).
+ * Linux (#101) does the same, as DevCatz does there (macOS's inset traffic lights would leave it without window buttons).
  */
 
 let win: BrowserWindow | null = null;
@@ -39,9 +43,11 @@ export function send(command: AppCommand, arg?: string): void {
 }
 
 function titleBarOverlay(): { color: string; symbolColor: string; height: number } {
+  // Linux (GNOME): the buttons bring their own round grey backgrounds, so no strip behind them (as DevCatz).
+  if (isLinux) return { color: '#00000000', symbolColor: nativeTheme.shouldUseDarkColors ? '#e5e7eb' : '#1f2937', height: 48 };
   return nativeTheme.shouldUseDarkColors ? { color: '#2b2d34', symbolColor: '#e5e7eb', height: 48 } : { color: '#e7e8ec', symbolColor: '#1f2937', height: 48 };
 }
-if (isWin) nativeTheme.on('updated', () => win && !win.isDestroyed() && win.setTitleBarOverlay(titleBarOverlay()));
+if (overlay) nativeTheme.on('updated', () => win && !win.isDestroyed() && win.setTitleBarOverlay(titleBarOverlay()));
 
 /** Opens (or brings forward) the window; `route` is a place in it (containers/<name>, engine, settings/about …). */
 export function openWindow(route?: string): void {
@@ -58,7 +64,7 @@ export function openWindow(route?: string): void {
     minWidth: 880,
     minHeight: 540,
     title: 'DoCatz',
-    ...(isWin
+    ...(overlay
       ? { titleBarStyle: 'hidden' as const, titleBarOverlay: titleBarOverlay(), backgroundColor: nativeTheme.shouldUseDarkColors ? '#1d1f24' : '#f6f7f9' }
       : { titleBarStyle: 'hiddenInset' as const, trafficLightPosition: { x: 16, y: 18 }, backgroundColor: '#00000000', vibrancy: 'sidebar' as const }),
     show: false,
@@ -99,7 +105,7 @@ function template(): MenuItemConstructorOptions[] {
   return [
     {
       label: app.name,
-      submenu: isWin
+      submenu: overlay
         ? [item('About DoCatz', 'about'), item(updateLabel, 'checkUpdates'), sep, item('Settings…', 'settings', 'CmdOrCtrl+,'), sep, { role: 'quit', label: 'Exit' }]
         : [item('About DoCatz', 'about'), item(updateLabel, 'checkUpdates'), sep, item('Settings…', 'settings', 'CmdOrCtrl+,'), sep, { role: 'services' }, sep, { role: 'hide' }, { role: 'hideOthers' }, { role: 'unhide' }, sep, { role: 'quit' }],
     },
@@ -127,7 +133,7 @@ function template(): MenuItemConstructorOptions[] {
         item('Forward', 'navForward', 'CmdOrCtrl+]'),
       ],
     },
-    { role: 'windowMenu', submenu: isWin ? [{ role: 'minimize' }] : [{ role: 'minimize' }, { role: 'zoom' }, sep, { role: 'front' }] },
+    { role: 'windowMenu', submenu: overlay ? [{ role: 'minimize' }] : [{ role: 'minimize' }, { role: 'zoom' }, sep, { role: 'front' }] },
     { role: 'help', submenu: [item('Report a Bug…', 'reportBug'), item('Send Feedback…', 'sendFeedback')] },
   ];
 }

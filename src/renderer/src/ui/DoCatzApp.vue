@@ -28,7 +28,8 @@ import { back, forward } from './nav';
  */
 const props = defineProps<{ route?: string }>();
 const ready = ref(false);
-const isWin = currentOS === 'windows';
+/** Windows and Linux: no menu bar, the ☰ button and the menu's shortcuts instead (window.ts). */
+const isWin = currentOS !== 'mac';
 
 const ICONS: Record<string, string> = {
   containers: 'M3 6.5A2.5 2.5 0 0 1 5.5 4h9A2.5 2.5 0 0 1 17 6.5v7a2.5 2.5 0 0 1-2.5 2.5h-9A2.5 2.5 0 0 1 3 13.5v-7ZM6 7a.75.75 0 0 0-.75.75v4.5a.75.75 0 0 0 1.5 0v-4.5A.75.75 0 0 0 6 7Zm2.75.75a.75.75 0 0 1 1.5 0v4.5a.75.75 0 0 1-1.5 0v-4.5ZM14 7a.75.75 0 0 0-.75.75v4.5a.75.75 0 0 0 1.5 0v-4.5A.75.75 0 0 0 14 7Z',

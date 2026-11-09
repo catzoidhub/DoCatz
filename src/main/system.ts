@@ -2,7 +2,8 @@ import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { connect } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { isWin } from './platform';
+import { isLinux, isWin } from './platform';
+import { runAsRootLinux } from './linuxadmin';
 import { run } from './proc';
 
 /**
@@ -13,7 +14,10 @@ import { run } from './proc';
  * - the resolver for a default domain other than .localhost: /etc/resolver/<tld> marked "# Managed by DevCatz" →
  *   127.0.0.1:53531 (macOS), or NRPT rules commented "DevCatz" for .<tld> and .localhost → 127.53.0.1 (Windows, where
  *   programs other than browsers do not resolve x.localhost by themselves).
- * Every change asks for the administrator password (macOS) or UAC approval (Windows) once.
+ * - Linux (#101, DevCatz's cleanurls.ts): systemd socket units `devcatz-forward-https/-http` handing each connection to
+ *   systemd-socket-proxyd, and a systemd-resolved drop-in /etc/systemd/resolved.conf.d/devcatz-<tld>.conf (route-only
+ *   `~<tld>`) → 127.0.0.1:53531.
+ * Every change asks for the administrator password (macOS, Linux through pkexec) or UAC approval (Windows) once.
  */
 
 const LABEL = 'com.mrcatz.herd.forward';
@@ -21,12 +25,17 @@ export const daemonFile = (scheme: 'https' | 'http') => `/Library/LaunchDaemons/
 const RESOLVER_MARK = '# Managed by DevCatz';
 const RESOLVER_MARKS = [RESOLVER_MARK, '# Managed by MrCatz Herd'];
 const NRPT_MARK = 'DevCatz';
-const resolverFile = (tld: string) => `/etc/resolver/${tld}`;
+const resolverFile = (tld: string) => (isLinux ? `/etc/systemd/resolved.conf.d/devcatz-${tld}.conf` : `/etc/resolver/${tld}`);
 
 export type AdminResult = { ok: boolean; message: string };
 
 /** macOS: a shell script as root, after the system's password prompt (`-128` in the message = cancelled). */
 export async function runAsAdmin(script: string, prompt: string): Promise<AdminResult> {
+  // Linux: polkit's own dialog (pkexec), which shows its own text, not `prompt`.
+  if (isLinux) {
+    const r = await runAsRootLinux(script);
+    return { ok: r.ok, message: r.cancelled ? '-128 Cancelled' : r.message };
+  }
   const file = join(tmpdir(), `docatz-admin-${process.pid}-${Date.now()}.sh`);
   writeFileSync(file, script, { mode: 0o700 });
   const r = await run('/usr/bin/osascript', ['-e', `do shell script "/bin/sh '${file}'" with prompt "${prompt.replace(/"/g, '\\"')}" with administrator privileges`], { timeout: 300_000 });
@@ -63,6 +72,13 @@ export async function udpPortOwner(port: number): Promise<{ name: string; pid: s
     const service = m?.[2] && m[2] !== 'N/A' ? m[2] : undefined;
     return { name: m?.[1] ?? 'process', pid, service };
   }
+  if (isLinux) {
+    // ss shows the process only for this user's own; root's (systemd-resolved, dnsmasq) shows as a nameless owner.
+    const { stdout } = await run('ss', ['-H', '-ulpn', `sport = :${port}`], { timeout: 10_000 });
+    if (!stdout.trim()) return null;
+    const m = /users:\(\("([^"]+)",pid=(\d+)/.exec(stdout);
+    return { name: m?.[1] ?? 'a system service', pid: m?.[2] ?? '' };
+  }
   const { stdout } = await run('/usr/sbin/lsof', ['-nP', `-iUDP:${port}`, '-Fpc']);
   const pid = stdout.match(/^p(\d+)/m)?.[1];
   return pid ? { name: stdout.match(/^c(.+)$/m)?.[1] ?? 'process', pid } : null;
@@ -96,9 +112,61 @@ async function winRules(): Promise<WinRule[]> {
   return rules;
 }
 
+// Linux: the same units as DevCatz (cleanurls.ts), so either app sees the other's as its own.
+const unitFile = (scheme: 'https' | 'http', kind: 'socket' | 'service') => `/etc/systemd/system/devcatz-forward-${scheme}.${kind}`;
+const PROXYD = ['/usr/lib/systemd/systemd-socket-proxyd', '/lib/systemd/systemd-socket-proxyd'];
+
+function linuxUnits(scheme: 'https' | 'http', listen: number, target: number, ipv4: boolean): string {
+  const socket = `[Unit]
+Description=DevCatz: ${scheme} on port ${listen} to its local proxy
+${RESOLVER_MARK}
+
+[Socket]
+ListenStream=[::1]:${listen}
+${ipv4 ? `ListenStream=127.0.0.1:${listen}
+` : ''}
+[Install]
+WantedBy=sockets.target
+`;
+  const service = `[Unit]
+Description=DevCatz: relay ${scheme} to 127.0.0.1:${target}
+Requires=devcatz-forward-${scheme}.socket
+After=devcatz-forward-${scheme}.socket
+${RESOLVER_MARK}
+
+[Service]
+ExecStart=$PROXYD 127.0.0.1:${target}
+DynamicUser=yes
+PrivateTmp=yes
+ProtectSystem=strict
+ProtectHome=yes
+NoNewPrivileges=yes
+`;
+  return `cat > ${unitFile(scheme, 'socket')} <<'MRCATZ_EOF'
+${socket}MRCATZ_EOF
+cat > ${unitFile(scheme, 'service')} <<MRCATZ_EOF
+${service}MRCATZ_EOF
+chmod 644 ${unitFile(scheme, 'socket')} ${unitFile(scheme, 'service')}
+`;
+}
+
+const removeLinuxUnits = `systemctl disable --now devcatz-forward-https.socket devcatz-forward-http.socket >/dev/null 2>&1 || true
+systemctl stop devcatz-forward-https.service devcatz-forward-http.service >/dev/null 2>&1 || true
+rm -f ${(['https', 'http'] as const).flatMap((s) => [unitFile(s, 'socket'), unitFile(s, 'service')]).join(' ')}
+systemctl daemon-reload
+`;
+
 /** The port :443 is forwarded to now (null: no forwarding). */
 export async function forwardTarget(): Promise<number | null> {
   if (isWin) return (await winRules()).find((r) => r.port === 443)?.target ?? null;
+  if (isLinux) {
+    try {
+      const m = /^ExecStart=\S+ 127\.0\.0\.1:(\d+)/m.exec(readFileSync(unitFile('https', 'service'), 'utf8'));
+      return m ? Number(m[1]) : null;
+    } catch {
+      return null;
+    }
+  }
   try {
     const m = /<string>\/usr\/bin\/nc<\/string>\s*<string>::1<\/string>\s*<string>(\d+)<\/string>/.exec(readFileSync(daemonFile('https'), 'utf8'));
     return m ? Number(m[1]) : null;
@@ -157,6 +225,16 @@ export async function installForward(httpsPort: number, httpPort: number, prompt
     }
     return runAsAdminWin(lines.join('\n'));
   }
+  if (isLinux) {
+    const script = `PROXYD=""; for p in ${PROXYD.join(' ')}; do [ -x "$p" ] && PROXYD="$p" && break; done
+[ -n "$PROXYD" ] || { echo "systemd-socket-proxyd was not found"; exit 1; }
+${removeLinuxUnits}${linuxUnits('https', 443, httpsPort, ipv4.https)}${linuxUnits('http', 80, httpPort, ipv4.http)}systemctl daemon-reload
+systemctl enable --now devcatz-forward-https.socket
+# Port 80 is best effort: another server (Apache, nginx) may have it.
+systemctl enable --now devcatz-forward-http.socket 2>/dev/null || { systemctl disable devcatz-forward-http.socket 2>/dev/null; rm -f ${unitFile('http', 'socket')} ${unitFile('http', 'service')}; systemctl daemon-reload; echo "http forward skipped"; }
+`;
+    return runAsAdmin(script, prompt);
+  }
   const write = (scheme: 'https' | 'http', listen: number, target: number) => `cat > ${daemonFile(scheme)} <<'MRCATZ_EOF'
 ${plist(scheme, listen, target, ipv4[scheme])}MRCATZ_EOF
 chown root:wheel ${daemonFile(scheme)}
@@ -175,6 +253,7 @@ export async function uninstallForward(prompt: string): Promise<AdminResult> {
     if (!rules.length) return { ok: true, message: '' };
     return runAsAdminWin(rules.map((r) => `netsh interface portproxy delete ${r.family} listenaddress=${r.listen} listenport=${r.port} | Out-Null`).join('\n'));
   }
+  if (isLinux) return existsSync(unitFile('https', 'socket')) || existsSync(unitFile('http', 'socket')) ? runAsAdmin(removeLinuxUnits, prompt) : { ok: true, message: '' };
   if (!existsSync(daemonFile('https')) && !existsSync(daemonFile('http'))) return { ok: true, message: '' };
   return runAsAdmin(removeDaemons, prompt);
 }
@@ -194,7 +273,7 @@ async function nrpt(dnsHost: string): Promise<NrptRule[]> {
     });
 }
 
-/** The namespaces a resolver must cover: the TLD (not .localhost on macOS, which resolves it), and .localhost on Windows. */
+/** The namespaces a resolver must cover: the TLD (not .localhost on macOS and Linux, which resolve it), and .localhost on Windows. */
 export const resolverZones = (tld: string): string[] => (isWin ? [...new Set([tld, 'localhost'])] : tld === 'localhost' ? [] : [tld]);
 
 /** `ours` = the shared one (DevCatz's or DoCatz's), `foreign` = another tool's, `none`. Every zone must be covered. */
@@ -215,7 +294,7 @@ export async function resolverStatus(tld: string, dnsHost: string): Promise<'our
 
 export async function installResolver(tld: string, dnsHost: string, dnsPort: number, prompt: string): Promise<AdminResult> {
   if (!/^[a-z][a-z0-9-]{0,30}$/.test(tld)) throw new Error(`Invalid domain ending ${tld}`);
-  if ((await resolverStatus(tld, dnsHost)) === 'foreign') return { ok: false, message: isWin ? `Another tool already has a DNS rule for .${tld}; remove it in that tool first.` : `/etc/resolver/${tld} belongs to another tool. Remove that tool's resolver first.` };
+  if ((await resolverStatus(tld, dnsHost)) === 'foreign') return { ok: false, message: isWin ? `Another tool already has a DNS rule for .${tld}; remove it in that tool first.` : `${resolverFile(tld)} belongs to another tool. Remove that tool's resolver first.` };
   if (isWin) {
     const rules = await nrpt(dnsHost);
     const want = resolverZones(tld).map((z) => `.${z}`).filter((ns) => !rules.some((r) => r.namespace === ns && r.current));
@@ -226,6 +305,22 @@ export async function installResolver(tld: string, dnsHost: string, dnsPort: num
       'Clear-DnsClientCache',
     ];
     return runAsAdminWin(lines.join('\n'));
+  }
+  if (isLinux) {
+    // A route-only domain (~tld): only *.<tld> goes to the shared DNS, everything else stays with the network's.
+    return runAsAdmin(
+      `mkdir -p /etc/systemd/resolved.conf.d
+cat > ${resolverFile(tld)} <<'MRCATZ_EOF'
+${RESOLVER_MARK}
+[Resolve]
+DNS=127.0.0.1:${dnsPort}
+Domains=~${tld}
+MRCATZ_EOF
+chmod 644 ${resolverFile(tld)}
+systemctl restart systemd-resolved
+`,
+      prompt,
+    );
   }
   return runAsAdmin(
     `set -e
@@ -248,5 +343,6 @@ export async function uninstallResolver(tld: string, dnsHost: string, prompt: st
     return runAsAdminWin(`Get-DnsClientNrptRule | Where-Object { $_.Comment -eq '${NRPT_MARK}' } | Remove-DnsClientNrptRule -Force\nClear-DnsClientCache`);
   }
   if ((await resolverStatus(tld, dnsHost)) !== 'ours' || tld === 'localhost') return { ok: true, message: '' };
+  if (isLinux) return runAsAdmin(`rm -f ${resolverFile(tld)}\nsystemctl restart systemd-resolved\n`, prompt);
   return runAsAdmin(`rm -f ${resolverFile(tld)}\n/usr/bin/killall -HUP mDNSResponder 2>/dev/null || true\n`, prompt);
 }

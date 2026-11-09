@@ -3,7 +3,7 @@ import { basename, dirname, join } from 'node:path';
 import type { DcProjectEnv } from '@shared/types';
 import { composeBin } from './cli';
 import { dockerHost } from './paths';
-import { isWin } from './platform';
+import { isLinux, isWin } from './platform';
 import { run } from './proc';
 import { dataDir, store } from './store';
 
@@ -268,8 +268,10 @@ export async function composeEnvArgs(files: string[], project: string): Promise<
   if (!services.length) return subst;
   const list = envFiles.map((f) => `      - ${JSON.stringify(f)}`).join('\n');
   // Windows: WSL's Docker has no DNS name for the PC (Lima's host resolver gives one on a Mac), so the services that get
-  // host.docker.internal also get it as host-gateway, which the engine points at Windows (engine/wsl.ts).
-  const gateway = isWin && pointed.length ? '\n    extra_hosts:\n      - "host.docker.internal:host-gateway"' : '';
+  // host.docker.internal also get it as host-gateway, which the engine points at Windows (engine/wsl.ts). Linux's own
+  // Docker Engine has no such name either: host-gateway is the docker0 bridge's address there (a service on the host
+  // must listen on more than 127.0.0.1 to be reached).
+  const gateway = (isWin || isLinux) && pointed.length ? '\n    extra_hosts:\n      - "host.docker.internal:host-gateway"' : '';
   const yaml = `# Written by DoCatz before each run: every service gets ${project}'s DoCatz .env${pointed.length ? ' and the hosts on this computer as containers reach them' : ''}.\nservices:\n${services.map((s) => `  ${JSON.stringify(s)}:\n    env_file:\n${list}${gateway}`).join('\n')}\n`;
   writeFileSync(overrideFile(project), yaml, { mode: 0o600 });
   return [...subst, '-f', overrideFile(project)];

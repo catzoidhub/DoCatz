@@ -4,8 +4,8 @@ import './assets/main.css';
 import '@xterm/xterm/css/xterm.css';
 import { currentOS } from '@shared/platform';
 
-// `html.is-win`: CSS for Windows only (room for the window buttons, no traffic lights on the left).
-if (currentOS === 'windows') document.documentElement.classList.add('is-win');
+// `html.is-win`: CSS for Windows and Linux (room for the window buttons on the right, no traffic lights on the left).
+if (currentOS !== 'mac') document.documentElement.classList.add('is-win');
 
 // A file dropped outside a drop zone must not open in the window.
 for (const type of ['dragover', 'drop'] as const)

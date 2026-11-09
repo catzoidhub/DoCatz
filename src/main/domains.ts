@@ -1,6 +1,6 @@
 import { X509Certificate } from 'node:crypto';
 import { lookup } from 'node:dns/promises';
-import { chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { chmodSync, existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { createServer as createHttp, request as httpRequest, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
 import { createServer as createHttps, request as httpsRequest } from 'node:https';
 import { connect, type Socket } from 'node:net';
@@ -9,11 +9,13 @@ import { join } from 'node:path';
 import { createSecureContext, type SecureContext } from 'node:tls';
 import forge from 'node-forge';
 import type { DcContainer, DcDomains, DcDomainsPatch, TaskProgress } from '@shared/types';
+import { words } from '@shared/platform';
 import { findCatzoidApp } from './companion';
 import { DNS_HOST, DNS_PORT, DnsServer } from './dns';
 import { Router, ROUTER_PORT, type RouterTarget } from './docker/router';
 import { isWeb, NOT_WEB } from './webports';
-import { appDataDir, isWin } from './platform';
+import { appDataDir, isLinux, isWin } from './platform';
+import { runAsRootLinux, shq } from './linuxadmin';
 import { lastLine, run } from './proc';
 import { readShared, SHARED_DIR, writeShared, type SharedDomains } from './shared';
 import { dataDir, store } from './store';
@@ -42,6 +44,30 @@ const CA_NAME = 'Catzoid Local CA';
 const HTTPS_KEY = 'domainsHttps';
 const NAMES_KEY = 'domainNames';
 const DEVCATZ_DATA = appDataDir('DevCatz');
+/**
+ * Linux: where the CA goes in the system store — Debian / Ubuntu (update-ca-certificates) or Fedora / RHEL / Arch
+ * (update-ca-trust) — under DevCatz's file name, as the CA is the one shared CA. Browsers keep their own NSS databases.
+ */
+const LINUX_STORES = [
+  { dir: '/usr/local/share/ca-certificates', update: 'update-ca-certificates', bundle: '/etc/ssl/certs/ca-certificates.crt' },
+  { dir: '/etc/pki/ca-trust/source/anchors', update: 'update-ca-trust', bundle: '/etc/pki/tls/certs/ca-bundle.crt' },
+];
+const LINUX_CA_FILE = 'devcatz-local-ca.crt';
+const linuxStore = () => LINUX_STORES.find((s) => existsSync(s.dir)) ?? LINUX_STORES[0];
+
+/** The NSS databases (cert9.db) browsers read on Linux: Chrome / Chromium's per user, Firefox's per profile (deb, snap, flatpak). */
+function nssDatabases(): string[] {
+  const h = homedir();
+  const dbs = [join(h, '.pki', 'nssdb'), join(h, 'snap', 'chromium', 'current', '.pki', 'nssdb')].filter((d) => d === join(h, '.pki', 'nssdb') || existsSync(d));
+  for (const root of [join(h, '.mozilla', 'firefox'), join(h, 'snap', 'firefox', 'common', '.mozilla', 'firefox'), join(h, '.var', 'app', 'org.mozilla.firefox', '.mozilla', 'firefox')]) {
+    try {
+      for (const p of readdirSync(root)) if (existsSync(join(root, p, 'cert9.db'))) dbs.push(join(root, p));
+    } catch {
+      /* no such Firefox */
+    }
+  }
+  return dbs;
+}
 /** Private ports that usually serve the app (picked first when a container publishes several). */
 const WEB_PORTS = [80, 8080, 3000, 8000, 5173, 4321, 5000, 4200, 8888, 4000, 9000, 443, 8443];
 /** Ports that are never the app (Caddy / FrankenPHP's admin API, metrics, debuggers). */
@@ -147,6 +173,8 @@ export class Domains {
 
   private async devcatzRunning(): Promise<boolean> {
     if (isWin) return /DevCatz\.exe/i.test((await run('tasklist', ['/FI', 'IMAGENAME eq DevCatz.exe', '/NH'], { timeout: 10_000 })).stdout);
+    // Linux: the deb's /opt/DevCatz/devcatz or the AppImage's, both named by electron-builder's executableName.
+    if (isLinux) return (await run('pgrep', ['-x', 'devcatz'], { timeout: 10_000 })).code === 0;
     return (await run('/usr/bin/pgrep', ['-f', 'DevCatz.app/Contents/MacOS/DevCatz'], { timeout: 10_000 })).code === 0;
   }
 
@@ -428,6 +456,7 @@ export class Domains {
     if (isWin) return (await run('certutil', ['-user', '-verifystore', 'Root', this.thumbprint()], { timeout: 20_000 })).code === 0;
     const probe = join(dataDir('certs'), 'docatz.localhost.crt');
     this.leaf('docatz.localhost');
+    if (isLinux) return existsSync(join(linuxStore().dir, LINUX_CA_FILE)) && (await run('openssl', ['verify', '-CAfile', linuxStore().bundle, probe], { timeout: 20_000 })).code === 0;
     return (await run('/usr/bin/security', ['verify-cert', '-c', probe, '-p', 'ssl', '-s', 'docatz.localhost', '-q'], { timeout: 20_000 })).code === 0;
   }
 
@@ -468,7 +497,71 @@ export class Domains {
     }
   }
 
+  /** The CA's own name (DevCatz's or DoCatz's), the nickname in the browsers' NSS databases, as DevCatz writes it. */
+  private caCommonName(): string {
+    return String(this.ca!.cert.subject.getField('CN')?.value ?? CA_NAME);
+  }
+
+  /**
+   * Linux: one password (pkexec) puts the CA in the system store and, where apt can, installs certutil (libnss3-tools);
+   * then, as the user, into each browser's NSS database — the same file and nickname as DevCatz (certs.ts trustLinux),
+   * so there is one entry whichever app trusted it.
+   */
+  private async trustLinux(on: boolean): Promise<{ ok: boolean; message: string }> {
+    const s = linuxStore();
+    const name = this.caCommonName();
+    const certutil = (await run('/bin/sh', ['-c', 'command -v certutil'], { timeout: 5000 })).code === 0;
+    if (!on) {
+      if (certutil) for (const db of nssDatabases()) await run('certutil', ['-d', `sql:${db}`, '-D', '-n', name], { timeout: 20_000 });
+      const r = await runAsRootLinux(`rm -f ${shq(join(s.dir, LINUX_CA_FILE))}
+${s.update === 'update-ca-certificates' ? 'update-ca-certificates --fresh' : s.update} >/dev/null`);
+      return { ok: r.ok, message: r.cancelled ? 'Cancelled' : r.message };
+    }
+    const root = await runAsRootLinux(
+      [
+        `mkdir -p ${shq(s.dir)}`,
+        `install -m 644 ${shq(this.ca!.files.cert)} ${shq(join(s.dir, LINUX_CA_FILE))}`,
+        `${s.update} >/dev/null`,
+        'if ! command -v certutil >/dev/null 2>&1 && command -v apt-get >/dev/null 2>&1; then DEBIAN_FRONTEND=noninteractive apt-get install -y -qq libnss3-tools >/dev/null 2>&1 || true; fi',
+      ].join('\n'),
+    );
+    if (!root.ok) return { ok: false, message: root.cancelled ? 'Cancelled' : root.message };
+    const missed: string[] = [];
+    if ((await run('/bin/sh', ['-c', 'command -v certutil'], { timeout: 5000 })).code !== 0) missed.push('browsers (certutil is missing: install libnss3-tools / nss-tools)');
+    else
+      for (const db of nssDatabases()) {
+        if (!existsSync(join(db, 'cert9.db'))) {
+          mkdirSync(db, { recursive: true });
+          await run('certutil', ['-d', `sql:${db}`, '-N', '--empty-password'], { timeout: 20_000 });
+        }
+        await run('certutil', ['-d', `sql:${db}`, '-D', '-n', name], { timeout: 20_000 });
+        const r = await run('certutil', ['-d', `sql:${db}`, '-A', '-t', 'C,,', '-n', name, '-i', this.ca!.files.cert], { timeout: 20_000 });
+        if (r.code !== 0) missed.push(db);
+      }
+    return { ok: true, message: missed.length ? `Not added for: ${missed.join(', ')}` : '' };
+  }
+
   async trust(on: boolean): Promise<DcDomains> {
+    if (isLinux) {
+      if (on)
+        await this.steps('ca', `Trusting the ${CA_NAME}`, ['Prepare the shared local CA', 'Add it to the system’s certificates and your browsers — your password', 'Check that it is trusted'], async (step) => {
+          this.ensureCa();
+          step(1, 'Waiting for your password');
+          const r = await this.trustLinux(true);
+          if (!r.ok) throw new Error(r.message === 'Cancelled' ? 'Cancelled' : lastLine(r.message) || 'The certificate was not trusted');
+          step(2, r.message || undefined);
+          if (!(await this.recordTrust())) throw new Error('The certificate was not trusted');
+        }, 'Certificate trusted — restart your browser');
+      else
+        await this.steps('ca', `Removing the ${CA_NAME}`, ['Remove it from the system’s certificates and your browsers — your password', 'Check that it is gone'], async (step) => {
+          this.ensureCa();
+          const r = await this.trustLinux(false);
+          if (!r.ok) throw new Error(r.message === 'Cancelled' ? 'Cancelled' : lastLine(r.message));
+          step(1);
+          if (await this.recordTrust()) throw new Error('The certificate is still trusted');
+        }, 'Certificate removed');
+      return this.state();
+    }
     const who = isWin ? 'Windows asks “install this certificate?”' : 'macOS asks for your password or Touch ID';
     if (on) {
       await this.steps('ca', `Trusting the ${CA_NAME}`, ['Prepare the shared local CA', `Add it to your ${isWin ? 'Trusted Root certificates' : 'login keychain'} — ${who}`, 'Check that it is trusted'], async (step) => {
@@ -509,7 +602,7 @@ export class Domains {
     if (on) {
       const f = this.forwardPorts();
       await this.steps('urls', 'Turning on names without a port', ['Check ports 443 and 80', `Forward ports 443 and 80 to ${f.by === ME ? 'DoCatz' : 'DevCatz'} — ${admin}`, 'Check that names answer without a port'], async (step) => {
-        step(1, isWin ? 'netsh interface portproxy, through one administrator prompt' : 'LaunchDaemons with /usr/bin/nc, through one password prompt');
+        step(1, isWin ? 'netsh interface portproxy, through one administrator prompt' : isLinux ? 'systemd socket units, through one password prompt' : 'LaunchDaemons with /usr/bin/nc, through one password prompt');
         const r = await installForward(f.httpsPort, f.httpPort, 'DoCatz wants to forward ports 443 and 80 to the local proxy so names work without a port.');
         if (!r.ok) throw new Error(cancelled(r) ? 'Cancelled' : r.message);
         writeShared({ domains: { cleanUrls: { on: true, ...f } } });
@@ -534,19 +627,19 @@ export class Domains {
     const zones = resolverZones(tld);
     const names = zones.map((z) => `*.${z}`).join(' and ');
     if (on) {
-      await this.steps('dns', isWin ? 'Adding DNS rules' : 'Installing the resolver', [`Start the local DNS on ${DNS_HOST}:${DNS_PORT}`, isWin ? `Add Windows DNS rules (NRPT) for ${names} — administrator approval` : `Create /etc/resolver/${tld} — your administrator password`, `Check that ${names} resolve to this ${isWin ? 'PC' : 'Mac'}`], async (step) => {
+      await this.steps('dns', isWin ? 'Adding DNS rules' : 'Installing the resolver', [`Start the local DNS on ${DNS_HOST}:${DNS_PORT}`, isWin ? `Add Windows DNS rules (NRPT) for ${names} — administrator approval` : `Create ${isLinux ? `/etc/systemd/resolved.conf.d/devcatz-${tld}.conf` : `/etc/resolver/${tld}`} — your administrator password`, `Check that ${names} resolve to ${words.thisComputer}`], async (step) => {
         await this.startDns();
         // DevCatz may already answer on that address: then DoCatz needs no DNS of its own.
         if (!this.dns.running && !(await this.devcatzDns())) throw new Error(this.dns.error ?? `The local DNS could not start on port ${DNS_PORT}`);
         step(1, isWin ? 'Add-DnsClientNrptRule, through one administrator prompt' : 'One password prompt');
-        const r = await installResolver(tld, DNS_HOST, DNS_PORT, `DoCatz wants to resolve ${names} to this ${isWin ? 'PC' : 'Mac'}.`);
+        const r = await installResolver(tld, DNS_HOST, DNS_PORT, `DoCatz wants to resolve ${names} to ${words.thisComputer}.`);
         if (!r.ok) throw new Error(cancelled(r) ? 'Cancelled' : r.message);
         step(2);
         for (let i = 0; i < 8 && !(await this.resolves()); i++) await new Promise((res) => setTimeout(res, 500));
         if (!(await this.resolves())) throw new Error(`The ${isWin ? 'rules are' : 'resolver is'} in place, but ${names} does not resolve yet: try again in a moment`);
-      }, `${names} resolves to this ${isWin ? 'PC' : 'Mac'}`);
+      }, `${names} resolves to ${words.thisComputer}`);
     } else {
-      await this.steps('dns', isWin ? 'Removing DNS rules' : 'Removing the resolver', [isWin ? 'Remove the DNS rules (NRPT) — administrator approval' : `Remove /etc/resolver/${tld} — your administrator password`, 'Check that they are gone'], async (step) => {
+      await this.steps('dns', isWin ? 'Removing DNS rules' : 'Removing the resolver', [isWin ? 'Remove the DNS rules (NRPT) — administrator approval' : `Remove ${isLinux ? `/etc/systemd/resolved.conf.d/devcatz-${tld}.conf` : `/etc/resolver/${tld}`} — your administrator password`, 'Check that they are gone'], async (step) => {
         const r = await uninstallResolver(tld, DNS_HOST, `DoCatz wants to stop resolving ${names}.`);
         if (!r.ok) throw new Error(cancelled(r) ? 'Cancelled' : r.message);
         step(1);

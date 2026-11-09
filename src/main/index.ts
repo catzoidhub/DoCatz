@@ -1,7 +1,8 @@
 import { app, clipboard, dialog, ipcMain, shell } from 'electron';
 import { execFile, spawn } from 'node:child_process';
 import { binDir } from './paths';
-import { isWin } from './platform';
+import { isLinux, isWin } from './platform';
+import { runInLinuxTerminal } from './linuxterm';
 import { createWriteStream, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { basename, join } from 'node:path';
 import { pipeline } from 'node:stream/promises';
@@ -366,6 +367,10 @@ function api(): DoCatzApi {
         return;
       }
       const sh = `export PATH="${binDir()}:$PATH" DOCKER_CONTEXT=docatz; ${command}`;
+      if (isLinux) {
+        if (!(await runInLinuxTerminal(sh))) throw new Error('No terminal app was found (GNOME Terminal, Konsole …)');
+        return;
+      }
       const as = sh.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
       await new Promise<void>((resolve, reject) => execFile('/usr/bin/osascript', ['-e', `tell application "Terminal" to do script "${as}"`, '-e', 'tell application "Terminal" to activate'], (e) => (e ? reject(new Error('Terminal did not open')) : resolve())));
     },

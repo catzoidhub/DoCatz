@@ -11,6 +11,8 @@ import ServiceMark from './ServiceMark.vue';
  * The container commands follow the container picked at the top.
  */
 const isWin = currentOS === 'windows';
+/** Linux (#101): the system's Docker Engine, no VM. */
+const isLinux = currentOS === 'linux';
 const terminalName = isWin ? 'PowerShell' : 'Terminal';
 const picked = ref<string>('');
 const running = computed(() => containers.value.filter((c) => c.state === 'running'));
@@ -58,7 +60,17 @@ const groups = computed<{ title: string; hint: string; icon: string; items: Cmd[
       { title: 'Its domain', cmd: `curl -I ${url.value}` },
     ],
   },
-  {
+  isLinux
+    ? {
+        title: 'Docker Engine',
+        hint: 'The system’s Docker Engine, which DoCatz uses on Linux (no VM).',
+        icon: 'M7 2a1 1 0 0 1 1 1v1h4V3a1 1 0 1 1 2 0v1h.5A2.5 2.5 0 0 1 17 6.5V7h1a1 1 0 1 1 0 2h-1v2h1a1 1 0 1 1 0 2h-1v.5a2.5 2.5 0 0 1-2.5 2.5H14v1a1 1 0 1 1-2 0v-1H8v1a1 1 0 1 1-2 0v-1h-.5A2.5 2.5 0 0 1 3 13.5V13H2a1 1 0 1 1 0-2h1V9H2a1 1 0 1 1 0-2h1v-.5A2.5 2.5 0 0 1 5.5 4H6V3a1 1 0 0 1 1-1Z',
+        items: [
+          { title: 'Its state', cmd: 'systemctl status docker --no-pager' },
+          { title: 'Its log', cmd: 'journalctl -u docker -f' },
+        ],
+      }
+    : {
     title: 'The Linux VM',
     hint: isWin ? 'The WSL distro DoCatz runs Docker in.' : 'The Lima VM DoCatz runs Docker in (virtiofs mounts of your home folder).',
     icon: 'M7 2a1 1 0 0 1 1 1v1h4V3a1 1 0 1 1 2 0v1h.5A2.5 2.5 0 0 1 17 6.5V7h1a1 1 0 1 1 0 2h-1v2h1a1 1 0 1 1 0 2h-1v.5a2.5 2.5 0 0 1-2.5 2.5H14v1a1 1 0 1 1-2 0v-1H8v1a1 1 0 1 1-2 0v-1h-.5A2.5 2.5 0 0 1 3 13.5V13H2a1 1 0 1 1 0-2h1V9H2a1 1 0 1 1 0-2h1v-.5A2.5 2.5 0 0 1 5.5 4H6V3a1 1 0 0 1 1-1Z',
@@ -68,15 +80,15 @@ const groups = computed<{ title: string; hint: string; icon: string; items: Cmd[
           { title: 'A shell in the VM', cmd: 'LIMA_HOME=~/.docatz/vm ~/.docatz/lima/bin/limactl shell docatz' },
           { title: 'Its state', cmd: 'LIMA_HOME=~/.docatz/vm ~/.docatz/lima/bin/limactl list' },
         ],
-  },
+      },
   {
     title: 'Builds',
     hint: 'Every build shows up in Builds, with its log.',
     icon: 'M11.98 1.8a1 1 0 0 1 .87 1.16L12.2 7H16a1 1 0 0 1 .78 1.63l-7 8.6a1 1 0 0 1-1.76-.8L8.67 12.6H5a1 1 0 0 1-.78-1.63l7-8.82a1 1 0 0 1 .76-.35Z',
     items: [
       { title: 'Build an image', cmd: 'docker build -t my-app .' },
-      { title: isWin ? 'For x64 and ARM PCs' : 'For Intel and Apple silicon', cmd: 'docker buildx build --platform linux/amd64,linux/arm64 -t my-app .' },
-      { title: isWin ? 'Run an x64 (amd64) image' : 'Run an Intel image', cmd: 'docker run --rm --platform linux/amd64 alpine uname -m', note: engine.value?.host.rosetta ? 'Fast through Rosetta (Engine → Rosetta for Intel images).' : undefined },
+      { title: isWin ? 'For x64 and ARM PCs' : isLinux ? 'For x64 and ARM64' : 'For Intel and Apple silicon', cmd: 'docker buildx build --platform linux/amd64,linux/arm64 -t my-app .' },
+      { title: isWin || isLinux ? 'Run an x64 (amd64) image' : 'Run an Intel image', cmd: 'docker run --rm --platform linux/amd64 alpine uname -m', note: engine.value?.host.rosetta ? 'Fast through Rosetta (Engine → Rosetta for Intel images).' : isLinux ? 'On an ARM64 computer this needs QEMU first: docker run --privileged --rm tonistiigi/binfmt --install amd64' : undefined },
     ],
   },
   {
