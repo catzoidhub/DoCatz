@@ -202,7 +202,10 @@ export async function offerAppImageInstall(resources: string): Promise<boolean> 
     // mount alive until the new DoCatz quit.
     // bash: dash (Ubuntu's /bin/sh) reads `exec 10>&-` as running a command named 10, and the relaunch never happened.
     const args = process.argv.slice(1).filter((x) => !x.startsWith('--appimage') && x !== '--no-sandbox');
-    spawn(existsSync('/bin/bash') ? '/bin/bash' : '/bin/sh', ['-c', `while kill -0 ${process.pid} 2>/dev/null; do sleep 0.2; done; for fd in $(ls /proc/$$/fd); do [ "$fd" -gt 2 ] && eval "exec $fd>&-"; done; exec "$0" "$@"`, target, ...args], { detached: true, stdio: ['ignore', log, log], env, cwd: homedir() }).unref();
+    // Without bash, only single-digit descriptors are closed (as DevCatz 9a82f28).
+    const shell = existsSync('/bin/bash') ? '/bin/bash' : '/bin/sh';
+    const close = shell === '/bin/bash' ? 'for fd in $(ls /proc/$$/fd); do [ "$fd" -gt 2 ] && eval "exec $fd>&-"; done' : 'for fd in 3 4 5 6 7 8 9; do eval "exec $fd>&-"; done';
+    spawn(shell, ['-c', `while kill -0 ${process.pid} 2>/dev/null; do sleep 0.2; done; ${close} 2>/dev/null; exec "$0" "$@"`, target, ...args], { detached: true, stdio: ['ignore', log, log], env, cwd: homedir() }).unref();
     app.exit(0);
     return true;
   } catch (e) {
