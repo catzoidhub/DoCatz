@@ -114,7 +114,9 @@ export class Updater {
     const s = stored();
     autoUpdater.allowPrerelease = channel === 'beta';
     autoUpdater.channel = channel === 'beta' ? 'beta' : 'latest';
-    autoUpdater.requestHeaders = { 'X-Catzoid-Install': s.installId, 'X-Catzoid-Version': app.getVersion(), 'X-Catzoid-Channel': channel };
+    // The install id / version / channel go to catzoid.com's feed only, never to GitHub (Catzoid #90): none when the
+    // feed is GitHub's release (the fallback when the site does not answer).
+    autoUpdater.requestHeaders = source === 'site' ? { 'X-Catzoid-Install': s.installId, 'X-Catzoid-Version': app.getVersion(), 'X-Catzoid-Channel': channel } : null;
     // DOCATZ_UPDATE_FEED: a local feed for tests.
     if (source === 'site') autoUpdater.setFeedURL({ provider: 'generic', url: process.env.DOCATZ_UPDATE_FEED || `${siteBase()}/updates/docatz` });
     else autoUpdater.setFeedURL({ provider: 'github', owner: 'catzoidhub', repo: 'DoCatz' });
@@ -171,6 +173,10 @@ export class Updater {
 
   async download(): Promise<void> {
     if (this.state.status !== 'available' && this.state.status !== 'error') return;
+    // The download goes through catzoid.com/updates/docatz/<file>, which redirects to GitHub's release assets, and
+    // electron-updater keeps these headers across that redirect: none on the download (Catzoid #90, as DevCatz c3cda70).
+    // The next check (feed) sets them again.
+    autoUpdater.requestHeaders = null;
     this.token = new CancellationToken();
     this.set({ status: 'downloading', progress: { percent: 0, transferred: 0, total: this.state.size ?? 0, bytesPerSecond: 0 }, error: undefined });
     try {
