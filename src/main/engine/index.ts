@@ -22,7 +22,7 @@ import { machineArch } from '../machine';
 
 const KEY = 'engine';
 const GiB = 1024 ** 3;
-const host = { cpus: hostCpus().length, memoryGiB: Math.round(totalmem() / GiB), arch: machineArch(), rosetta: process.platform === 'darwin' && process.arch === 'arm64' };
+const host = { cpus: hostCpus().length, memoryGiB: Math.round(totalmem() / GiB), arch: machineArch(), rosetta: process.platform === 'darwin' && machineArch() === 'arm64' };
 
 function defaults(): EngineConfig {
   return { cpus: Math.max(2, Math.min(4, Math.floor(host.cpus / 2))), memoryGiB: Math.max(2, Math.min(4, Math.floor(host.memoryGiB / 2))), diskGiB: 64, rosetta: host.rosetta, autoStart: true };

@@ -1,5 +1,5 @@
 import { spawn } from 'node:child_process';
-import { existsSync, lstatSync, mkdirSync, readFileSync, readlinkSync, rmSync, symlinkSync, unlinkSync, writeFileSync } from 'node:fs';
+import { existsSync, lstatSync, mkdirSync, readdirSync, readFileSync, readlinkSync, rmSync, statSync, symlinkSync, unlinkSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import type { EngineConfig } from '@shared/types';
@@ -7,6 +7,7 @@ import { limaPackage, VERSIONS } from '../components';
 import { fetchPinned } from '../download';
 import { docatzDir, DOCATZ_HOME, socketPath } from '../paths';
 import { lastLine, run } from '../proc';
+import { machineArch } from '../machine';
 import type { Backend, BackendStatus, StepReporter } from './backend';
 import { MountEvents } from './mountevents';
 
@@ -41,7 +42,7 @@ interface LimaInstance {
 
 /** The VM's definition. The image comes from Lima's own Ubuntu LTS template (pinned by digest there). */
 function yaml(c: EngineConfig): string {
-  const rosetta = process.arch === 'arm64' && c.rosetta;
+  const rosetta = machineArch() === 'arm64' && c.rosetta;
   return `# Written by DoCatz — changed by DoCatz's Engine settings; edits here are replaced.
 minimumLimaVersion: 2.0.0
 base:
@@ -111,6 +112,9 @@ export class LimaBackend implements Backend {
 
   private async limaInstalled(): Promise<boolean> {
     if (!existsSync(limactl())) return false;
+    // The computer's own arch: an x86_64 limactl (the Intel build's, under Rosetta) refuses to run there, so it is replaced.
+    const f = await run('/usr/bin/file', ['-b', limactl()], { timeout: 10_000 });
+    if (f.code === 0 && !f.stdout.includes(machineArch() === 'arm64' ? 'arm64' : 'x86_64')) return false;
     const r = await run(limactl(), ['--version'], { env: env(), timeout: 15_000 });
     return r.code === 0 && r.stdout.includes(VERSIONS.lima);
   }
@@ -138,24 +142,34 @@ export class LimaBackend implements Backend {
     r.step(0);
     if (!(await this.limaInstalled())) {
       const pkg = limaPackage();
-      const file = await fetchPinned(pkg, (f, got, total) => r.detail(`${(got / 1e6).toFixed(0)} of ${(total / 1e6).toFixed(0)} MB`, f), r.signal);
+      const file = await fetchPinned(pkg, (f, got, total) => r.detail(`Downloading Lima ${VERSIONS.lima}: ${(got / 1e6).toFixed(0)} of ${(total / 1e6).toFixed(0)} MB`, f), r.signal);
       rmSync(limaDir(), { recursive: true, force: true });
       mkdirSync(limaDir(), { recursive: true });
       const x = await run('/usr/bin/tar', ['-xzf', file, '-C', limaDir()], { timeout: 120_000 });
       if (x.code !== 0) throw new Error(`Lima could not be unpacked: ${lastLine(x.stderr)}`);
     }
     r.step(1);
-    if (!(await this.instance())) {
-      mkdirSync('/tmp/docatz', { recursive: true });
-      const file = join(DOCATZ_HOME, 'docatz.yaml');
-      writeFileSync(file, yaml(config));
-      const c = await run(limactl(), ['create', `--name=${NAME}`, '--tty=false', file], { env: env(), signal: r.signal, onLine: (l) => r.detail(lastLine(l)) });
-      if (c.code !== 0) throw new Error(`The VM could not be created: ${lastLine(c.stderr) || `limactl exited ${c.code}`}`);
+    // Lima prints download progress on a terminal only: DoCatz watches its download itself and shows MB and a bar
+    // (user, 2026-11-10); Lima's own lines show only while nothing downloads.
+    const watch = watchImageDownload((text, fraction) => r.detail(text, fraction));
+    const line = (l: string) => {
+      if (!watch.active()) r.detail(lastLine(l));
+    };
+    try {
+      if (!(await this.instance())) {
+        mkdirSync('/tmp/docatz', { recursive: true });
+        const file = join(DOCATZ_HOME, 'docatz.yaml');
+        writeFileSync(file, yaml(config));
+        const c = await run(limactl(), ['create', `--name=${NAME}`, '--tty=false', file], { env: env(), signal: r.signal, onLine: line });
+        if (c.code !== 0) throw new Error(`The VM could not be created: ${lastLine(c.stderr) || `limactl exited ${c.code}`}`);
+      }
+      await this.lateEventsOff();
+      r.step(2, 'The first start downloads Ubuntu and installs Docker inside — a few minutes.');
+      const s = await run(limactl(), ['start', '--tty=false', '--timeout=15m', NAME], { env: env(), signal: r.signal, onLine: line });
+      if (s.code !== 0) throw new Error(`The VM did not start: ${lastLine(s.stderr) || `limactl exited ${s.code}`}`);
+    } finally {
+      watch.stop();
     }
-    await this.lateEventsOff();
-    r.step(2, 'The first start downloads Ubuntu and installs Docker inside — a few minutes.');
-    const s = await run(limactl(), ['start', '--tty=false', '--timeout=15m', NAME], { env: env(), signal: r.signal, onLine: (l) => r.detail(lastLine(l)) });
-    if (s.code !== 0) throw new Error(`The VM did not start: ${lastLine(s.stderr) || `limactl exited ${s.code}`}`);
     r.step(3);
     this.linkSocket();
   }
@@ -217,7 +231,7 @@ export class LimaBackend implements Backend {
       writeFileSync(join(DOCATZ_HOME, 'docatz.yaml'), yaml(c));
       return;
     }
-    const rosetta = process.arch === 'arm64' && c.rosetta;
+    const rosetta = machineArch() === 'arm64' && c.rosetta;
     const expr = `.cpus = ${c.cpus} | .memory = "${c.memoryGiB}GiB" | .disk = "${c.diskGiB}GiB" | .vmOpts.vz.rosetta.enabled = ${rosetta} | .vmOpts.vz.rosetta.binfmt = ${rosetta}`;
     const r = await run(limactl(), ['edit', '--tty=false', `--set=${expr}`, NAME], { env: env(), timeout: 60_000 });
     if (r.code !== 0) throw new Error(`The engine settings could not be changed: ${lastLine(r.stderr)}`);
@@ -236,4 +250,46 @@ export class LimaBackend implements Backend {
     // Lima's host agent runs on its own: the engine keeps running when DoCatz quits. Only the events stop with DoCatz.
     this.events.stop();
   }
+}
+
+/**
+ * Lima's image download, watched from outside (Lima shows its progress bar on a terminal only): its cache keeps each
+ * download in ~/Library/Caches/lima/download/by-url-sha256/<hash>/ as `data.tmp.*` while it comes, with the `url`
+ * beside it; the full size is the server's Content-Length. Reports "Downloading Ubuntu: 312 of 945 MB" once a second.
+ */
+function watchImageDownload(report: (text: string, fraction?: number) => void): { active: () => boolean; stop: () => void } {
+  const root = join(process.env.LIMA_CACHE_HOME || join(homedir(), 'Library', 'Caches', 'lima'), 'download', 'by-url-sha256');
+  const sizes = new Map<string, number | null>();
+  let busy = false;
+  let active = false;
+  const tick = async () => {
+    if (busy) return;
+    busy = true;
+    try {
+      let found: { dir: string; got: number } | null = null;
+      for (const d of existsSync(root) ? readdirSync(root) : []) {
+        const dir = join(root, d);
+        const tmp = readdirSync(dir).find((f) => f.startsWith('data.tmp'));
+        if (tmp) found = { dir, got: statSync(join(dir, tmp)).size };
+      }
+      active = !!found;
+      if (!found) return;
+      const url = readFileSync(join(found.dir, 'url'), 'utf8').trim();
+      if (!sizes.has(url)) {
+        sizes.set(url, null);
+        const res = await fetch(url, { method: 'HEAD' }).catch(() => null);
+        sizes.set(url, Number(res?.headers.get('content-length')) || null);
+      }
+      const total = sizes.get(url);
+      const name = /ubuntu/i.test(url) ? 'Ubuntu' : (url.split('/').pop() ?? 'the image');
+      const mb = (n: number) => `${Math.round(n / 1e6)} MB`;
+      report(total ? `Downloading ${name}: ${mb(found.got)} of ${mb(total)}` : `Downloading ${name}: ${mb(found.got)}`, total ? Math.min(1, found.got / total) : undefined);
+    } catch {
+      /* the file moved on: next tick */
+    } finally {
+      busy = false;
+    }
+  };
+  const timer = setInterval(() => void tick(), 1000);
+  return { active: () => active, stop: () => clearInterval(timer) };
 }

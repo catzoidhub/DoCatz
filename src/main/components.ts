@@ -62,7 +62,8 @@ const need = (p: Pinned | null, what: string): Pinned => {
   return p;
 };
 
-export const limaPackage = () => LIMA[arch()];
+/** The computer's own arch (machine.ts): Lima will not run under Rosetta. */
+export const limaPackage = () => LIMA[machineArch()];
 export const dockerPackage = () => need(DOCKER[`${os()}-${arch()}`], 'Docker CLI');
 export const composePackage = () => need(COMPOSE[`${os()}-${arch()}`], 'Docker Compose');
 export const buildxPackage = () => need(BUILDX[`${os()}-${arch()}`], 'Docker Buildx');
