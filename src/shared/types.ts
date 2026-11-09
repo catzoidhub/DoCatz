@@ -136,7 +136,7 @@ export interface McatzpTarget {
   /** The account signed in to it, when the assistant keeps that on this computer. */
   account?: string;
 }
-export type McatzpTargetId = 'claude-code' | 'zcode' | 'claude-desktop' | 'cursor' | 'windsurf' | 'vscode' | 'cline' | 'gemini' | 'codex' | 'opencode' | 'copilot' | 'kiro' | 'antigravity' | 'qwen' | 'lmstudio' | 'roo' | 'amp' | 'warp';
+export type McatzpTargetId = 'claude-code' | 'zcode' | 'claude-desktop' | 'cursor' | 'windsurf' | 'vscode' | 'cline' | 'gemini' | 'codex' | 'opencode' | 'copilot' | 'kiro' | 'antigravity' | 'qwen' | 'lmstudio' | 'roo' | 'amp' | 'warp' | 'zed';
 export interface McatzpInstallProgress {
   phase: 'download' | 'install';
   received: number;

@@ -169,13 +169,14 @@ export function destructiveActions(api: DoCatzApi, scopes: Scopes, reads: Engine
         return ok(r);
       },
     ),
-    typed(
+    {
+      // Not on Linux, where the engine is the system's Docker Engine (MCatzP 1.0.2 knows 'linux').
+      ...typed(
       'reset_engine',
       'Reset the engine',
-      'Deletes the VM and its disk: every container, image and volume on this engine, in every project. The next start makes a new one. Not on Linux, where the engine is the system’s Docker Engine.',
+      'Deletes the VM and its disk: every container, image and volume on this engine, in every project. The next start makes a new one.',
       OBJECT(),
       async () => {
-        if (process.platform === 'linux') throw new Error('On Linux the engine is the system’s Docker Engine: DoCatz does not reset it. prune removes what is unused');
         if (!scopes.all) throw new Error('Reset touches every project: the user shares all of them first, in DoCatz, Settings → MCatzP, or resets in DoCatz');
         const d = await api.diskUsage().catch(() => null);
         return { title: 'Reset the engine?', facts: [...fact('Goes', d ? `${d.containers.count} containers, ${d.images.count} images, ${d.volumes.count} volumes` : 'every container, image and volume'), ...fact('Stays', 'Project folders on this computer')], page: null, typeName: 'reset' };
@@ -185,6 +186,8 @@ export function destructiveActions(api: DoCatzApi, scopes: Scopes, reads: Engine
         return ok({ reset: true });
       },
     ),
+      platforms: ['darwin', 'win32'],
+    },
     typed(
       'env_remove_variable',
       'Remove an environment variable',
