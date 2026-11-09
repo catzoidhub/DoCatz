@@ -192,7 +192,9 @@ function handleLink(raw: string): void {
   }
 }
 
-if (!app.requestSingleInstanceLock()) app.quit();
+// exit, not quit: quit() lets this second process reach whenReady and flash a window of its own before it ends (on Linux
+// a docatz:// link starts one; found by DBCatz, 2026-11-10). The running DoCatz gets the link through second-instance.
+if (!app.requestSingleInstanceLock()) app.exit(0);
 app.on('second-instance', (_e, argv) => {
   const link = argv.find((a) => a.startsWith('docatz://'));
   if (link) handleLink(link);
