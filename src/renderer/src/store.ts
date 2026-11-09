@@ -96,7 +96,7 @@ export async function gatewayLink(kind: string): Promise<boolean> {
   return ok === true;
 }
 /** Frameworks that make an API (the container gets Open in DialCatz when its project has routes to import), not a site's front end. */
-export const API_FRAMEWORKS = new Set(['nestjs', 'express', 'node', 'go', 'rust', 'laravel', 'codeigniter', 'yii', 'symfony', 'cakephp', 'slim', 'php', 'django', 'flask', 'fastapi', 'litestar', 'python']);
+export const API_FRAMEWORKS = new Set(['nestjs', 'express', 'node', 'go', 'rust', 'laravel', 'codeigniter', 'yii', 'symfony', 'cakephp', 'slim', 'php', 'django', 'flask', 'fastapi', 'litestar', 'python', 'rails', 'sinatra', 'hanami', 'ruby']);
 /** Laravel's and others' background containers (no requests to send them). */
 export const WORKER_NAME = /^(scheduler?|schedule|queue|worker|workers|horizon|cron|reverb|supervisor|jobs?)(-|_|\d|$)/i;
 /** Libraries that make a site's front end even when its language makes APIs too (a Rust app with Leptos …). */

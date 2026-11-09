@@ -143,3 +143,8 @@ Rust frameworks (Simple Icons 13.21.0 for Rust, Actix, Rocket, Tauri, Leptos, Be
 - sonic.png — https://valeriansaliou.github.io/sonic/images/banner.jpg (Sonic's mascot, cropped from the project banner; copied from DevCatz)
 - sockudo.png — https://github.com/sockudo.png (Sockudo's GitHub organisation avatar; copied from DevCatz)
 - goravel.svg — https://www.goravel.dev/logo.svg (the Goravel logo from its site)
+
+Ruby frameworks (#99, copied from DevCatz; GitHub organisation avatars, 128 px): sinatra.png — https://github.com/sinatra.png;
+hanami.png — https://github.com/hanami.png; padrino.png — https://github.com/padrino.png; grape.png —
+https://github.com/ruby-grape.png; bridgetown.png — https://github.com/bridgetownrb.png; middleman.png —
+https://github.com/middleman.png; rage.png — https://github.com/rage-rb.png. Ruby, Ruby on Rails and Jekyll: Simple Icons 13.21.0.

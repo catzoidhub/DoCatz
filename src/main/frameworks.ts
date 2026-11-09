@@ -7,7 +7,7 @@ import { run } from './proc';
 
 /**
  * Which framework a compose service is built from, for its mark in the list (the same marks and the same markers as
- * DevCatz's detection: package.json dependencies, composer.json, go.mod, Cargo.toml, Python requirements). The build
+ * DevCatz's detection: package.json dependencies, composer.json, go.mod, Cargo.toml, Python requirements, Gemfile). The build
  * folder of each service comes from `docker compose config`; a service that only runs an image keeps the image's logo.
  * Cached per project until its compose files change.
  */
@@ -55,6 +55,38 @@ const PHP: [string, DcFrameworkName][] = [
   ['cakephp/cakephp', 'cakephp'], ['slim/slim', 'slim'], ['drupal/core', 'drupal'], ['drupal/core-recommended', 'drupal'], ['joomla/joomla-cms', 'joomla'],
 ];
 
+/**
+ * Ruby (#99, as DevCatz's runtimes/ruby.ts): the web gem the Gemfile (or Gemfile.lock) asks for, in this order —
+ * Rails first, as a Rails app also has Rack, Puma … Rails, Sinatra, Hanami and Jekyll are frameworks of their own;
+ * the others are Ruby with their name as the library. A Gemfile without a web gem (CocoaPods, fastlane in a JS or
+ * mobile project) is not a Ruby app.
+ */
+const RUBY_WEB_GEMS = ['rails', 'hanami', 'bridgetown', 'jekyll', 'middleman', 'padrino', 'rage-rb', 'sinatra', 'roda', 'grape', 'cuba', 'hobbit', 'scorched', 'nyny', 'camping', 'ramaze', 'ramverk', 'goliath', 'cramp', 'volt', 'rack'];
+const RUBY_OWN: Record<string, DcFrameworkName> = { rails: 'rails', hanami: 'hanami', jekyll: 'jekyll', sinatra: 'sinatra' };
+const RUBY_ENTRIES = ['app.rb', 'server.rb', 'main.rb', 'web.rb', 'application.rb'];
+const RUBY_SERVES = /\brequire\s+['"](?:webrick|socket|sinatra|rack|puma|roda)['"]|\bTCPServer\.new\b|\bWEBrick::HTTPServer\b|\bRack::Handler\b/;
+
+function rubyGems(dir: string): Set<string> {
+  const out = new Set<string>();
+  const gemfile = readText(join(dir, 'Gemfile')) || readText(join(dir, 'gems.rb'));
+  for (const m of gemfile.matchAll(/^\s*gem\s+['"]([A-Za-z0-9_.-]+)['"]/gm)) out.add(m[1].toLowerCase());
+  const lock = readText(join(dir, 'Gemfile.lock')) || readText(join(dir, 'gems.locked'));
+  for (const m of lock.matchAll(/^ {4}([A-Za-z0-9_.-]+) \(/gm)) out.add(m[1].toLowerCase());
+  return out;
+}
+
+function rubyProject(dir: string): DcFramework | null {
+  const manifest = ['Gemfile', 'gems.rb', 'config.ru'].some((f) => existsSync(join(dir, f)));
+  if (!manifest) return null;
+  const gems = rubyGems(dir);
+  let gem = RUBY_WEB_GEMS.find((g) => gems.has(g)) ?? null;
+  // A Rails app whose Gemfile only lists railties pieces; a bare Rack app.
+  if (!gem && existsSync(join(dir, 'config', 'application.rb')) && existsSync(join(dir, 'bin', 'rails'))) gem = 'rails';
+  if (!gem && existsSync(join(dir, 'config.ru'))) gem = 'rack';
+  if (!gem) return null;
+  return RUBY_OWN[gem] ? { framework: RUBY_OWN[gem], library: null } : { framework: 'ruby', library: gem === 'rage-rb' ? 'rage' : gem };
+}
+
 /** Plain projects with no manifest, recognised like DevCatz: the file that serves something. */
 const JS_ENTRIES = ['server', 'index', 'app', 'main'].flatMap((n) => ['js', 'mjs', 'cjs', 'ts'].map((x) => `${n}.${x}`));
 const JS_LISTENS = /\b(?:createServer|Bun\.serve|Deno\.serve)\s*\(|\.listen\s*\(/;
@@ -66,6 +98,7 @@ function plainProject(dir: string): DcFramework | null {
   const js = JS_ENTRIES.map((f) => readText(join(dir, f))).find((t) => JS_LISTENS.test(t));
   if (js !== undefined) return { framework: 'node', library: /\bDeno\.serve\s*\(/.test(js) ? 'deno' : /\bBun\.serve\s*\(/.test(js) ? 'bun' : null };
   if (/\bnet\/http\b|\bnet\.Listen\(/.test(readText(join(dir, 'main.go')))) return { framework: 'go', library: null };
+  if (RUBY_ENTRIES.some((f) => RUBY_SERVES.test(readText(join(dir, f))))) return { framework: 'ruby', library: null };
   return existsSync(join(dir, 'index.html')) || existsSync(join(dir, 'index.htm')) ? { framework: 'static', library: null } : null;
 }
 
@@ -78,6 +111,9 @@ export function detectFramework(dir: string): DcFramework | null {
   if (existsSync(join(dir, 'artisan')) && composer) return { framework: 'laravel', library: null };
   const php = composer ? PHP.find(([n]) => n in (composer.require ?? {}))?.[1] : undefined;
   if (php) return { framework: php, library: null };
+  // Ruby before package.json: a Rails app has one too (jsbundling, Tailwind), and is still a Rails app.
+  const ruby = rubyProject(dir);
+  if (ruby) return ruby;
   const pkg = readJson<{ dependencies?: Record<string, string>; devDependencies?: Record<string, string> }>(join(dir, 'package.json'));
   if (pkg) {
     const deps = { ...(pkg.dependencies ?? {}), ...(pkg.devDependencies ?? {}) };
@@ -127,7 +163,7 @@ export function detectBuild(context: string, dockerfile?: string): DcFramework |
   if (!dirs.includes(context)) dirs.push(context);
   const found = dirs.map((d) => detectFramework(d)).filter((f): f is DcFramework => f !== null);
   // A specific framework wins over a bare language (node, php, python) found higher up.
-  return found.find((f) => !['node', 'php', 'python', 'static'].includes(f.framework) || f.library) ?? found[0] ?? null;
+  return found.find((f) => !['node', 'php', 'python', 'ruby', 'static'].includes(f.framework) || f.library) ?? found[0] ?? null;
 }
 
 /**

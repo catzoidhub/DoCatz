@@ -23,6 +23,8 @@ const SERVED: { file: RegExp; hint: RegExp; what: string }[] = [
   { file: /^go\.mod$/, hint: /(swaggo\/swag|danielgtaylor\/huma|getkin\/kin-openapi|ogen-go\/ogen|go-swagger)/, what: 'OpenAPI document the app serves' },
   { file: /^composer\.json$/, hint: /"(darkaonline\/l5-swagger|nelmio\/api-doc-bundle|api-platform\/core|zircote\/swagger-php|dedoc\/scramble)"/, what: 'OpenAPI document the app serves' },
   { file: /^Cargo\.toml$/, hint: /\b(utoipa|aide|poem-openapi|paperclip|okapi)\b/, what: 'OpenAPI document the app serves' },
+  // Ruby (#99): rswag (Rails), grape-swagger, oas_rails, rspec-openapi, rage's own OpenAPI.
+  { file: /^Gemfile$/, hint: /^\s*gem\s+['"](rswag|rswag-api|rswag-ui|grape-swagger|oas_rails|rspec-openapi|rage-rb)['"]/m, what: 'OpenAPI document the app serves' },
 ];
 const ALWAYS = new Set(['fastapi', 'litestar']);
 

@@ -253,10 +253,11 @@ export type DcFrameworkName =
   | 'nuxt' | 'next' | 'vite-vue' | 'vite-react' | 'vite-svelte' | 'tanstack-start' | 'vite' | 'astro' | 'sveltekit' | 'angular' | 'nestjs' | 'express' | 'node' | 'static'
   | 'go' | 'rust'
   | 'laravel' | 'codeigniter' | 'yii' | 'symfony' | 'cakephp' | 'wordpress' | 'drupal' | 'joomla' | 'slim' | 'php'
-  | 'django' | 'flask' | 'fastapi' | 'litestar' | 'python';
+  | 'django' | 'flask' | 'fastapi' | 'litestar' | 'python'
+  | 'rails' | 'sinatra' | 'hanami' | 'jekyll' | 'ruby';
 export interface DcFramework {
   framework: DcFrameworkName;
-  /** A Go / Rust / Python / Node app's own web framework (gin, axum, starlette, fastify …), when recognised. */
+  /** A Go / Rust / Python / Node / Ruby app's own web framework (gin, axum, starlette, fastify, roda …), when recognised. */
   library: string | null;
 }
 

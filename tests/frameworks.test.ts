@@ -117,3 +117,41 @@ describe('what the app shows', () => {
     expect(apiSource(doc, ['go'])).not.toBeNull();
   });
 });
+
+describe('Ruby (#99)', () => {
+  test('Rails wins over the Rack, Puma and Sinatra-like gems it brings', () => {
+    expect(detectFramework(project({ Gemfile: "source 'https://rubygems.org'\ngem 'rails', '~> 8.0'\ngem 'puma'\n", 'Gemfile.lock': 'GEM\n  specs:\n    rack (3.1.0)\n    rails (8.0.1)\n' }))).toEqual({ framework: 'rails', library: null });
+  });
+  test('a Rails app with a package.json (jsbundling) is still Rails', () => {
+    expect(detectFramework(project({ Gemfile: "gem 'rails'\n", 'package.json': '{"devDependencies":{"esbuild":"0.24.0"}}' }))?.framework).toBe('rails');
+  });
+  test('Rails from railties pieces only: config/application.rb + bin/rails', () => {
+    expect(detectFramework(project({ Gemfile: "gem 'railties'\ngem 'actionpack'\n", 'config/application.rb': 'module App; end', 'bin/rails': '#!/usr/bin/env ruby' }))?.framework).toBe('rails');
+  });
+  test('Sinatra, Hanami and Jekyll are frameworks of their own', () => {
+    expect(detectFramework(project({ Gemfile: "gem 'sinatra'\n" }))).toEqual({ framework: 'sinatra', library: null });
+    expect(detectFramework(project({ Gemfile: "gem 'hanami', '~> 2.2'\n" }))).toEqual({ framework: 'hanami', library: null });
+    expect(detectFramework(project({ Gemfile: "gem 'jekyll'\n" }))).toEqual({ framework: 'jekyll', library: null });
+  });
+  test('the smaller ones are Ruby with their name, rage-rb as Rage', () => {
+    expect(detectFramework(project({ Gemfile: "gem 'roda'\n" }))).toEqual({ framework: 'ruby', library: 'roda' });
+    expect(detectFramework(project({ Gemfile: "gem 'rage-rb'\n" }))).toEqual({ framework: 'ruby', library: 'rage' });
+    expect(detectFramework(project({ 'config.ru': 'run ->(env) { [200, {}, ["ok"]] }' }))).toEqual({ framework: 'ruby', library: 'rack' });
+  });
+  test('a Gemfile for CocoaPods / fastlane in a JS project is not Ruby', () => {
+    expect(detectFramework(project({ Gemfile: "gem 'cocoapods'\ngem 'fastlane'\n", 'package.json': '{"dependencies":{"next":"15.0.0"}}' }))?.framework).toBe('next');
+  });
+  test('a lone script that serves is Ruby; one that only computes is not', () => {
+    expect(detectFramework(project({ 'server.rb': "require 'webrick'\nWEBrick::HTTPServer.new(Port: 8000).start" }))).toEqual({ framework: 'ruby', library: null });
+    expect(detectFramework(project({ 'main.rb': 'puts 1 + 1' }))).toBeNull();
+  });
+  test('labels and marks as DevCatz shows them', () => {
+    expect(frameworkTag('rails').label).toBe('Ruby on Rails');
+    expect(frameworkTag('ruby', 'roda').label).toBe('Roda');
+    expect(frameworkTag('ruby', 'padrino').label).toBe('Padrino');
+    expect(frameworkTag('ruby').icon.title).toBe('Ruby');
+  });
+  test('rswag in the Gemfile means an OpenAPI document for DialCatz', () => {
+    expect(apiSource(project({ Gemfile: "gem 'rails'\ngem 'rswag'\n" }), ['rails'])?.how).toBe('served');
+  });
+});

@@ -38,6 +38,11 @@ const TAGS: Record<string, [string, string]> = {
   fastapi: ['FastAPI', 'fastapi'],
   litestar: ['Litestar', 'litestar'],
   python: ['Python', 'python'],
+  rails: ['Ruby on Rails', 'rubyonrails'],
+  sinatra: ['Sinatra', 'sinatra'],
+  hanami: ['Hanami', 'hanami'],
+  jekyll: ['Jekyll', 'jekyll'],
+  ruby: ['Ruby', 'ruby'],
 };
 
 
@@ -92,6 +97,24 @@ const LIBRARIES: Record<string, [string, string]> = {
   express: ['Express', 'express'],
   bun: ['Bun', 'bun'],
   deno: ['Deno', 'deno'],
+  // Ruby: the project's own logo where it has one, else the Ruby mark.
+  bridgetown: ['Bridgetown', 'bridgetown'],
+  middleman: ['Middleman', 'middleman'],
+  padrino: ['Padrino', 'padrino'],
+  rage: ['Rage', 'rage'],
+  grape: ['Grape', 'grape'],
+  roda: ['Roda', 'ruby'],
+  cuba: ['Cuba', 'ruby'],
+  hobbit: ['Hobbit', 'ruby'],
+  scorched: ['Scorched', 'ruby'],
+  nyny: ['NYNY', 'ruby'],
+  camping: ['Camping', 'ruby'],
+  ramaze: ['Ramaze', 'ruby'],
+  ramverk: ['Ramverk', 'ruby'],
+  goliath: ['Goliath', 'ruby'],
+  cramp: ['Cramp', 'ruby'],
+  volt: ['Volt', 'ruby'],
+  rack: ['Rack', 'ruby'],
 };
 
 /** The name and mark of a framework; a Go / Python app's own web framework (`library`) wins when known. */
