@@ -144,7 +144,7 @@ export class AskAi {
     const here = list.find((c) => c.id === req.where.container || c.name === req.where.container);
     const system = [
       `You are the command line of DoCatz, a Docker engine and container manager for ${words.os} (Catzoid family). The user says in plain words what they want; you answer with DoCatz actions that do it (the user clicks each), or just answer when it is a question.`,
-      'DoCatz screens: Containers (grouped by compose project; each with Info, Logs, Terminal, Files, Stats), Images, Volumes, Networks, Engine (the VM, its CPUs / memory / disk, docker context, CLIs), Settings.',
+      `DoCatz screens: Containers (grouped by compose project; each with Info, Logs, Terminal, Files, Stats), Images, Volumes, Networks, Engine (${engine.backend === 'system' ? 'the system’s Docker Engine, no VM' : 'the VM, its CPUs / memory / disk'}, docker context, CLIs), Settings.`,
       '- Use the container and project names below exactly; never invent them. When the request names something not listed, say so.',
       '- Order actions as they should run (start the engine before what needs it). One to four actions; none when nothing fits.',
       '- explanation: one or two sentences, in the language the user wrote in.',

@@ -180,7 +180,10 @@ const uninstalling = ref(false);
     <div class="card-body flex-row items-center gap-3">
       <div class="min-w-0 flex-1">
         <h2 class="font-semibold">Uninstall DoCatz</h2>
-        <p class="text-xs opacity-60">Removes DoCatz, its engine (every container, image and volume in it), the docatz docker context and its settings from {{ words.thisComputer }}. Project folders your containers used stay.</p>
+        <p class="text-xs opacity-60">
+          <template v-if="words.os === 'Linux'">Removes DoCatz, its docker CLIs, the docatz docker context and its settings from {{ words.thisComputer }}. The system’s Docker Engine stays, with every container, image and volume in it, and so do project folders.</template>
+          <template v-else>Removes DoCatz, its engine (every container, image and volume in it), the docatz docker context and its settings from {{ words.thisComputer }}. Project folders your containers used stay.</template>
+        </p>
       </div>
       <button class="btn btn-sm btn-outline btn-error shrink-0" @click="uninstalling = true">Uninstall…</button>
     </div>

@@ -35,7 +35,7 @@ async function bindError(err: NodeJS.ErrnoException): Promise<string> {
         : 'Close that program';
     return `Port ${DNS_PORT} is taken by ${who} for every address, so ${what}. ${hint}, then Try again.`;
   }
-  if (err.code === 'EACCES') return `${WIN ? 'Windows' : 'macOS'} refused ${at} to DoCatz (a firewall or security tool?), so ${what}.`;
+  if (err.code === 'EACCES') return `${process.platform === 'win32' ? 'Windows' : process.platform === 'linux' ? 'Linux' : 'macOS'} refused ${at} to DoCatz (a firewall or security tool?), so ${what}.`;
   return `DNS: ${err.code ?? err.message} on ${at}`;
 }
 

@@ -1,6 +1,6 @@
 import { execFile, spawn } from 'node:child_process';
 import { app, net, shell } from 'electron';
-import { chmodSync, copyFileSync, existsSync, mkdirSync, mkdtempSync, renameSync, rmSync, writeFileSync } from 'node:fs';
+import { chmodSync, copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { homedir, tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { TaskProgress } from '@shared/types';
@@ -142,12 +142,24 @@ export async function siteAsset(app: string, site: string, signal?: AbortSignal)
 
 /** The version of an installed Catzoid app at `path` (its bundle on a Mac, its .exe on Windows), or null. */
 export async function installedVersion(path: string): Promise<string | null> {
-  // Linux: a .deb's version from dpkg (its package is the app's name in lower case); an AppImage does not say.
+  // Linux: a .deb's version from dpkg (its package is the app's name in lower case); an AppImage does not say, so the
+  // version the app wrote in its own bridge.json (mcatzp.app.version, every Catzoid app writes it); else 'installed'.
   if (isLinux) {
     const pkg = /^\/opt\/([^/]+)\//.exec(path)?.[1]?.toLowerCase();
-    if (!pkg) return null;
-    const r = await run('dpkg-query', ['-W', '-f=${Version}', pkg], 10_000);
-    return r.code === 0 ? (/\d+\.\d+\.\d+/.exec(r.out)?.[0] ?? null) : null;
+    if (pkg) {
+      const r = await run('dpkg-query', ['-W', '-f=${Version}', pkg], 10_000);
+      const v = r.code === 0 ? /\d+\.\d+\.\d+/.exec(r.out)?.[0] : undefined;
+      if (v) return v;
+    }
+    const name = /([^/]+)\.AppImage$/.exec(path)?.[1] ?? /^\/opt\/([^/]+)\//.exec(path)?.[1];
+    try {
+      const b = JSON.parse(readFileSync(join(process.env.XDG_CONFIG_HOME || join(homedir(), '.config'), name ?? '', 'bridge.json'), 'utf8')) as { mcatzp?: { app?: { version?: string } } };
+      const v = b.mcatzp?.app?.version;
+      if (v && /^\d+\.\d+\.\d+/.test(v)) return v;
+    } catch {
+      /* no bridge.json yet */
+    }
+    return 'installed';
   }
   const out = await new Promise<string>((resolve) =>
     isWin

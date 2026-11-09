@@ -425,10 +425,12 @@ export function changeActions(api: DoCatzApi, scopes: Scopes, reads: EngineReads
     change(
       'configure_engine',
       'Change the engine\'s settings',
-      'Changes the CPUs, memory, disk size, Rosetta and whether the engine starts with DoCatz. Most apply at the next restart_engine.',
+      'Changes the CPUs, memory, disk size, Rosetta and whether the engine starts with DoCatz. Most apply at the next restart_engine. On Linux only autoStart applies (the system’s Docker Engine uses the whole computer).',
       OBJECT({ cpus: { type: 'integer', minimum: 1, maximum: 128 }, memoryGiB: { type: 'integer', minimum: 1, maximum: 1024 }, diskGiB: { type: 'integer', minimum: 8, maximum: 8192 }, rosetta: { type: 'boolean' }, autoStart: { type: 'boolean' } }),
       async (a) => {
-        const c = (await api.engineState()).config;
+        const st = await api.engineState();
+        if (st.backend === 'system' && (a.cpus !== undefined || a.memoryGiB !== undefined || a.diskGiB !== undefined || a.rosetta !== undefined)) throw new Error('On Linux the engine is the system’s Docker Engine: it uses the whole computer, so only autoStart can be set');
+        const c = st.config;
         const row = (k: keyof typeof c, label: string) => (a[k] !== undefined && a[k] !== c[k] ? fact(label, `${String(c[k])} → ${String(a[k])}`) : []);
         const facts = [...row('cpus', 'CPUs'), ...row('memoryGiB', 'Memory GB'), ...row('diskGiB', 'Disk GB'), ...row('rosetta', 'Rosetta'), ...row('autoStart', 'At start')];
         if (!facts.length) throw new Error('Those are the settings already (get_engine shows them)');
