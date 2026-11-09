@@ -716,6 +716,8 @@ export interface DoCatzApi {
   /** The program on this computer; `askSite` false answers at once from the disk. */
   mcatzpSetup(askSite?: boolean): Promise<McatzpSetup>;
   mcatzpInstall(): Promise<McatzpSetup>;
+  /** Takes MCatzP out of every assistant and removes the copy a Catzoid app installed; turns this app's switch off. */
+  mcatzpUninstall(): Promise<{ removedFrom: string[]; binary: 'removed' | 'kept' | 'none'; keptPath: string | null }>;
   mcatzpInstallCancel(): Promise<void>;
   /** Where each client is approved, across the Catzoid apps. */
   mcatzpApprovals(): Promise<McatzpApproval[]>;
@@ -848,7 +850,7 @@ export interface DoCatzApi {
 
 /** Every method of the bridge, registered as `docatz:<name>` IPC handlers. */
 export const API_METHODS: (keyof DoCatzApi)[] = [
-  'appInfo', 'aboutInfo', 'updateState', 'updateCheck', 'updateDownload', 'updateCancel', 'updateSkip', 'updateInstall', 'updateConfigure', 'reportPreview', 'reportSend', 'captureWindow', 'reportError', 'reportSettings', 'reportConfigure', 'uninstallPlan', 'uninstallRun', 'settings', 'setSettings', 'setAiKey', 'aiModels', 'aiProbe', 'aiTest', 'aiCancel', 'aiAsk', 'aiPreviewAsk', 'aiExplainLog', 'aiPreviewLog', 'aiFile', 'aiPreviewFile', 'openUrl', 'reveal', 'openSibling', 'mcatzpActivity', 'mcatzpClearActivity', 'mcatzpRevoke', 'mcatzpSetup', 'mcatzpInstall', 'mcatzpInstallCancel', 'mcatzpApprovals', 'mcatzpTargets', 'mcatzpAddToClient', 'mcatzpRemoveFromClient', 'mcatzpUpdate', 'mcatzpPending', 'mcatzpAnswer', 'copyText', 'apiSource', 'siblingVersions', 'migrateSources', 'migrateInventory', 'migrateRun', 'migrateCancel', 'devcatzGateways', 'databases', 'siblingInstall', 'siblingInstallCancel', 'runInTerminal',
+  'appInfo', 'aboutInfo', 'updateState', 'updateCheck', 'updateDownload', 'updateCancel', 'updateSkip', 'updateInstall', 'updateConfigure', 'reportPreview', 'reportSend', 'captureWindow', 'reportError', 'reportSettings', 'reportConfigure', 'uninstallPlan', 'uninstallRun', 'settings', 'setSettings', 'setAiKey', 'aiModels', 'aiProbe', 'aiTest', 'aiCancel', 'aiAsk', 'aiPreviewAsk', 'aiExplainLog', 'aiPreviewLog', 'aiFile', 'aiPreviewFile', 'openUrl', 'reveal', 'openSibling', 'mcatzpActivity', 'mcatzpClearActivity', 'mcatzpRevoke', 'mcatzpSetup', 'mcatzpInstall', 'mcatzpUninstall', 'mcatzpInstallCancel', 'mcatzpApprovals', 'mcatzpTargets', 'mcatzpAddToClient', 'mcatzpRemoveFromClient', 'mcatzpUpdate', 'mcatzpPending', 'mcatzpAnswer', 'copyText', 'apiSource', 'siblingVersions', 'migrateSources', 'migrateInventory', 'migrateRun', 'migrateCancel', 'devcatzGateways', 'databases', 'siblingInstall', 'siblingInstallCancel', 'runInTerminal',
   'engineState', 'engineStart', 'engineStop', 'engineRestart', 'engineReset', 'engineConfigure', 'engineCancel', 'engineSetupWsl', 'restartComputer', 'engineLog', 'contextSet', 'cliInstall', 'cliPath', 'diskUsage',
   'containers', 'container', 'containerEnv', 'containerAction', 'containerRemove', 'stats', 'logsFollow', 'logsStop', 'termOpen', 'termInput', 'termResize', 'termClose', 'files', 'fileSave', 'projects', 'composePick', 'composeRun', 'composeProject', 'runCancel', 'readText', 'writeText',
   'images', 'imageRemove', 'imagePull', 'volumes', 'volumeRemove', 'networks', 'networkRemove', 'prunePreview', 'prune',

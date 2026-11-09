@@ -44,6 +44,7 @@ export const MCATZP_COVERAGE: Record<keyof DoCatzApi, string> = {
   mcatzpRevoke: 'never: a client does not manage approvals',
   mcatzpSetup: 'never: a client does not install itself',
   mcatzpInstall: 'never: a client does not install itself',
+  mcatzpUninstall: 'not a tool',
   mcatzpInstallCancel: 'never: a client does not install itself',
   mcatzpApprovals: "never: what runs a client on this computer is the user's to install",
   mcatzpTargets: 'never: a client does not install itself',
