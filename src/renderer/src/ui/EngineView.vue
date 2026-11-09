@@ -101,7 +101,7 @@ const copy = (t: string) => {
                 <button class="btn btn-sm" :disabled="!!busy" @click="run('restart', () => api.engineRestart())"><span v-if="busy === 'restart'" class="loading loading-spinner loading-xs" />Restart</button>
                 <button class="btn btn-sm" :disabled="!!busy" @click="run('stop', () => api.engineStop())"><span v-if="busy === 'stop'" class="loading loading-spinner loading-xs" />Stop</button>
               </template>
-              <button v-else-if="!['unsupported', 'starting', 'stopping'].includes(s.status) && !s.task" class="btn btn-primary btn-sm" @click="run('start', () => api.engineStart())">{{ s.status === 'missing' ? 'Set up and start' : 'Start' }}</button>
+              <button v-else-if="!['unsupported', 'starting', 'stopping'].includes(s.status) && !s.task" class="btn btn-primary btn-sm" @click="run('start', () => api.engineStart())">{{ s.status === 'missing' ? (isSystem ? 'Install Docker Engine' : 'Set up and start') : 'Start' }}</button>
               <button v-else-if="s.task && !s.task.error && !wslTask" class="btn btn-ghost btn-sm" @click="api.engineCancel()">Cancel</button>
             </div>
             <!-- WSL's own install shows in the card above -->

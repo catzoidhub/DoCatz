@@ -16,7 +16,7 @@ import type { Backend, BackendStatus, StepReporter } from './backend';
  * CPU / memory / disk are the computer's own (no settings), and Reset is not DoCatz's to do: the data is the system's.
  */
 
-const DOCKERD = ['/usr/bin/dockerd', '/usr/sbin/dockerd', '/usr/local/bin/dockerd'];
+const DOCKERD = ['/usr/bin/dockerd', '/usr/sbin/dockerd', '/usr/local/bin/dockerd', '/snap/bin/dockerd'];
 
 async function systemctl(...args: string[]): Promise<string> {
   return (await run('systemctl', args, { timeout: 15_000 })).stdout.trim();
@@ -29,10 +29,19 @@ async function socketOpen(): Promise<boolean> {
 
 export class LinuxBackend implements Backend {
   readonly id = 'system' as const;
-  readonly steps = ['Install or start Docker Engine (one password prompt)', 'Connect to Docker'];
+  /** What a start shows: installing when Docker Engine is missing (user, 2026-11-10: a notice and a button for it). */
+  get steps(): string[] {
+    return this.installed()
+      ? ['Start Docker Engine — your password', 'Connect to Docker']
+      : ['Install Docker Engine and Docker Compose — your password, then a few minutes', 'Connect to Docker'];
+  }
 
   private installed(): boolean {
-    return DOCKERD.some(existsSync);
+    // DOCATZ_FAKE_NO_DOCKER: tests the "not installed" notice and Install on a computer that has it (the install
+    // script then only adds what is missing).
+    if (process.env.DOCATZ_FAKE_NO_DOCKER) return false;
+    // A socket counts too (Docker installed some other way): never install docker.io over it.
+    return DOCKERD.some(existsSync) || existsSync(LINUX_SOCKET);
   }
 
   private async version(): Promise<string> {
@@ -44,7 +53,7 @@ export class LinuxBackend implements Backend {
 
   async status(): Promise<BackendStatus> {
     const base = { manager: await this.version(), dir: this.installed() ? '/var/lib/docker' : '', running: null };
-    if (!this.installed()) return { ...base, status: 'missing', message: 'Docker Engine is not installed: Start installs it from your package manager.' };
+    if (!this.installed()) return { ...base, status: 'missing', message: 'DoCatz runs your containers on Docker Engine, which is not on this computer yet. DoCatz can install it from your package manager (docker.io and Docker Compose): one password prompt, then a few minutes.' };
     const active = await systemctl('is-active', 'docker');
     if (active === 'activating') return { ...base, status: 'starting', message: '' };
     if (active === 'deactivating') return { ...base, status: 'stopping', message: '' };

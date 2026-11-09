@@ -469,7 +469,7 @@ export class Domains {
 
   // ---------------------------------------------------------------- setup steps (as DevCatz's setupSteps)
 
-  private async steps<T>(what: 'ca' | 'urls' | 'dns', title: string, steps: string[], work: (step: (i: number, detail?: string) => void) => Promise<T>, doneTitle: string): Promise<T> {
+  private async steps<T>(what: 'ca' | 'urls' | 'dns' | 'tld', title: string, steps: string[], work: (step: (i: number, detail?: string) => void) => Promise<T>, doneTitle: string): Promise<T> {
     clearTimeout(this.taskClear);
     const set = (p: Partial<TaskProgress>) => {
       this.task = { what, task: { ...(this.task?.what === what ? this.task.task : { kind: 'setup', title, steps, step: 0 }), ...p } };
@@ -719,14 +719,19 @@ ${s.update === 'update-ca-certificates' ? 'update-ca-certificates --fresh' : s.u
   }
 
   async set(patch: DcDomainsPatch): Promise<DcDomains> {
-    if (patch.tld !== undefined) {
+    if (patch.tld !== undefined && patch.tld.trim().toLowerCase().replace(/^\./, '') !== this.tld()) {
       const tld = patch.tld.trim().toLowerCase().replace(/^\./, '');
       if (!/^[a-z][a-z0-9-]{0,30}$/.test(tld)) throw new Error('A domain ending is letters, digits and dashes, like localhost or test');
       if (['com', 'net', 'org', 'io', 'dev', 'app', 'local'].includes(tld)) throw new Error(`.${tld} is a real (or reserved) domain ending — pick localhost or test`);
-      if ((await resolverStatus(tld, DNS_HOST).catch(() => 'none')) === 'foreign') throw new Error(`Another tool already resolves .${tld} — pick another ending`);
-      writeShared({ domains: { tld } });
-      this.contexts.clear();
-      await this.startDns();
+      // Steps, not a silent wait: checking the resolver asks the system (PowerShell on Windows takes seconds).
+      await this.steps('tld', `Changing the ending to .${tld}`, [`Check that no other tool resolves .${tld}`, `Give every container a .${tld} name`, 'Restart the local DNS'], async (step) => {
+        if ((await resolverStatus(tld, DNS_HOST).catch(() => 'none')) === 'foreign') throw new Error(`Another tool already resolves .${tld} — pick another ending`);
+        step(1);
+        writeShared({ domains: { tld } });
+        this.contexts.clear();
+        step(2);
+        await this.startDns();
+      }, `Names end in .${tld}`);
     }
     if (patch.https !== undefined) store.setExtra(HTTPS_KEY, patch.https === true);
     this.probe = null;

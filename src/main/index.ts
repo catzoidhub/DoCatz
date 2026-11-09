@@ -1,4 +1,4 @@
-import { app, clipboard, dialog, ipcMain, shell } from 'electron';
+import { app, clipboard, dialog, ipcMain, Notification, shell } from 'electron';
 import { execFile, spawn } from 'node:child_process';
 import { binDir } from './paths';
 import { isLinux, isWin } from './platform';
@@ -654,6 +654,12 @@ app.whenReady().then(async () => {
     void engine.adopt();
   } else {
     const s = await engine.state();
+    // Linux (#101, user 2026-11-10): no Docker Engine on this computer — say so outside the window too, with the way in.
+    if (s.backend === 'system' && s.status === 'missing' && Notification.isSupported()) {
+      const n = new Notification({ title: 'Docker Engine is not installed', body: 'DoCatz can install it for you: open Engine → Install Docker Engine (one password prompt).' });
+      n.on('click', () => openWindow('engine'));
+      n.show();
+    }
     if (s.status === 'stopped' && s.config.autoStart) void engine.start().catch((e) => console.warn('engine autostart:', (e as Error).message));
     else tray.update(s, []);
   }

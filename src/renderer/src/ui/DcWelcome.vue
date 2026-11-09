@@ -119,14 +119,14 @@ const privacy = () => site.value && api.openUrl(`${site.value}/docs/privacy-and-
               <div class="min-w-0">
                 <p class="font-medium">1 · Set up the engine</p>
                 <p class="mt-1 text-sm opacity-70">
-                  <template v-if="engine?.backend === 'system'">Docker Engine from your package manager runs your containers directly, with no VM; DoCatz installs and starts it after one password prompt.</template>
+                  <template v-if="engine?.backend === 'system'">{{ engine.status === 'missing' ? 'Docker Engine is not on this computer yet. DoCatz installs it from your package manager (docker.io and Docker Compose) after one password prompt; it runs your containers directly, with no VM.' : 'Docker Engine from your package manager runs your containers directly, with no VM; DoCatz starts it after one password prompt.' }}</template>
                   <template v-else>
                     {{ engine?.backend === 'wsl' ? 'A small Linux distro in WSL 2 runs Docker.' : 'A small Linux VM on Apple’s Virtualization framework runs Docker, with fast file sharing for your home folder.' }}
                     The first start downloads about 1 GB and takes a few minutes; after that it starts in seconds.
                   </template>
                 </p>
               </div>
-              <button class="btn btn-primary btn-sm shrink-0" :disabled="!!needs" @click="setUp">Set up now</button>
+              <button class="btn btn-primary btn-sm shrink-0" :disabled="!!needs" @click="setUp">{{ engine?.backend === 'system' && engine.status === 'missing' ? 'Install now' : 'Set up now' }}</button>
             </div>
           </div>
 
@@ -134,7 +134,7 @@ const privacy = () => site.value && api.openUrl(`${site.value}/docs/privacy-and-
             <p class="font-medium">2 · Your docker keeps working</p>
             <p class="mt-1 text-sm opacity-70">
               DoCatz brings its own docker, compose and buildx and adds a <span class="font-mono">docatz</span> context. Nothing switches until you choose
-              <b>Use DoCatz as the default</b> in Engine — Docker Desktop or OrbStack can stay side by side.
+              <b>Use DoCatz as the default</b> in Engine — {{ engine?.backend === 'system' ? 'the docker command you already have keeps working as it is.' : engine?.backend === 'wsl' ? 'Docker Desktop can stay side by side.' : 'Docker Desktop or OrbStack can stay side by side.' }}
             </p>
           </div>
 

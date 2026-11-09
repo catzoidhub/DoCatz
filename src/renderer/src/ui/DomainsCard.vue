@@ -51,9 +51,10 @@ const zoneNames = computed(() => (d.value?.resolver.zones ?? []).map((z) => `*.$
           <span class="flex items-center gap-1">
             <span class="opacity-50">.</span>
             <input v-model="tldInput" class="input input-sm w-32 font-mono" spellcheck="false" :disabled="busy" />
-            <button class="btn btn-sm" :disabled="busy || tldInput.trim() === d.tld">Save</button>
+            <button class="btn btn-sm" :disabled="busy || tldInput.trim() === d.tld"><span v-if="d.task?.what === 'tld' && !d.task.task.done" class="loading loading-spinner loading-xs" />Save</button>
           </span>
         </form>
+        <TaskSteps v-if="d.task?.what === 'tld'" :task="d.task.task" />
         <div v-if="d.resolver.needed" class="opt-row">
           <span class="flex min-w-0 flex-col">
             <span class="label-caps">{{ words.os === 'Windows' ? 'Register the names with Windows' : 'Resolver' }}</span>

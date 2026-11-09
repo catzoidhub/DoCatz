@@ -179,7 +179,7 @@ export interface DcDomains {
   /** DevCatz is on this computer. */
   devcatz: boolean;
   /** A setup step running (trust the CA, forwarding, resolver) — the window shows its steps. */
-  task: { what: 'ca' | 'urls' | 'dns'; task: TaskProgress } | null;
+  task: { what: 'ca' | 'urls' | 'dns' | 'tld'; task: TaskProgress } | null;
 }
 export type DcDomainsPatch = { tld?: string; https?: boolean };
 

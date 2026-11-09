@@ -136,11 +136,13 @@ export class Engine {
   /** Sets up what is missing and starts the engine; the steps show in the window. Resolves when Docker answers. */
   async start(): Promise<void> {
     if (this.busy) return;
-    if (await docker.ping()) return void this.changed();
+    // DOCATZ_FAKE_NO_DOCKER (tests, Linux): the install runs although Docker answers.
+    if (!process.env.DOCATZ_FAKE_NO_DOCKER && (await docker.ping())) return void this.changed();
     this.busy = 'starting';
     this.abort = new AbortController();
     const steps = [...this.backend.steps, ...(cliInstalled() ? [] : ['Install docker, compose and buildx'])];
-    this.task = { kind: 'engine', title: 'Starting the engine', steps, step: 0 };
+    const installing = this.backend.id === 'system' && this.last?.status === 'missing';
+    this.task = { kind: 'engine', title: installing ? 'Installing Docker Engine' : 'Starting the engine', steps, step: 0 };
     void this.changed();
     const signal = this.abort.signal;
     try {
