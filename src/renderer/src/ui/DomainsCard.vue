@@ -62,6 +62,7 @@ const zoneNames = computed(() => (d.value?.resolver.zones ?? []).map((z) => `*.$
               <template v-if="d.resolver.status === 'foreign'">Another tool already resolves these names — remove it there first.</template>
               <template v-else-if="d.resolver.status === 'ours' && d.resolver.resolves">{{ zoneNames }} resolve to {{ words.thisComputer }}.</template>
               <template v-else-if="words.os === 'Windows'">Only browsers resolve {{ zoneNames }} on Windows by themselves; DNS rules (NRPT) let every program reach the containers. Administrator approval once.</template>
+              <template v-else-if="words.os === 'Linux'">Sends {{ zoneNames }} to the local DNS (a systemd-resolved rule, /etc/systemd/resolved.conf.d/devcatz-{{ d.tld }}.conf). Your password once.</template>
               <template v-else>Sends {{ zoneNames }} to the local DNS (/etc/resolver/{{ d.tld }}). Your administrator password once.</template>
               <template v-if="d.resolver.dnsError"> {{ d.resolver.dnsError }}</template>
             </span>
@@ -82,7 +83,7 @@ const zoneNames = computed(() => (d.value?.resolver.zones ?? []).map((z) => `*.$
           <template v-else>No certificate yet: Trust makes one.</template>
         </p>
         <div class="opt-row">
-          <span class="flex min-w-0 flex-col"><span class="label-caps">Trust the certificate</span><span class="text-xs opacity-50">{{ words.os === 'Windows' ? 'Adds it to your Trusted Root certificates — Windows asks “install this certificate?”' : 'Adds it to your login keychain — macOS asks for your password or Touch ID.' }}</span></span>
+          <span class="flex min-w-0 flex-col"><span class="label-caps">Trust the certificate</span><span class="text-xs opacity-50">{{ words.os === 'Windows' ? 'Adds it to your Trusted Root certificates — Windows asks “install this certificate?”' : words.os === 'Linux' ? 'Adds it to the system’s certificates and to Chrome’s and Firefox’s own stores — your password once.' : 'Adds it to your login keychain — macOS asks for your password or Touch ID.' }}</span></span>
           <button v-if="!d.ca?.trusted" class="btn btn-sm btn-primary" :disabled="busy" @click="call(() => api.caTrust(true))">Trust…</button>
           <button v-else class="btn btn-sm btn-ghost" :disabled="busy" @click="call(() => api.caTrust(false))">Remove…</button>
         </div>
@@ -99,7 +100,7 @@ const zoneNames = computed(() => (d.value?.resolver.zones ?? []).map((z) => `*.$
       <div class="card-body gap-3">
         <div class="flex items-center gap-2"><h2 class="flex-1">URLs without a port</h2><span class="badge badge-soft badge-primary badge-sm" title="One :443 forwarding per computer, shared by DevCatz and DoCatz">Shared with Catzoid apps</span></div>
         <p class="text-sm opacity-60">
-          Forwards ports 443 and 80 to {{ d.devcatz ? 'DevCatz’s proxy (so its sites keep working), which hands DoCatz’s names on' : 'DoCatz’s proxy' }}, so URLs need no :{{ d.httpsPort }}. {{ words.os === 'Windows' ? 'Administrator approval once.' : 'Your administrator password once.' }}
+          Forwards ports 443 and 80 to {{ d.devcatz ? 'DevCatz’s proxy (so its sites keep working), which hands DoCatz’s names on' : 'DoCatz’s proxy' }}, so URLs need no :{{ d.httpsPort }}. {{ words.os === 'Windows' ? 'Administrator approval once.' : words.os === 'Linux' ? 'Your password once.' : 'Your administrator password once.' }}
         </p>
         <div class="opt-row">
           <span class="flex min-w-0 flex-col">

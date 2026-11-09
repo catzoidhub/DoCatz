@@ -693,19 +693,21 @@ ${s.update === 'update-ca-certificates' ? 'update-ca-certificates --fresh' : s.u
     const d = shared();
     const tld = this.tld();
     const zones = resolverZones(tld);
-    if (!this.probe || Date.now() - this.probe.at > 20_000) {
+    // A local copy: a setup step may clear this.probe while this answer still awaits (it read null once, 2026-11-10).
+    let probe = this.probe;
+    if (!probe || Date.now() - probe.at > 20_000) {
       const [r, resolves] = await Promise.all([d.cleanUrls?.on ? this.reachesDocatz() : Promise.resolve('no' as const), this.resolves()]);
-      this.probe = { at: Date.now(), reaches: r === 'yes', frontDown: r === 'down', resolves };
+      probe = this.probe = { at: Date.now(), reaches: r === 'yes', frontDown: r === 'down', resolves };
     }
     const trusted = this.ca ? (d.ca?.trusted ?? (await this.recordTrust())) : false;
     return {
       tld,
       https: this.https(),
       ca: this.ca ? { cert: this.ca.files.cert, by: this.ca.files.by, trusted } : null,
-      cleanUrls: { on: d.cleanUrls?.on === true, by: d.cleanUrls?.on ? d.cleanUrls.by : null, reachesDocatz: this.probe.reaches, frontDown: this.probe.frontDown === true },
+      cleanUrls: { on: d.cleanUrls?.on === true, by: d.cleanUrls?.on ? d.cleanUrls.by : null, reachesDocatz: probe.reaches, frontDown: probe.frontDown === true },
       httpsPort: this.httpsPort,
       httpPort: this.httpPort,
-      resolver: { needed: zones.length > 0, status: zones.length ? await resolverStatus(tld, DNS_HOST).catch(() => 'none' as const) : 'ours', resolves: this.probe.resolves, dnsError: this.dns.running || (await this.devcatzDns()) ? null : this.dns.error, zones },
+      resolver: { needed: zones.length > 0, status: zones.length ? await resolverStatus(tld, DNS_HOST).catch(() => 'none' as const) : 'ours', resolves: probe.resolves, dnsError: this.dns.running || (await this.devcatzDns()) ? null : this.dns.error, zones },
       devcatz: this.devcatz !== null,
       task: this.task,
     };
