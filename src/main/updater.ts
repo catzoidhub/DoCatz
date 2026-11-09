@@ -146,9 +146,9 @@ export class Updater {
     }
     const lastChecked = Date.now();
     save({ lastChecked });
-    // No Windows build on the feed yet (latest.yml missing, as while the installer waits for signing): nothing newer
-    // for this copy, not a failure.
-    if (error && process.platform === 'win32' && /\b404\b/.test(error)) error = '';
+    // No Windows / Linux build on the feed yet (latest.yml / latest-linux.yml missing, as while the installer waits for
+    // signing or before the first Linux release): nothing newer for this copy, not a failure.
+    if (error && process.platform !== 'darwin' && /\b404\b/.test(error)) error = '';
     if (error) {
       this.set({ status: 'error', error: `Could not reach the update feed: ${error}`, lastChecked });
       return this.get();
@@ -157,8 +157,12 @@ export class Updater {
       this.set({ status: 'none', version: undefined, lastChecked });
       return this.get();
     }
-    // The file electron-updater will fetch for this computer: Windows the Setup .exe, a Mac the zip of its own chip.
-    const mine = (u: string) => (process.platform === 'win32' ? u.endsWith('.exe') : u.endsWith('.zip') && (process.arch === 'arm64') === u.includes('arm64'));
+    // The file electron-updater will fetch for this computer: Windows the Setup .exe, a Mac the zip of its own chip,
+    // Linux the AppImage (or, installed from the .deb, the .deb; electron-updater installs it through pkexec) of its arch.
+    const arm = (u: string) => /arm64|aarch64/.test(u);
+    const linuxKind = process.env.APPIMAGE ? '.AppImage' : '.deb';
+    const mine = (u: string) =>
+      process.platform === 'win32' ? u.endsWith('.exe') : process.platform === 'linux' ? u.endsWith(linuxKind) && (process.arch === 'arm64') === arm(u) : u.endsWith('.zip') && (process.arch === 'arm64') === arm(u);
     const size = info.files?.find((f) => mine(f.url))?.size;
     this.set({ status: 'available', version: info.version, notes: notesOf(info), size, releaseDate: info.releaseDate, lastChecked, source: this.source });
     if (!manual && stored().skipped !== info.version) this.notify('available');

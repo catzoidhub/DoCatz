@@ -5,7 +5,7 @@ import { join } from 'node:path';
 import type { DcMigrateInventory, DcMigrateSource, DcMigrateSourceId, TaskProgress } from '@shared/types';
 import { dockerBin } from './cli';
 import { dockerHost } from './paths';
-import { isWin } from './platform';
+import { isLinux, isWin } from './platform';
 import { run } from './proc';
 
 /**
@@ -43,6 +43,14 @@ function known(): { id: DcMigrateSourceId; name: string; hosts: string[]; instal
       return [];
     }
   })();
+  // Linux (#101): DoCatz's engine is the system's Docker Engine; the others run their own (Docker Desktop's VM,
+  // Rancher Desktop's, Colima's).
+  if (isLinux)
+    return [
+      { id: 'docker-desktop', name: 'Docker Desktop', hosts: [`unix://${join(home, '.docker', 'desktop', 'docker.sock')}`], installed: () => existsSync('/opt/docker-desktop') },
+      { id: 'rancher', name: 'Rancher Desktop', hosts: [`unix://${join(home, '.rd', 'docker.sock')}`], installed: () => existsSync('/opt/rancher-desktop') },
+      { id: 'colima', name: 'Colima', hosts: colima, installed: () => colima.length > 0 || ['/usr/local/bin/colima', '/usr/bin/colima'].some(existsSync) },
+    ];
   return [
     { id: 'docker-desktop', name: 'Docker Desktop', hosts: [`unix://${join(home, '.docker', 'run', 'docker.sock')}`], installed: () => existsSync('/Applications/Docker.app') },
     { id: 'orbstack', name: 'OrbStack', hosts: [`unix://${join(home, '.orbstack', 'run', 'docker.sock')}`], installed: () => existsSync('/Applications/OrbStack.app') || existsSync(join(home, 'Applications', 'OrbStack.app')) },

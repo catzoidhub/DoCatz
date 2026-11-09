@@ -1,0 +1,70 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- AppStream data for the .deb (Ubuntu App Center / GNOME Software show it when the package is opened), so the
+     Linux install page has the same care as the DMG window and the Windows installer (Catzoid #93, DoCatz #101). -->
+<component type="desktop-application">
+  <id>com.mrcatz.docatz</id>
+  <name>DoCatz</name>
+  <summary>Docker containers with a domain each, herded by one cat</summary>
+  <developer id="com.catzoid">
+    <name>Catzoid</name>
+  </developer>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>GPL-3.0-only</project_license>
+  <description>
+    <p>
+      DoCatz is a desktop app for your Docker engine: containers grouped by compose project, each web container on its
+      own name like https://web.shop.docatz.localhost, with logs, a terminal and files a click away.
+    </p>
+    <ul>
+      <li>Compose projects with Up, Build, Restart and Down, and every container's logs, terminal, files and stats</li>
+      <li>A domain for each container over HTTPS, with a trusted local certificate</li>
+      <li>Images, volumes, networks and builds, with disk usage and clean-up</li>
+      <li>On Linux it runs the system's Docker Engine and installs it for you when it is missing</li>
+      <li>Works with DevCatz, DBCatz and DialCatz, and an AI helper that explains what it sees</li>
+    </ul>
+    <p>Nothing changes outside its own folders until you choose it in the app.</p>
+  </description>
+  <launchable type="desktop-id">docatz.desktop</launchable>
+  <branding>
+    <color type="primary" scheme_preference="light">#86cbf8</color>
+    <color type="primary" scheme_preference="dark">#2f2878</color>
+  </branding>
+  <url type="homepage">https://catzoid.com/docatz</url>
+  <url type="help">https://catzoid.com/docs</url>
+  <url type="bugtracker">https://github.com/catzoidhub/DoCatz/issues</url>
+  <screenshots>
+    <screenshot type="default">
+      <caption>A compose project with its containers and domains</caption>
+      <image>https://catzoid.com/screens/docatz/project-light.webp</image>
+    </screenshot>
+    <screenshot>
+      <caption>Every container's logs as they come</caption>
+      <image>https://catzoid.com/screens/docatz/logs-light.webp</image>
+    </screenshot>
+    <screenshot>
+      <caption>A terminal inside any container</caption>
+      <image>https://catzoid.com/screens/docatz/terminal-light.webp</image>
+    </screenshot>
+    <screenshot>
+      <caption>A domain for every container, over HTTPS</caption>
+      <image>https://catzoid.com/screens/docatz/domains-light.webp</image>
+    </screenshot>
+  </screenshots>
+  <categories>
+    <category>Development</category>
+  </categories>
+  <keywords>
+    <keyword>docker</keyword>
+    <keyword>compose</keyword>
+    <keyword>containers</keyword>
+    <keyword>images</keyword>
+    <keyword>localhost</keyword>
+  </keywords>
+  <provides>
+    <binary>docatz</binary>
+  </provides>
+  <content_rating type="oars-1.1"/>
+  <releases>
+    <release version="1.1.0" date="2026-11-05"/>
+  </releases>
+</component>

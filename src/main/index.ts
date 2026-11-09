@@ -3,6 +3,7 @@ import { execFile, spawn } from 'node:child_process';
 import { binDir } from './paths';
 import { isLinux, isWin } from './platform';
 import { runInLinuxTerminal } from './linuxterm';
+import { offerAppImageInstall } from './appimage';
 import { createWriteStream, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { basename, join } from 'node:path';
 import { pipeline } from 'node:stream/promises';
@@ -610,6 +611,8 @@ function api(): DoCatzApi {
 }
 
 app.whenReady().then(async () => {
+  // Linux AppImage run from Downloads: the install window first (it restarts DoCatz from ~/Applications; Catzoid #93).
+  if (await offerAppImageInstall(app.isPackaged ? process.resourcesPath : join(app.getAppPath(), 'resources'))) return;
   if (app.isPackaged) app.setAsDefaultProtocolClient('docatz');
   const impl = api() as unknown as Record<string, (...args: unknown[]) => unknown>;
   for (const m of API_METHODS) ipcMain.handle(`docatz:${m}`, async (_e, ...args) => impl[m](...args));

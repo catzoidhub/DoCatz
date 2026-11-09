@@ -6,7 +6,9 @@ import { dirname, join } from 'node:path';
 import { findCatzoidApp } from './companion';
 import type { DcUninstallPlan } from '@shared/types';
 import { readShared, setSharedKey, SHARED_DIR } from './shared';
-import { isWin } from './platform';
+import { isLinux, isWin } from './platform';
+import { runAsRootLinux, shq } from './linuxadmin';
+import { appImageIconFile } from './appimage';
 import type { DcAiProvider } from '@shared/types';
 import { words } from '@shared/platform';
 import { DOCATZ_HOME } from './paths';
@@ -27,6 +29,10 @@ import { DOCATZ_HOME } from './paths';
  * with its own NSIS uninstaller (the app, its shortcuts, its entry in Installed apps), and the docatz:// link goes —
  * all from a small progress window that starts once DoCatz has quit (Windows keeps a running app's profile locked).
  * The shared AI keys are the Catzoid\keys\<provider>.dpapi files.
+ *
+ * Linux (#101, as DevCatz): ~/.docatz, ~/.config/DoCatz, its caches and menu entry go after it quits; the app is the
+ * AppImage (deleted) or the .deb (dpkg -r behind the password prompt, while DoCatz still runs). The engine is the
+ * system's Docker Engine, which stays with every container, image and volume in it.
  */
 
 const BUNDLE_ID = 'com.mrcatz.docatz';
@@ -46,6 +52,8 @@ const run = (cmd: string, args: string[]) =>
 
 /** The running app bundle (…/DoCatz.app); on Windows the NSIS uninstaller next to DoCatz.exe. */
 function bundle(): string | null {
+  // Linux: the AppImage file, or a .deb's /opt/DoCatz.
+  if (isLinux) return process.env.APPIMAGE || (process.execPath.startsWith('/opt/') ? dirname(process.execPath) : null);
   if (isWin) {
     const u = join(dirname(process.execPath), `Uninstall ${app.getName()}.exe`);
     return existsSync(u) ? u : null;
@@ -57,6 +65,8 @@ function bundle(): string | null {
 async function keychainHas(service: string, account?: string): Promise<boolean> {
   // Windows: the shared AI keys are files (shared.ts).
   if (isWin) return service === SHARED_KEYS && !!account && existsSync(join(SHARED_DIR, 'keys', `${account}.dpapi`));
+  // Linux: the shared AI keys are Secret Service items (shared.ts); Electron's own safe storage is not listed there.
+  if (isLinux) return service === SHARED_KEYS && !!account && (await run('secret-tool', ['lookup', 'service', service, 'account', account])).ok;
   return (await run('/usr/bin/security', ['find-generic-password', '-s', service, ...(account ? ['-a', account] : [])])).ok;
 }
 
@@ -76,7 +86,43 @@ function winLeftovers(): { label: string; path: string }[] {
   return [{ label: 'Update downloads', path: join(local, 'docatz-updater') }].filter((f) => existsSync(f.path));
 }
 
+/** Linux: the .deb package this DoCatz came from (null for an AppImage or a copied folder). */
+async function linuxPackage(): Promise<string | null> {
+  if (!isLinux || process.env.APPIMAGE) return null;
+  const r = await run('dpkg', ['-S', process.execPath]);
+  return r.ok ? r.out.split(':')[0]?.trim() || null : null;
+}
+
+/** Linux: what DoCatz keeps outside its data folder (caches, update downloads, the AppImage's menu entry). */
+function linuxLeftovers(): { label: string; path: string }[] {
+  const cache = process.env.XDG_CACHE_HOME || join(home, '.cache');
+  const apps = join(process.env.XDG_DATA_HOME || join(home, '.local', 'share'), 'applications');
+  return [
+    { label: 'Caches', path: join(cache, 'DoCatz') },
+    { label: 'Update downloads', path: join(cache, 'docatz-updater') },
+    { label: 'The menu entry', path: join(apps, 'docatz.desktop') },
+    { label: 'The menu entry’s icon', path: appImageIconFile() },
+  ].filter((f) => existsSync(f.path));
+}
+
 export async function uninstallPlan(): Promise<DcUninstallPlan> {
+  if (isLinux) {
+    const items = [
+      { label: 'docker, compose and buildx, downloads (~/.docatz) — the system’s Docker Engine and everything in it stay', path: DOCATZ_HOME },
+      { label: 'The docatz docker context and the PATH lines in .bashrc / .zshrc', path: '~/.docker/contexts' },
+      { label: 'Settings, certificates, bridge.json', path: app.getPath('userData') },
+      ...linuxLeftovers(),
+    ].filter((f) => f.path !== DOCATZ_HOME || existsSync(f.path));
+    const b = bundle();
+    const pkg = await linuxPackage();
+    if (b && app.isPackaged) items.push({ label: pkg ? `The app (the ${pkg} package, removed with your password)` : 'The app', path: b });
+    const shared: { label: string; path: string }[] = [];
+    if (existsSync(join(SHARED_DIR, 'shared.json'))) shared.push({ label: 'Theme, AI provider, site address and domains shared by the Catzoid apps', path: join(SHARED_DIR, 'shared.json') });
+    for (const p of readShared().ai?.keys ?? []) if (await keychainHas(SHARED_KEYS, p)) shared.push({ label: `${p} API key (${words.secretStore})`, path: `Keyring: ${SHARED_KEYS} · ${p}` });
+    const otherApps: string[] = [];
+    for (const o of OTHERS) if (await installed(o.id, o.name)) otherApps.push(o.name);
+    return { items, shared, otherApps, homebrew: false, dryRun: dryRun() };
+  }
   if (isWin) {
     const items = [{ label: 'The engine: the WSL distro and its disk — every container, image and volume in it', path: join(DOCATZ_HOME, 'vm') }, { label: 'docker, compose and buildx, downloads (~/.docatz)', path: DOCATZ_HOME }, { label: 'The docatz docker context and the PATH entry', path: '~/.docker/contexts' }, { label: 'Settings, certificates, bridge.json', path: app.getPath('userData') }, ...winLeftovers()];
     const u = bundle();
@@ -143,6 +189,29 @@ export async function uninstallRun(confirm: string, shared: boolean, beforeQuit:
     }
     const folders = [app.getPath('userData'), DOCATZ_HOME, ...winLeftovers().map((f) => f.path), ...sharedPaths];
     await afterQuitWin(bundle(), folders);
+    setImmediate(() => app.exit(0));
+    return plan;
+  }
+  if (isLinux) {
+    if (withShared) for (const p of readShared().ai?.keys ?? []) await setSharedKey(p as DcAiProvider, '').catch(() => undefined);
+    // The .deb's files are root's: dpkg removes them (and the menu entry) behind the password prompt; a running program
+    // keeps its open files, so DoCatz still finishes and quits.
+    const pkg = await linuxPackage();
+    if (pkg) {
+      const r = await runAsRootLinux(`dpkg -r ${shq(pkg)} >/dev/null`);
+      if (!r.ok) console.warn('uninstall: dpkg -r:', r.message);
+    }
+    const out = ['#!/bin/sh', `while kill -0 ${process.pid} 2>/dev/null; do sleep 0.2; done`];
+    for (const f of plan.items) if (!f.path.startsWith('~') && !f.path.startsWith('/opt/')) out.push(`rm -rf ${q(f.path)}`);
+    if (withShared) {
+      out.push(`rm -f ${q(join(SHARED_DIR, 'shared.json'))}`);
+      if (ownCa()) out.push(`rm -rf ${q(join(SHARED_DIR, 'ca'))}`);
+      out.push(`rmdir ${q(SHARED_DIR)} 2>/dev/null`);
+    }
+    out.push('rm -f "$0"');
+    const script = join(tmpdir(), `docatz-uninstall-${process.pid}.sh`);
+    writeFileSync(script, out.join('\n') + '\n', { mode: 0o700 });
+    spawn('/bin/sh', [script], { detached: true, stdio: 'ignore', cwd: dirname(script) }).unref();
     setImmediate(() => app.exit(0));
     return plan;
   }
