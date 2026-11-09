@@ -68,7 +68,13 @@ async function uninstallMcatzp() {
   uninstallBusy.value = false;
   uninstalling.value = null;
   if (!r) return;
-  notify('success', r.binary === 'kept' ? `MCatzP taken out of the assistants; your copy at ${r.keptPath} stays` : 'MCatzP uninstalled');
+  // A Homebrew / npm copy goes its own way (mcatzp-host 1.0.3 keeps it): name the command.
+  const how = r.keptPath ? (/homebrew|Cellar|linuxbrew/i.test(r.keptPath) ? ' (brew uninstall mcatzp)' : /node_modules|npm/i.test(r.keptPath) ? ' (npm uninstall -g mcatzp)' : '') : '';
+  notify('success', r.binary === 'kept' ? `MCatzP taken out of the assistants; your copy at ${r.keptPath} stays${how}` : 'MCatzP uninstalled');
+  if (r.failed.length) {
+    const name = (id: string) => targets.value.find((t) => t.id === id)?.label ?? id;
+    notify('error', `Not taken out of ${r.failed.map((f) => `${name(f.id)}: ${f.error}`).join('; ')}`);
+  }
   settings.value = (await attempt(() => api.settings())) ?? settings.value;
   setup.value = (await attempt(() => api.mcatzpSetup(false))) ?? setup.value;
   void loadTargets();

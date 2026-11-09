@@ -717,7 +717,7 @@ export interface DoCatzApi {
   mcatzpSetup(askSite?: boolean): Promise<McatzpSetup>;
   mcatzpInstall(): Promise<McatzpSetup>;
   /** Takes MCatzP out of every assistant and removes the copy a Catzoid app installed; turns this app's switch off. */
-  mcatzpUninstall(): Promise<{ removedFrom: string[]; binary: 'removed' | 'kept' | 'none'; keptPath: string | null }>;
+  mcatzpUninstall(): Promise<{ removedFrom: McatzpTargetId[]; failed: { id: McatzpTargetId; error: string }[]; binary: 'removed' | 'kept' | 'none'; keptPath: string | null }>;
   mcatzpInstallCancel(): Promise<void>;
   /** Where each client is approved, across the Catzoid apps. */
   mcatzpApprovals(): Promise<McatzpApproval[]>;
