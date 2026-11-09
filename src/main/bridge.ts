@@ -3,13 +3,15 @@ import { chmodSync, existsSync, mkdirSync, renameSync, writeFileSync } from 'nod
 import { join } from 'node:path';
 import type { BridgeEntry } from '@catzoid/mcatzp-host';
 import type { DcContainer } from '@shared/types';
+import { dockerHost } from './paths';
 
 /**
  * DoCatz's bridge.json (Catzoid ecosystem, DoCatz TODO #22): the containers DoCatz runs, so DevCatz, DBCatz and
  * DialCatz can list them and link back with docatz://container/<name>. Names, compose project / service, image,
  * state, published ports and domains, the compose folder and the framework a service is built from (DialCatz makes an
  * environment of a project's HTTP services and reads their routes, #25) — never environment values, mounts, labels or
- * secrets. Written in DoCatz's
+ * secrets. `engineEndpoint` is the docker host of DoCatz's engine (the `docatz` context's), on every platform, so DevCatz
+ * can tell when DoCatz's engine and the system's are one daemon (DoCatz #101). Written in DoCatz's
  * data folder (folder 0700, file 0600, atomically) when the list changes; Uninstall removes it with the folder.
  */
 
@@ -55,7 +57,7 @@ export function writeBridge(containers: DcContainer[], engine: 'running' | 'stop
     const dir = join(file, '..');
     if (!existsSync(dir)) mkdirSync(dir, { recursive: true, mode: 0o700 });
     else chmodSync(dir, 0o700);
-    const doc = { schema: 1, app: 'DoCatz', version: app.getVersion(), updatedAt: Date.now(), engine, proxy, containers: list, ...(mcatzp ? { mcatzp } : {}) };
+    const doc = { schema: 1, app: 'DoCatz', version: app.getVersion(), updatedAt: Date.now(), engine, engineEndpoint: dockerHost(), proxy, containers: list, ...(mcatzp ? { mcatzp } : {}) };
     const tmp = `${file}.${process.pid}.tmp`;
     writeFileSync(tmp, JSON.stringify(doc, null, 2) + '\n', { mode: 0o600 });
     renameSync(tmp, file);
