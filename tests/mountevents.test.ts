@@ -1,7 +1,7 @@
 import { afterAll, expect, test } from 'bun:test';
 import { mkdirSync, mkdtempSync, rmSync, statSync, utimesSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { join, sep } from 'node:path';
 import { MountEvents, type OpenMountShell, watchRoots } from '../src/main/engine/mountevents';
 
 const root = mkdtempSync(join(tmpdir(), 'docatz-mounts-'));
@@ -15,8 +15,10 @@ function events() {
 }
 
 test('only what the VM shares is watched, and no folder twice', () => {
-  expect(watchRoots(['/home/a/x', '/home/a/x/src', '/home/a/x', '/var/lib/y', '/home/a/xy'], ['/home/a'])).toEqual(['/home/a/x', '/home/a/xy']);
-  expect(watchRoots(['/home/a'], ['/home/a'])).toEqual(['/home/a']);
+  // Paths with this computer's separator, as the folders DoCatz gets (the test also runs on Windows).
+  const p = (s: string) => s.split('/').join(sep);
+  expect(watchRoots([p('/home/a/x'), p('/home/a/x/src'), p('/home/a/x'), p('/var/lib/y'), p('/home/a/xy')], [p('/home/a')])).toEqual([p('/home/a/x'), p('/home/a/xy')]);
+  expect(watchRoots([p('/home/a')], [p('/home/a')])).toEqual([p('/home/a')]);
 });
 
 test('a change passes on the file\'s own time, to the nanosecond', async () => {
