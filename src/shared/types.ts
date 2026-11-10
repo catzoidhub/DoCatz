@@ -655,6 +655,10 @@ export interface DcGateway {
   status: string;
   version: string | null;
   webUi: string | null;
+  /** DevCatz's own address for it (https://waha.localhost): what DoCatz shows and opens for its container. */
+  url: string | null;
+  /** The 127.0.0.1 port DevCatz talks to it on (its `api`), which picks the container in a compose project. */
+  apiPort: number | null;
   /** Its compose project, or (WAHA) its one container. */
   project: string | null;
   container: string | null;
