@@ -1,5 +1,8 @@
 import { approvalsAcrossApps, type McatzpApproval, type McatzpUninstall, uninstall as hostUninstall, addToClient as add, install as run, type McatzpInstallProgress, type McatzpSetup, type McatzpTarget, removeFromClient as remove, setupState as state, targets as list, type McatzpTargetId, type SetupOptions } from '@catzoid/mcatzp-host';
 import { execFile } from 'node:child_process';
+import { existsSync, readdirSync, rmdirSync } from 'node:fs';
+import { homedir } from 'node:os';
+import { join } from 'node:path';
 import { siteBase } from '../shared';
 
 /** An app opened from the desktop has a bare PATH on a Mac; Homebrew's or npm's copy is only found with the login shell's. */
@@ -42,4 +45,17 @@ export const removeFromClient = async (id: McatzpTargetId): Promise<void> => rem
  * the entries that run the copy in use leave their clients, the shared copy and an emptied bin folder go, a Homebrew /
  * npm copy stays (its path is returned), an `npx` entry is left alone. Clients it could not change are in `failed`.
  */
-export const uninstall = async (): Promise<McatzpUninstall> => hostUninstall(await options());
+export async function uninstall(): Promise<McatzpUninstall> {
+  const r = await hostUninstall(await options());
+  // The host removes the emptied bin folder but not the one above it (~/.catzoid, %LOCALAPPDATA%\Catzoid; found in the
+  // x64 VM, 2026-11-10): it goes too when nothing else is in it — rmdir only, never anything with files inside.
+  if (r.binary === 'removed') {
+    const dir = process.platform === 'win32' ? join(process.env.LOCALAPPDATA ?? join(homedir(), 'AppData', 'Local'), 'Catzoid') : join(homedir(), '.catzoid');
+    try {
+      if (existsSync(dir) && readdirSync(dir).length === 0) rmdirSync(dir);
+    } catch {
+      /* not empty or not ours to remove: it stays */
+    }
+  }
+  return r;
+}

@@ -93,6 +93,13 @@ async function linuxPackage(): Promise<string | null> {
   return r.ok ? r.out.split(':')[0]?.trim() || null : null;
 }
 
+/** Linux: the per-user mimeapps.list files xdg-mime may have written the docatz:// handler to. */
+function linuxMimeLists(): string[] {
+  const config = process.env.XDG_CONFIG_HOME || join(home, '.config');
+  const data = process.env.XDG_DATA_HOME || join(home, '.local', 'share');
+  return [join(config, 'mimeapps.list'), join(data, 'applications', 'mimeapps.list')];
+}
+
 /** Linux: what DoCatz keeps outside its data folder (caches, update downloads, the AppImage's menu entry). */
 function linuxLeftovers(): { label: string; path: string }[] {
   const cache = process.env.XDG_CACHE_HOME || join(home, '.cache');
@@ -208,6 +215,9 @@ export async function uninstallRun(confirm: string, shared: boolean, beforeQuit:
       if (ownCa()) out.push(`rm -rf ${q(join(SHARED_DIR, 'ca'))}`);
       out.push(`rmdir ${q(SHARED_DIR)} 2>/dev/null`);
     }
+    // The docatz:// handler xdg-mime wrote when the menu entry was made (appimage.ts) stays in mimeapps.list otherwise,
+    // pointing at a .desktop file that is gone (found in the x64 VM, 2026-11-10). Only that line goes.
+    for (const f of linuxMimeLists()) out.push(`[ -f ${q(f)} ] && sed -i '/^x-scheme-handler\\/docatz=docatz\\.desktop;\\?$/d' ${q(f)}`);
     out.push('rm -f "$0"');
     const script = join(tmpdir(), `docatz-uninstall-${process.pid}.sh`);
     writeFileSync(script, out.join('\n') + '\n', { mode: 0o700 });
