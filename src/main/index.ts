@@ -275,7 +275,9 @@ function api(): DoCatzApi {
     reportSend: (kind, message, email, shots) => reporter.feedback(kind, message, email, Array.isArray(shots) ? shots : []),
     captureWindow: async () => {
       const w = win();
-      return w && !w.isDestroyed() ? (await w.webContents.capturePage()).toPNG().toString('base64') : '';
+      // capturePage never answers on some Linux setups (a VM without a GPU, Wayland; DevCatz 2bb764f): the report goes
+      // without the picture after 10 s.
+      return w && !w.isDestroyed() ? Promise.race([w.webContents.capturePage().then((img) => img.toPNG().toString('base64')), new Promise<string>((r) => setTimeout(() => r(''), 10_000))]) : '';
     },
     reportError: async (message, stack) => reporter.error('renderer', Object.assign(new Error(message), { stack })),
     reportSettings: async () => reporter.settings(),

@@ -143,6 +143,8 @@ export class Domains {
       this.listen(s, this.httpsPort, host);
     }
     await this.startDns();
+    // Linux: browser profiles made after Trust (Firefox's first run) get the CA too.
+    this.watchBrowsersLinux();
     // Whether :443 reaches DoCatz changes when DevCatz starts or quits (it is the front when installed): check every
     // 10 s, and when it changes the URLs follow at once.
     const probe = async () => {
@@ -539,6 +541,38 @@ ${s.update === 'update-ca-certificates' ? 'update-ca-certificates --fresh' : s.u
         if (r.code !== 0) missed.push(db);
       }
     return { ok: true, message: missed.length ? `Not added for: ${missed.join(', ')}` : '' };
+  }
+
+  private seenNss = new Set<string>();
+  private nssTimer: NodeJS.Timeout | null = null;
+
+  /**
+   * Linux (as DevCatz 2bb764f, found on Ubuntu 26.04 amd64): Firefox makes a profile's NSS database the first time it
+   * runs, often after Trust, and does not read the system store; while the CA is in the system store, each browser
+   * database that lacks it gets it (as the user, no password). Checked at start and every 30 s, certutil only for
+   * databases not seen yet.
+   */
+  private watchBrowsersLinux(): void {
+    if (!isLinux || this.nssTimer) return;
+    const tick = () => void this.syncBrowsersLinux().catch((e: Error) => console.warn('browser certificates:', e.message));
+    tick();
+    this.nssTimer = setInterval(tick, 30_000);
+    this.nssTimer.unref();
+  }
+
+  private async syncBrowsersLinux(): Promise<void> {
+    const fresh = nssDatabases().filter((db) => existsSync(join(db, 'cert9.db')) && !this.seenNss.has(db));
+    if (!fresh.length || !existsSync(join(linuxStore().dir, LINUX_CA_FILE))) return;
+    this.ensureCa();
+    if (!this.ca) return;
+    if ((await run('/bin/sh', ['-c', 'command -v certutil'], { timeout: 5000 })).code !== 0) return;
+    const name = this.caCommonName();
+    for (const db of fresh) {
+      this.seenNss.add(db);
+      if ((await run('certutil', ['-d', `sql:${db}`, '-L', '-n', name], { timeout: 20_000 })).code === 0) continue;
+      const r = await run('certutil', ['-d', `sql:${db}`, '-A', '-t', 'C,,', '-n', name, '-i', this.ca.files.cert], { timeout: 20_000 });
+      if (r.code === 0) console.log(`${name} added to ${db}`);
+    }
   }
 
   async trust(on: boolean): Promise<DcDomains> {
