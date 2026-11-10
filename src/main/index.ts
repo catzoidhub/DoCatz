@@ -32,6 +32,7 @@ import { projects, Runs } from './runs';
 import { learnProject } from './frameworks';
 import { projectPrefs, setProjectPrefs } from './prefs';
 import { applySettings, migrateToShared, setAiKey, setSettings, settings } from './settings';
+import { browsersState, openWeb, refreshBrowsers } from './browsers';
 import { siteBase } from './shared';
 import { DocatzTray } from './tray';
 import { uninstallPlan, uninstallRun } from './uninstall';
@@ -372,7 +373,11 @@ function api(): DoCatzApi {
     aiPreviewFile: async (req) => ai.previewFile(req),
     openUrl: async (url) => {
       if (url === 'app:licenses') await shell.openPath(app.isPackaged ? join(process.resourcesPath, 'third-party-licenses.txt') : join(app.getAppPath(), 'resources', 'third-party-licenses.txt'));
-      else if (/^https?:\/\//i.test(url)) await shell.openExternal(url);
+      else if (/^https?:\/\//i.test(url)) await openWeb(url, settings().browser);
+    },
+    browsers: async () => {
+      await refreshBrowsers();
+      return browsersState();
     },
     reveal: async (path) => shell.showItemInFolder(path),
     runInTerminal: async (command) => {

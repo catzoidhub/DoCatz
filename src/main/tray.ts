@@ -1,7 +1,9 @@
-import { app, Menu, nativeImage, shell, Tray, type MenuItemConstructorOptions } from 'electron';
+import { app, Menu, nativeImage, Tray, type MenuItemConstructorOptions } from 'electron';
 import { join } from 'node:path';
 import type { DcContainer, EngineState } from '@shared/types';
 import { isWin } from './platform';
+import { openWeb } from './browsers';
+import { settings } from './settings';
 
 /** Windows and Linux: the coloured icon (a black template glyph would vanish on a dark taskbar or panel). */
 const colour = process.platform !== 'darwin';
@@ -42,7 +44,7 @@ export class DocatzTray {
     const entry = (c: DcContainer): MenuItemConstructorOptions => ({
       label: c.project ? (c.service ?? c.name) : c.name,
       submenu: [
-        ...(c.url ? [{ label: `Open ${c.url.replace(/^https?:\/\//, '')}`, click: () => void shell.openExternal(c.url!) }] : []),
+        ...(c.url ? [{ label: `Open ${c.url.replace(/^https?:\/\//, '')}`, click: () => void openWeb(c.url!, settings().browser) }] : []),
         { label: 'Open in DoCatz', click: () => this.actions.open(`containers/${c.name}`) },
       ],
     });

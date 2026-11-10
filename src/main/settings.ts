@@ -2,10 +2,11 @@ import { nativeTheme, safeStorage } from 'electron';
 import { DC_AI_DEFAULTS, DC_AI_FEATURES, DC_AI_PROVIDERS, type DcAiFeature, type DoCatzSettings, type DoCatzSettingsPatch, type McatzpSettings, type DcAiProvider, type Theme } from '@shared/types';
 import { store } from './store';
 import { readShared, setSharedKey, sharedKey, watchShared, writeShared } from './shared';
+import { validBrowser } from './browsers';
 
 /**
- * The Settings page's values: appearance and Ask AI. Checked here (the window
- * is not trusted with the shape), applied at once. The theme and the AI
+ * The Settings page's values: appearance, the browser and Ask AI. Checked here (the window
+ * is not trusted with the shape), applied at once. The theme, the browser (Open with) and the AI
  * connection (provider, models, addresses, API keys) are shared with the
  * other Catzoid apps (shared.ts: Catzoid/shared.json + the "Catzoid AI"
  * Keychain item), so a key entered in DevCatz works here and the other way
@@ -35,6 +36,7 @@ function local(): Stored {
   const ai = { ...DC_AI_DEFAULTS, ...(s.ai ?? {}) };
   return {
     theme: THEMES.includes(s.theme as Theme) ? (s.theme as Theme) : 'system',
+    browser: typeof s.browser === 'string' ? s.browser : '',
     mcatzp: mcatzpOf(s.mcatzp),
     ai: { enabled: ai.enabled === true, provider: PROVIDERS.includes(ai.provider) ? ai.provider : 'anthropic', models: ai.models ?? {}, baseUrls: ai.baseUrls ?? {}, off: Array.isArray(ai.off) ? ai.off.filter((f): f is DcAiFeature => FEATURES.includes(f)) : [] },
   };
@@ -47,6 +49,7 @@ function stored(): Stored {
   const provider = sh.ai?.provider ?? s.ai.provider;
   return {
     theme: sh.theme && THEMES.includes(sh.theme) ? sh.theme : s.theme,
+    browser: typeof sh.browser === 'string' ? sh.browser : s.browser,
     mcatzp: s.mcatzp,
     ai: { enabled: s.ai.enabled, provider: PROVIDERS.includes(provider) ? provider : 'anthropic', models: sh.ai?.models ?? s.ai.models, baseUrls: sh.ai?.baseUrls ?? s.ai.baseUrls, off: s.ai.off },
   };
@@ -76,6 +79,11 @@ export function setSettings(patch: DoCatzSettingsPatch): DoCatzSettings {
   if (patch.theme !== undefined) {
     if (!THEMES.includes(patch.theme)) throw new Error(`Unknown theme ${patch.theme}`);
     s.theme = patch.theme;
+  }
+  if (patch.browser !== undefined) {
+    const b = String(patch.browser);
+    if (!validBrowser(b)) throw new Error('That browser is not installed here');
+    s.browser = b;
   }
   const ai = patch.ai;
   if (ai) {
@@ -112,9 +120,10 @@ export function setSettings(patch: DoCatzSettingsPatch): DoCatzSettings {
     if (m.projects !== undefined) s.mcatzp.projects = names(m.projects);
   }
   store.setExtra(KEY, s);
-  // The theme and the connection are shared with DevCatz; Ask AI on / off is not.
+  // The theme, the browser and the connection are shared with the Catzoid apps; Ask AI on / off is not.
   const conn = ai && (ai.provider !== undefined || ai.models !== undefined || ai.baseUrls !== undefined);
-  if (patch.theme !== undefined || conn) writeShared({ ...(patch.theme !== undefined ? { theme: s.theme } : {}), ...(conn ? { ai: { provider: s.ai.provider, models: s.ai.models, baseUrls: s.ai.baseUrls } } : {}) });
+  if (patch.theme !== undefined || patch.browser !== undefined || conn)
+    writeShared({ ...(patch.theme !== undefined ? { theme: s.theme } : {}), ...(patch.browser !== undefined ? { browser: s.browser } : {}), ...(conn ? { ai: { provider: s.ai.provider, models: s.ai.models, baseUrls: s.ai.baseUrls } } : {}) });
   nativeTheme.themeSource = s.theme;
   return settings();
 }

@@ -62,6 +62,8 @@ export interface Shared {
   version: 1;
   theme?: Theme;
   ai?: SharedAi;
+  /** Browser for web links (Settings → General → Open with): an installed browser's app / .exe / .desktop file on this computer; '' = the system default. */
+  browser?: string;
   /** The Catzoid site address the apps build their links from (Catzoid TODO #50); catzoid.com when unset. */
   site?: string;
   /** Default domain, local CA, names without a port (DoCatz TODO #61); merged one level deep like `ai`. */

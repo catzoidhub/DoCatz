@@ -37,6 +37,7 @@ export const MCATZP_COVERAGE: Record<keyof DoCatzApi, string> = {
   aiFile: 'never: uses the user\'s AI key',
   aiPreviewFile: 'never: uses the user\'s AI key',
   openUrl: "tool: open_container_url (only a shared container's own address)",
+  browsers: 'not a tool: Settings → General → Open with lists the browsers installed here',
   reveal: 'not a tool: opens the file manager',
   openSibling: 'tool: open_in_dialcatz, open_in_dbcatz',
   mcatzpActivity: 'not a tool: Settings → MCatzP',

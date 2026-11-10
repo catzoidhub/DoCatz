@@ -12,6 +12,22 @@ export interface DoCatzSettings {
   theme: Theme;
   ai: DcAiSettings;
   mcatzp: McatzpSettings;
+  /** Browser for container addresses and other web links (Settings → General → Open with): an installed browser's app / .exe / .desktop file; '' = the system default. DoCatz's own, per computer. */
+  browser: string;
+}
+
+/** An installed web browser (Settings → General → Open with), as DevCatz's. */
+export interface BrowserInfo {
+  name: string;
+  /** The app bundle (/Applications/Google Chrome.app), the program (.exe) or the .desktop file. */
+  path: string;
+  /** Its app icon as a data URL ('' when the OS gave none). */
+  icon: string;
+}
+export interface BrowsersState {
+  list: BrowserInfo[];
+  /** What the OS opens https links with (null when it could not be read). */
+  systemDefault: BrowserInfo | null;
 }
 
 // ------------------------------------------------------------ AI (Catzoid family #58)
@@ -62,7 +78,7 @@ export const DC_AI_FEATURES: { id: DcAiFeature; label: string; hint: string; sen
   { id: 'logs', label: 'Explain with AI in Logs', hint: 'Explains why a container fails or keeps restarting from the log lines you pick, and what to change.', sends: 'the log lines you pick (obvious secrets masked), the container’s image, state, exit code and restart count' },
   { id: 'compose', label: 'Write and fix compose files and Dockerfiles', hint: 'A compose file or Dockerfile from plain words, or a fix for one that fails — always shown before anything is saved.', sends: 'the file open in the editor (obvious secrets masked) and your request' },
 ];
-export type DoCatzSettingsPatch = { theme?: Theme; ai?: Partial<Omit<DcAiSettings, 'keys'>>; mcatzp?: Partial<Omit<McatzpSettings, 'clients'>> };
+export type DoCatzSettingsPatch = { theme?: Theme; ai?: Partial<Omit<DcAiSettings, 'keys'>>; mcatzp?: Partial<Omit<McatzpSettings, 'clients'>>; browser?: string };
 
 /** Settings → MCatzP: the local channel an AI client reaches DoCatz through. DoCatz's own, per computer. */
 export interface McatzpSettings {
@@ -698,6 +714,8 @@ export interface DoCatzApi {
   aiFile(request: DcFileRequest, token?: string): Promise<DcFileAnswer>;
   aiPreviewFile(request: DcFileRequest): Promise<DcAiPreview>;
   openUrl(url: string): Promise<void>;
+  /** Installed browsers and the system default (Settings → General → Open with), looked at again on each call. */
+  browsers(): Promise<BrowsersState>;
   reveal(path: string): Promise<void>;
   /** Opens a sibling Catzoid app at a link (devcatz://…, dbcatz://…); false when it is not installed. */
   openSibling(app: SiblingApp, link: string): Promise<boolean>;
@@ -850,7 +868,7 @@ export interface DoCatzApi {
 
 /** Every method of the bridge, registered as `docatz:<name>` IPC handlers. */
 export const API_METHODS: (keyof DoCatzApi)[] = [
-  'appInfo', 'aboutInfo', 'updateState', 'updateCheck', 'updateDownload', 'updateCancel', 'updateSkip', 'updateInstall', 'updateConfigure', 'reportPreview', 'reportSend', 'captureWindow', 'reportError', 'reportSettings', 'reportConfigure', 'uninstallPlan', 'uninstallRun', 'settings', 'setSettings', 'setAiKey', 'aiModels', 'aiProbe', 'aiTest', 'aiCancel', 'aiAsk', 'aiPreviewAsk', 'aiExplainLog', 'aiPreviewLog', 'aiFile', 'aiPreviewFile', 'openUrl', 'reveal', 'openSibling', 'mcatzpActivity', 'mcatzpClearActivity', 'mcatzpRevoke', 'mcatzpSetup', 'mcatzpInstall', 'mcatzpUninstall', 'mcatzpInstallCancel', 'mcatzpApprovals', 'mcatzpTargets', 'mcatzpAddToClient', 'mcatzpRemoveFromClient', 'mcatzpUpdate', 'mcatzpPending', 'mcatzpAnswer', 'copyText', 'apiSource', 'siblingVersions', 'migrateSources', 'migrateInventory', 'migrateRun', 'migrateCancel', 'devcatzGateways', 'databases', 'siblingInstall', 'siblingInstallCancel', 'runInTerminal',
+  'appInfo', 'aboutInfo', 'updateState', 'updateCheck', 'updateDownload', 'updateCancel', 'updateSkip', 'updateInstall', 'updateConfigure', 'reportPreview', 'reportSend', 'captureWindow', 'reportError', 'reportSettings', 'reportConfigure', 'uninstallPlan', 'uninstallRun', 'settings', 'setSettings', 'setAiKey', 'aiModels', 'aiProbe', 'aiTest', 'aiCancel', 'aiAsk', 'aiPreviewAsk', 'aiExplainLog', 'aiPreviewLog', 'aiFile', 'aiPreviewFile', 'openUrl', 'browsers', 'reveal', 'openSibling', 'mcatzpActivity', 'mcatzpClearActivity', 'mcatzpRevoke', 'mcatzpSetup', 'mcatzpInstall', 'mcatzpUninstall', 'mcatzpInstallCancel', 'mcatzpApprovals', 'mcatzpTargets', 'mcatzpAddToClient', 'mcatzpRemoveFromClient', 'mcatzpUpdate', 'mcatzpPending', 'mcatzpAnswer', 'copyText', 'apiSource', 'siblingVersions', 'migrateSources', 'migrateInventory', 'migrateRun', 'migrateCancel', 'devcatzGateways', 'databases', 'siblingInstall', 'siblingInstallCancel', 'runInTerminal',
   'engineState', 'engineStart', 'engineStop', 'engineRestart', 'engineReset', 'engineConfigure', 'engineCancel', 'engineSetupWsl', 'restartComputer', 'engineLog', 'contextSet', 'cliInstall', 'cliPath', 'diskUsage',
   'containers', 'container', 'containerEnv', 'containerAction', 'containerRemove', 'stats', 'logsFollow', 'logsStop', 'termOpen', 'termInput', 'termResize', 'termClose', 'files', 'fileSave', 'projects', 'composePick', 'composeRun', 'composeProject', 'runCancel', 'readText', 'writeText',
   'images', 'imageRemove', 'imagePull', 'volumes', 'volumeRemove', 'networks', 'networkRemove', 'prunePreview', 'prune',

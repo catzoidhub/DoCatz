@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { keyLabel, words } from '@shared/platform';
-import { computed, onMounted, ref, watch } from 'vue';
-import { aiProvider, DC_AI_FEATURES, DC_AI_PROVIDERS, type DcAiFeature, type DcAiProvider, type DcReportSettings, type Theme } from '@shared/types';
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
+import { aiProvider, DC_AI_FEATURES, DC_AI_PROVIDERS, type BrowsersState, type DcAiFeature, type DcAiProvider, type DcReportSettings, type Theme } from '@shared/types';
 import { api, attempt, mcatzpUpdate, notify, saveSettings, settings, settingsTab } from '../store';
 import DcNavButtons from './DcNavButtons.vue';
 import DcModelPicker from './DcModelPicker.vue';
@@ -11,7 +11,7 @@ import DcUpdates from './DcUpdates.vue';
 import McatzpSettings from './McatzpSettings.vue';
 
 /**
- * Settings (the rail's last item, ⌘,): General (the theme; Privacy: crash reports), Domains (shared with DevCatz,
+ * Settings (the rail's last item, ⌘,): General (the theme; Open with: the browser; Privacy: crash reports), Domains (shared with DevCatz,
  * TODO #61), AI (provider, its API key, model, a switch per feature), Updates and About — the same tabs as DialCatz,
  * plus Domains.
  */
@@ -145,6 +145,21 @@ async function setCrash(on: boolean) {
 const site = ref('');
 onMounted(async () => (site.value = (await api.appInfo().catch(() => null))?.site ?? ''));
 
+// General → Open with → Browser (as DevCatz's, shared with the Catzoid apps): the installed browsers, looked at again
+// when the tab opens and when DoCatz comes to the front (one installed meanwhile shows up).
+const browsers = ref<BrowsersState>({ list: [], systemDefault: null });
+const loadBrowsers = async () => (browsers.value = (await api.browsers().catch(() => null)) ?? browsers.value);
+onMounted(() => {
+  void loadBrowsers();
+  window.addEventListener('focus', loadBrowsers);
+});
+onBeforeUnmount(() => window.removeEventListener('focus', loadBrowsers));
+const chosenBrowser = computed(() => (s.value.browser ? (browsers.value.list.find((b) => b.path === s.value.browser) ?? null) : browsers.value.systemDefault));
+function pickBrowser(path: string) {
+  void saveSettings({ browser: path });
+  (document.activeElement as HTMLElement | null)?.blur();
+}
+
 </script>
 
 <template>
@@ -173,6 +188,38 @@ onMounted(async () => (site.value = (await api.appInfo().catch(() => null))?.sit
               </div>
             </div>
             <p class="text-xs opacity-60">Auto follows {{ words.os }} ({{ words.appearanceSettings }}). All Catzoid apps use the same theme.</p>
+          </div>
+        </div>
+        <!-- Open with: the browser for container addresses (as DevCatz's; shared) -->
+        <div v-if="tab === 'general'" class="card">
+          <div class="card-body">
+            <div class="flex items-center gap-2"><h2>Open with</h2><span class="badge badge-ghost badge-sm" title="Change it here and every Catzoid app follows">Shared with Catzoid apps</span></div>
+            <div class="flex items-center gap-3">
+              <span class="w-28 shrink-0" :title="`Container addresses: links in DoCatz and Open … in the ${words.tray}`">Browser</span>
+              <div class="dropdown">
+                <button type="button" tabindex="0" class="select select-sm flex w-64 items-center gap-2 text-left">
+                  <img v-if="chosenBrowser?.icon" :src="chosenBrowser.icon" alt="" class="size-4 shrink-0" draggable="false" />
+                  <span class="min-w-0 flex-1 truncate">{{ s.browser ? (chosenBrowser?.name ?? 'Not installed') : `System default (${browsers.systemDefault?.name ?? words.os})` }}</span>
+                </button>
+                <ul tabindex="0" class="dropdown-content menu z-30 mt-1 w-64 rounded-box border border-base-300/70 bg-base-100 p-1.5 shadow-xl">
+                  <li>
+                    <button type="button" class="flex items-center gap-2" :class="{ 'menu-active': !s.browser }" @click="pickBrowser('')">
+                      <img v-if="browsers.systemDefault?.icon" :src="browsers.systemDefault.icon" alt="" class="size-4 shrink-0" draggable="false" />
+                      <span class="flex-1 truncate">System default</span>
+                      <span class="text-xs opacity-50">{{ browsers.systemDefault?.name ?? '' }}</span>
+                    </button>
+                  </li>
+                  <li v-for="b in browsers.list" :key="b.path">
+                    <button type="button" class="flex items-center gap-2" :class="{ 'menu-active': s.browser === b.path }" :title="b.path" @click="pickBrowser(b.path)">
+                      <img v-if="b.icon" :src="b.icon" alt="" class="size-4 shrink-0" draggable="false" />
+                      <span class="flex-1 truncate">{{ b.name }}</span>
+                    </button>
+                  </li>
+                </ul>
+              </div>
+            </div>
+            <p class="text-xs opacity-60">Container addresses open here. All Catzoid apps use the same browser.</p>
+            <p v-if="s.browser && !chosenBrowser && browsers.list.length" class="text-xs text-warning">The chosen browser is no longer installed; links open in the system default.</p>
           </div>
         </div>
         <div v-if="tab === 'general'" class="card">
