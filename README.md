@@ -9,19 +9,18 @@
   <a href="https://catzoid.com/community">Community</a>
 </p>
 
-A fast, light Docker engine and container manager for macOS and Windows: a small Linux VM (WSL 2 on Windows) runs Docker, your
+A fast, light Docker engine and container manager for macOS, Windows and Linux: Docker runs in a small Linux VM on a Mac, in WSL 2 on Windows and as the system's own Docker Engine on Linux; your
 containers are grouped by compose project with their logs, a terminal and their files, and every container gets its
 own domain without publishing a port — `https://web.shop.docatz.localhost`.
 
 Part of [Catzoid](https://catzoid.com) — free, open-source developer tools with nine lives. All cats, no catch: no
 account, no Pro tier, nothing locked behind a payment.
 
-> **Early days.** DoCatz is in its first builds and not released yet; it ships with the next DevCatz update.
-
 ## What it does
 
 - **The engine** — a Linux VM on Apple's Virtualization framework (through [Lima](https://lima-vm.io)) with fast
-  file sharing for your home folder and Rosetta for Intel images; WSL 2 on Windows. CPUs, memory and disk are yours to
+  file sharing for your home folder and Rosetta for Intel images; WSL 2 on Windows; on Linux the system's Docker
+  Engine, installed for you with one password if it is missing. CPUs, memory and disk are yours to
   set. Everything it downloads is pinned to a known checksum and kept in `~/.docatz`.
 - **Your docker keeps working** — DoCatz brings docker, compose and buildx and adds a `docatz` context; nothing
   switches until you choose *Use DoCatz as the default*, so Docker Desktop or OrbStack can stay side by side.
@@ -50,6 +49,10 @@ Windows 10 / 11 (x64): `DoCatz-Setup-<version>.exe` from the same page or the
 [latest release](https://github.com/catzoidhub/DoCatz/releases/latest). It installs for your account only, no
 administrator rights needed. It is not code-signed yet (see Code signing below).
 
+Linux (x64): `DoCatz-<version>-x64.AppImage` or `DoCatz-<version>-amd64.deb` from the same page or the
+[latest release](https://github.com/catzoidhub/DoCatz/releases/latest). The AppImage offers to install itself into
+`~/Applications` with a menu entry on its first run; the `.deb` suits Ubuntu and Debian. Neither is signed yet.
+
 ## Build from source
 
 ```bash
@@ -67,7 +70,7 @@ macOS builds are signed with a Developer ID and notarized by Apple. **The Window
 the SignPath Foundation, which signs open-source projects for free, asks for a project with more history and public
 use than DoCatz has today, and paid certificates are out of reach for now. Windows SmartScreen therefore warns when you
 open the installer: choose **More info → Run anyway**. The installer is built by GitHub Actions from this repository,
-so what you run is this source. Stars, issues and pull requests help DoCatz qualify for free signing later. Policy:
+so what you run is this source. Linux packages are built by GitHub Actions from this repository too, and are not signed either. Stars, issues and pull requests help DoCatz qualify for free signing later. Policy:
 [catzoid.com/legal/code-signing](https://catzoid.com/legal/code-signing).
 
 ## How it is made
