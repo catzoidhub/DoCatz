@@ -781,6 +781,7 @@ ${s.update === 'update-ca-certificates' ? 'update-ca-certificates --fresh' : s.u
    * leaves the trusted roots as well, so no trusted certificate is left whose files are gone.
    */
   async uninstall(removeCa = false): Promise<void> {
+    await this.router.remove();
     const d = shared();
     const others = (d.usedBy ?? []).filter((a) => a !== ME);
     writeShared({ domains: { usedBy: others } });

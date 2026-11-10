@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { words } from '@shared/platform';
+import { currentOS, words } from '@shared/platform';
 import { computed, onMounted, ref } from 'vue';
 import type { DcUninstallPlan } from '@shared/types';
 import { api, notify } from '../store';
@@ -63,7 +63,8 @@ async function go() {
             <span class="block truncate font-mono text-xs opacity-55" :title="i.path">{{ i.path }}</span>
           </li>
         </ul>
-        <p class="text-xs opacity-60">Your project folders stay: files your containers used from this computer are never touched. What lives only inside a volume goes with the engine, so copy it out first if you need it.</p>
+        <p v-if="currentOS === 'linux'" class="text-xs opacity-60">Your project folders stay: files your containers used from this computer are never touched. The system’s Docker Engine keeps your containers, images and volumes; only DoCatz’s own router container goes.</p>
+        <p v-else class="text-xs opacity-60">Your project folders stay: files your containers used from this computer are never touched. What lives only inside a volume goes with the engine, so copy it out first if you need it.</p>
         <p class="text-xs opacity-60">The domain resolver and port forwarding go too when no other Catzoid app uses them: {{ words.adminAsk }} for that.</p>
         <label v-if="plan.shared.length" class="opt-row cursor-pointer">
           <span class="flex flex-col">

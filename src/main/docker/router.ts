@@ -81,6 +81,16 @@ ${streams.length ? `stream {\n${streams.map((s) => `  server {\n    listen 127.0
 }
 
 export class Router {
+  /**
+   * Uninstall: the router container goes. On Linux the engine is the system's Docker, which stays, and the container
+   * would come back with it (restart unless-stopped, still listening on 127.0.0.1:8790; found in the x64 VM, 2026-11-10).
+   */
+  async remove(): Promise<void> {
+    await docker.json('DELETE', `/containers/${NAME}`, { query: { force: true }, timeout: 60_000 }).catch(() => undefined);
+    this.id = null;
+    this.last = '';
+  }
+
   private id: string | null = null;
   private last = '';
   private listening = new Map<string, number[]>();
