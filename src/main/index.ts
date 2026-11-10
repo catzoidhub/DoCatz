@@ -47,7 +47,8 @@ import { appMenuPopup, applyMenu, mainWindow, menuKey, menuShortcuts, openWindow
  *   docatz://container/<name>                            a container's page
  *   docatz://compose?path=<file>[&site=<DevCatz site>]   that compose project: its containers when it runs, and the
  *                                                        compose file ready to Up / rebuild (never run by the link)
- *   docatz://gateways?kind=<k> / docatz://services?kind=<k>  (Windows) a DevCatz service in its group
+ *   docatz://gateways?kind=<k> / docatz://services?kind=<k>  a DevCatz service in its group
+ *   docatz://engine[?action=start]                       the Engine page; `start` starts a stopped engine (for DevCatz)
  */
 
 const engine = new Engine();
@@ -180,6 +181,21 @@ function handleLink(raw: string): void {
       const kind = u.searchParams.get('kind') ?? u.pathname.replace(/^\//, '');
       if (kind && !/^[a-z0-9-]{1,30}$/.test(kind)) throw new Error('bad service kind');
       return openWindow(kind ? `${u.hostname}/${kind}` : u.hostname);
+    }
+    // DevCatz starting the engine it runs its gateways on: docatz://engine?action=start brings DoCatz's Engine page up
+    // and starts it when stopped (launching DoCatz.exe again did nothing while it ran; DevCatz, 2026-11-10). Starting is
+    // all a link can do — stop / restart / reset stay in the window.
+    if (u.hostname === 'engine') {
+      const action = u.searchParams.get('action');
+      if (action && action !== 'start') throw new Error('unknown engine action');
+      openWindow('engine');
+      // Only a stopped engine: never an install (WSL, Docker Engine, its download) from a link — the window offers that.
+      if (action === 'start')
+        void engine
+          .state()
+          .then((s) => (s.status === 'stopped' || s.status === 'error' ? engine.start() : undefined))
+          .catch((e) => console.warn('engine start from a link:', (e as Error).message));
+      return;
     }
     if (u.hostname === 'compose') {
       const path = u.searchParams.get('path') ?? '';

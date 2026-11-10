@@ -197,7 +197,8 @@ const memPct = computed(() => (props.stats && props.stats.memLimit ? (props.stat
                   <span class="text-sm opacity-60">Domain</span>
                   <a class="link font-mono text-xs" @click="api.openUrl(detail.url)">{{ detail.url }}</a>
                   <button class="btn btn-ghost btn-xs" @click="copy(detail.url, 'URL')">Copy</button>
-                  <button class="btn btn-ghost btn-xs" title="Change the name in front of .docatz" @click="startName">Edit</button>
+                  <button v-if="!gatewayKind" class="btn btn-ghost btn-xs" title="Change the name in front of .docatz" @click="startName">Edit</button>
+                  <span v-else class="text-xs opacity-55">DevCatz’s address</span>
                   <span v-if="c.domainName" class="badge badge-ghost badge-xs">custom</span>
                 </div>
                 <form v-else class="flex flex-wrap items-center gap-1.5" @submit.prevent="saveName">

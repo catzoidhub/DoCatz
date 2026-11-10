@@ -1,6 +1,6 @@
 import { X509Certificate } from 'node:crypto';
 import { lookup } from 'node:dns/promises';
-import { chmodSync, existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { chmodSync, existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { createServer as createHttp, request as httpRequest, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
 import { createServer as createHttps, request as httpsRequest } from 'node:https';
 import { connect, type Socket } from 'node:net';
@@ -12,6 +12,7 @@ import type { DcContainer, DcDomains, DcDomainsPatch, TaskProgress } from '@shar
 import { words } from '@shared/platform';
 import { findCatzoidApp } from './companion';
 import { DNS_HOST, DNS_PORT, DnsServer } from './dns';
+import { devcatzUrl } from './gateways';
 import { Router, ROUTER_PORT, type RouterTarget } from './docker/router';
 import { isWeb, NOT_WEB } from './webports';
 import { appDataDir, isLinux, isWin } from './platform';
@@ -173,7 +174,28 @@ export class Domains {
   private standIn = new Map<string, Server>();
   private standInTimer: ReturnType<typeof setInterval> | null = null;
 
+  /** DevCatz's bridge.json as last seen while standing in: DevCatz rewrites it when it starts. */
+  private bridgeSeen = 0;
+  /** After DevCatz showed it started, the ports stay free this long, so its proxy can bind them (it tries for 8 s). */
+  private standInPausedUntil = 0;
+
+  private bridgeMtime(): number {
+    try {
+      return statSync(join(appDataDir('DevCatz'), 'bridge.json')).mtimeMs;
+    } catch {
+      return 0;
+    }
+  }
+
   private async devcatzRunning(): Promise<boolean> {
+    // A DevCatz the process check cannot name (a development build runs as electron.exe / electron) still rewrites its
+    // bridge.json when it starts: DoCatz then let go of 8443 / 8180 too late or never, and DevCatz's proxy failed with
+    // EADDRINUSE after its 8 s (Windows, 2026-11-10).
+    if (Date.now() < this.standInPausedUntil) return true;
+    if (this.standIn.size && this.bridgeSeen && this.bridgeMtime() > this.bridgeSeen) {
+      this.standInPausedUntil = Date.now() + 60_000;
+      return true;
+    }
     if (isWin) return /DevCatz\.exe/i.test((await run('tasklist', ['/FI', 'IMAGENAME eq DevCatz.exe', '/NH'], { timeout: 10_000 })).stdout);
     // Linux: the deb's /opt/DevCatz/devcatz or the AppImage's, both named by electron-builder's executableName.
     if (isLinux) return (await run('pgrep', ['-x', 'devcatz'], { timeout: 10_000 })).code === 0;
@@ -193,6 +215,7 @@ export class Domains {
   private startStandIn(httpsPort: number, httpPort: number): void {
     const handler = (req: IncomingMessage, res: ServerResponse) => this.forward(req, res);
     const upgrade = (req: IncomingMessage, socket: Socket, head: Buffer) => this.upgrade(req, socket, head);
+    if (!this.standIn.size) this.bridgeSeen = this.bridgeMtime();
     const https = this.leaf('docatz.localhost');
     for (const host of ['127.0.0.1', '::1']) {
       for (const [tls, port] of [[false, httpPort], [true, httpsPort]] as const) {
@@ -272,6 +295,9 @@ export class Domains {
 
   /** https://<host>[:port] — without the port only when :443 / :80 reach DoCatz's proxy. */
   urlFor = (c: Omit<DcContainer, 'url'>): string | null => {
+    // DevCatz's gateways and services: DevCatz's own address, the one it shows everywhere (its name still routes here too).
+    const theirs = devcatzUrl(c);
+    if (theirs) return theirs;
     const host = this.hostFor(c);
     if (!host || !isWeb(c)) return null;
     const https = this.https() && this.ca !== null;

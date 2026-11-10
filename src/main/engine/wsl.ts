@@ -176,6 +176,13 @@ export class WslBackend implements Backend {
       if (a.code !== 0) throw new Error(`Docker could not be installed in the distro: ${wslError(a.stderr || a.stdout)}`);
     }
     r.step(2);
+    // Our wsl.exe can outlive the dockerd it started (WSL ended the distro while Windows slept, or dockerd died): Start
+    // then only waited, docker.log untouched, until the user chose Restart (DevCatz, Windows, 2026-11-10). Without a
+    // dockerd inside, ours goes and a new one starts.
+    if (this.daemon && this.daemon.exitCode === null && (await inDistro('pgrep -x dockerd >/dev/null', { timeout: 15_000 })).code !== 0) {
+      this.daemon.kill();
+      this.daemon = null;
+    }
     if (!this.daemon || this.daemon.exitCode !== null) {
       // A dockerd left from a DoCatz that did not quit cleanly (crashed, ended from Task Manager) holds the socket:
       // ours would exit at once and the engine show as stopped while Docker answers. It goes first; ours is the one

@@ -55,6 +55,11 @@ export function devcatzGateways(): DcGateway[] {
       status: str(g.status, /^[a-z-]{1,20}$/) ?? '',
       version: str(g.version, /^[\w.+-]{1,40}$/),
       webUi: str(g.webUi, /^https?:\/\/[^\s"<>]{1,300}$/),
+      url: str(g.url, /^https?:\/\/[^\s"<>/]{1,200}\/?$/)?.replace(/\/$/, '') ?? null,
+      apiPort: (() => {
+        const m = str(g.api, /^https?:\/\/(127\.0\.0\.1|localhost|\[::1\]):\d{1,5}\/?$/)?.match(/:(\d{1,5})\/?$/);
+        return m ? Number(m[1]) : null;
+      })(),
       project,
       container,
       // DevCatz's own link for it; a missing or odd one falls back to the page it has for that list
@@ -63,4 +68,20 @@ export function devcatzGateways(): DcGateway[] {
   }
   cache = { mtime, list };
   return list;
+}
+
+/**
+ * DevCatz's own address for a container it runs here (https://waha.localhost), so DoCatz shows and opens the name DevCatz
+ * shows, uses in its .env lines and its tray — not DoCatz's devcatz-waha.docatz.localhost, which reaches the same
+ * container (user, 2026-11-10: "tetap tertulis waha.localhost … ini tidak hanya terjadi di waha"). WAHA is matched by
+ * its container; a compose project's container by the port DevCatz talks to (`api`, 127.0.0.1:<port>), so its database
+ * keeps no address. Null: not DevCatz's, or DevCatz has no address for it.
+ */
+export function devcatzUrl(c: { name: string; project: string | null; ports: { public: number | null }[] }): string | null {
+  for (const g of devcatzGateways()) {
+    if (!g.url) continue;
+    if (g.container && c.name === g.container) return g.url;
+    if (g.project && c.project === g.project && g.apiPort && c.ports.some((p) => p.public === g.apiPort)) return g.url;
+  }
+  return null;
 }
