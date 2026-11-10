@@ -24,6 +24,31 @@ const limaDir = () => docatzDir('lima');
 const limaHome = () => docatzDir('vm');
 /** Inside the VM: a time and a path per change; setting the file's own time raises the event there. */
 const TOUCH_LOOP = 'while IFS= read -r t && IFS= read -r p; do touch -c -m -d "@$t" -- "$p" 2>/dev/null; done';
+/**
+ * Inside the VM: dockerd's `host-gateway` (`extra_hosts: …:host-gateway`, `--add-host …:host-gateway`, Laravel Sail's
+ * default compose) is the VM's own docker0 (172.17.0.1) unless set, so such containers could not reach the Mac
+ * (found by DevCatz with Postal, 2026-11-10). It becomes host.lima.internal's address from /etc/hosts; dockerd restarts
+ * only when daemon.json changed (once per VM), and prints `changed` then.
+ */
+const HOST_GATEWAY = `set -e
+ip=$(awk '$2 == "host.lima.internal" { print $1; exit }' /etc/hosts)
+[ -n "$ip" ] || exit 0
+mkdir -p /etc/docker
+r=$(python3 - "$ip" <<'PY'
+import json, os, sys
+p, ip = '/etc/docker/daemon.json', sys.argv[1]
+d = json.load(open(p)) if os.path.exists(p) and os.path.getsize(p) else {}
+if d.get('host-gateway-ip') == ip:
+    print('same')
+else:
+    d['host-gateway-ip'] = ip
+    json.dump(d, open(p, 'w'), indent=2)
+    print('changed')
+PY
+)
+[ "$r" = changed ] || exit 0
+systemctl restart docker
+echo changed`;
 const limactl = () => join(limaDir(), 'bin', 'limactl');
 const vmDir = () => join(limaHome(), NAME);
 const forwarded = () => join(vmDir(), 'sock', 'docker.sock');
@@ -171,7 +196,14 @@ export class LimaBackend implements Backend {
       watch.stop();
     }
     r.step(3);
+    await this.hostGatewayToMac();
     this.linkSocket();
+  }
+
+  /** host-gateway = the Mac (HOST_GATEWAY); new VMs and ones made before this get it on start. A failure only warns. */
+  private async hostGatewayToMac(): Promise<void> {
+    const r = await run(limactl(), ['shell', '--workdir=/', NAME, 'sudo', 'sh', '-c', HOST_GATEWAY], { env: env(), timeout: 90_000 });
+    if (r.code !== 0) console.warn('host-gateway:', lastLine(r.stderr));
   }
 
   /** A VM made before DoCatz raised file events itself: Lima's own come 7 to 16 s late and watch the whole home folder. */
