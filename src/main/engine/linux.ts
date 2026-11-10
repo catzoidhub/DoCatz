@@ -1,4 +1,5 @@
 import { existsSync } from 'node:fs';
+import { createConnection } from 'node:net';
 import { userInfo } from 'node:os';
 import type { EngineConfig } from '@shared/types';
 import { Cancelled } from '../download';
@@ -22,6 +23,20 @@ async function systemctl(...args: string[]): Promise<string> {
   return (await run('systemctl', args, { timeout: 15_000 })).stdout.trim();
 }
 
+/** Nothing listens on the socket file (connection refused, or it is gone); permission errors count as someone there. */
+function refused(path: string): Promise<boolean> {
+  return new Promise((resolve) => {
+    const s = createConnection({ path });
+    const done = (v: boolean) => {
+      s.destroy();
+      resolve(v);
+    };
+    s.setTimeout(2000, () => done(false));
+    s.once('connect', () => done(false));
+    s.once('error', (e: NodeJS.ErrnoException) => done(e.code === 'ECONNREFUSED' || e.code === 'ENOENT'));
+  });
+}
+
 /** Can this user talk to the socket (docker group or the ACL)? */
 async function socketOpen(): Promise<boolean> {
   return (await run('/bin/sh', ['-c', `[ -r ${shq(LINUX_SOCKET)} ] && [ -w ${shq(LINUX_SOCKET)} ]`], { timeout: 5000 })).code === 0;
@@ -36,12 +51,21 @@ export class LinuxBackend implements Backend {
       : ['Install Docker Engine and Docker Compose — your password, then a few minutes', 'Connect to Docker'];
   }
 
+  /** The socket is a leftover nothing listens on (apt purge docker.io keeps /var/run/docker.sock until a reboot). */
+  private deadSocket = false;
+
   private installed(): boolean {
     // DOCATZ_FAKE_NO_DOCKER: tests the "not installed" notice and Install on a computer that has it (the install
     // script then only adds what is missing).
     if (process.env.DOCATZ_FAKE_NO_DOCKER) return false;
-    // A socket counts too (Docker installed some other way): never install docker.io over it.
-    return DOCKERD.some(existsSync) || existsSync(LINUX_SOCKET);
+    // A live socket counts too (Docker installed some other way): never install docker.io over it. A dead one with no
+    // dockerd does not (found in the x64 VM, 2026-11-10: after a purge DoCatz offered Start instead of Install).
+    return DOCKERD.some(existsSync) || (existsSync(LINUX_SOCKET) && !this.deadSocket);
+  }
+
+  /** Looks again whether a socket without dockerd is a leftover; installed() reads the answer. */
+  private async probeSocket(): Promise<void> {
+    this.deadSocket = !DOCKERD.some(existsSync) && existsSync(LINUX_SOCKET) && (await refused(LINUX_SOCKET));
   }
 
   private async version(): Promise<string> {
@@ -52,6 +76,7 @@ export class LinuxBackend implements Backend {
   }
 
   async status(): Promise<BackendStatus> {
+    await this.probeSocket();
     const base = { manager: await this.version(), dir: this.installed() ? '/var/lib/docker' : '', running: null };
     if (!this.installed()) return { ...base, status: 'missing', message: 'DoCatz runs your containers on Docker Engine, which is not on this computer yet. DoCatz can install it from your package manager (docker.io and Docker Compose): one password prompt, then a few minutes.' };
     const active = await systemctl('is-active', 'docker');
@@ -63,6 +88,7 @@ export class LinuxBackend implements Backend {
   }
 
   async start(_config: EngineConfig, r: StepReporter): Promise<void> {
+    await this.probeSocket();
     r.step(0, this.installed() ? 'Waiting for your password' : 'Waiting for your password, then installing (a few minutes)');
     const user = shq(userInfo().username);
     const sock = shq(LINUX_SOCKET);
