@@ -155,7 +155,7 @@ const rateText = (v: number) => `${bytes(v)}/s`;
         <p class="truncate text-xs opacity-55">{{ gateway ? `DevCatz service${gateway.version ? ` ${gateway.version}` : ''} · read-only` : 'Compose project' }}<template v-if="dir"> · {{ dir }}</template></p>
       </div>
       <div v-if="gateway" class="no-drag flex shrink-0 items-center gap-1">
-        <button class="btn btn-sm btn-primary" title="DevCatz installs, starts and stops its services" @click="gatewayLink(gateway.kind)">Open in DevCatz</button>
+        <button class="btn btn-sm btn-primary gap-2" title="DevCatz installs, starts and stops its services" @click="gatewayLink(gateway.kind)"><img :src="devcatzLogo" alt="" class="size-5 drop-shadow-sm" draggable="false" />Open in DevCatz</button>
         <button class="btn btn-ghost btn-sm btn-square" title="Close" @click="openProject = null">✕</button>
       </div>
       <div v-else class="no-drag flex shrink-0 items-center gap-1">
@@ -242,7 +242,7 @@ const rateText = (v: number) => `${bytes(v)}/s`;
                 updates it (it keeps the compose run attached), so do that in DevCatz.
               </p>
               <div class="flex flex-wrap gap-1.5">
-                <button class="btn btn-sm btn-primary" @click="gatewayLink(gateway.kind)">Open in DevCatz</button>
+                <button class="btn btn-sm btn-primary gap-2" @click="gatewayLink(gateway.kind)"><img :src="devcatzLogo" alt="" class="size-5 drop-shadow-sm" draggable="false" />Open in DevCatz</button>
                 <button v-if="gateway.webUi && running" class="btn btn-sm" @click="api.openUrl(gateway.webUi)">Open web UI</button>
               </div>
             </div>

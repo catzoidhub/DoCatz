@@ -4,6 +4,7 @@ import type { DcApiSource, DcContainer, DcContainerDetail, DcStats } from '@shar
 import { API_FRAMEWORKS, FRONT_END_LIBRARIES, WORKER_NAME, api, attempt, bytes, changes, containerTab, databaseOf, dbcatzLink, dialcatzLink, errorText, gatewayKindOf, gatewayLink, gateways, notify, openContainer, statsHistory, type ContainerTab } from '../store';
 import ConfirmDialog from '../components/ConfirmDialog.vue';
 import dbcatzLogo from '../assets/logos/dbcatz.png';
+import devcatzLogo from '../assets/logos/devcatz.png';
 import dialcatzLogo from '../assets/logos/dialcatz.png';
 import DcNavButtons from './DcNavButtons.vue';
 import LogsPane from './LogsPane.vue';
@@ -137,7 +138,7 @@ const memPct = computed(() => (props.stats && props.stats.memLimit ? (props.stat
       <div class="no-drag flex shrink-0 items-center gap-1">
         <span v-if="busy" class="loading loading-spinner loading-sm mx-2" />
         <!-- a DevCatz service's container: read-only here, DevCatz starts, stops and removes it -->
-        <button v-else-if="gatewayKind" class="btn btn-sm btn-primary" title="DevCatz installs, starts and stops its services" @click="gatewayLink(gatewayKind)">Open in DevCatz</button>
+        <button v-else-if="gatewayKind" class="btn btn-sm btn-primary gap-2" title="DevCatz installs, starts and stops its services" @click="gatewayLink(gatewayKind)"><img :src="devcatzLogo" alt="" class="size-5 drop-shadow-sm" draggable="false" />Open in DevCatz</button>
         <template v-else>
           <button v-if="running" class="btn btn-sm" @click="act('stop')">Stop</button>
           <button v-else class="btn btn-sm btn-primary" @click="act('start')">Start</button>
