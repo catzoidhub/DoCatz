@@ -1,7 +1,9 @@
 import { approvalsAcrossApps, type McatzpApproval, type McatzpUninstall, uninstall as hostUninstall, addToClient as add, install as run, type McatzpInstallProgress, type McatzpSetup, type McatzpTarget, removeFromClient as remove, setupState as state, targets as list, type McatzpTargetId, type SetupOptions } from '@catzoid/mcatzp-host';
+import { installPath } from '@catzoid/mcatzp-host/setup';
 import { execFile } from 'node:child_process';
-import { existsSync, readdirSync, rmdirSync } from 'node:fs';
-import { homedir } from 'node:os';
+import { randomBytes } from 'node:crypto';
+import { closeSync, existsSync, openSync, readdirSync, renameSync, rmdirSync } from 'node:fs';
+import { homedir, tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { siteBase } from '../shared';
 
@@ -33,7 +35,47 @@ export async function availableUpdate(): Promise<string | null> {
   const { source, version, latest } = await setupState();
   return source === 'catzoid' && version && latest && version.localeCompare(latest, undefined, { numeric: true }) < 0 ? latest : null;
 }
-export const install = async (progress: (p: McatzpInstallProgress) => void, signal: AbortSignal): Promise<void> => run(await options(), progress, signal);
+/**
+ * Windows (MCatzP #29, 2026-11-10): an AI assistant running MCatzP keeps mcatzp.exe locked, and the host's install gave
+ * up with "MCatzP is in use: close the AI assistant using it" — on the Windows PC the update could not happen while
+ * four Claude Code sessions ran it. Windows lets a running .exe be moved, not replaced: it goes into the temp folder under
+ * the name the host sweeps once it has stopped (mcatzp-<hex>.exe.old, as its uninstall does since 1.0.4), the new copy
+ * is written, and the assistants already running keep the old one until they restart. Put back when the install fails.
+ * As DBCatz 887513b.
+ */
+function moveAsideIfRunning(target: string): string | null {
+  if (process.platform !== 'win32' || !existsSync(target)) return null;
+  try {
+    closeSync(openSync(target, 'r+'));
+    return null; // not running: the host replaces it itself
+  } catch (e) {
+    const code = (e as NodeJS.ErrnoException).code;
+    if (code !== 'EBUSY' && code !== 'EPERM') return null;
+  }
+  const aside = join(process.env.TEMP || tmpdir(), `mcatzp-${randomBytes(4).toString('hex')}.exe.old`);
+  renameSync(target, aside);
+  return aside;
+}
+
+/** Installs or updates MCatzP. True when a copy an assistant was running had to be moved aside (Windows). */
+export async function install(progress: (p: McatzpInstallProgress) => void, signal: AbortSignal): Promise<boolean> {
+  const o = await options();
+  const target = installPath(o);
+  const aside = moveAsideIfRunning(target);
+  try {
+    await run(o, progress, signal);
+  } catch (e) {
+    if (aside && !existsSync(target)) {
+      try {
+        renameSync(aside, target);
+      } catch {
+        /* the host's next install writes a new one */
+      }
+    }
+    throw e;
+  }
+  return aside !== null;
+}
 /** Where each client is approved, from every Catzoid app's bridge.json. Approvals stay per app: this only reads them. */
 export const approvals = async (): Promise<McatzpApproval[]> => approvalsAcrossApps(await options());
 export const targets = async (): Promise<McatzpTarget[]> => list(await options());

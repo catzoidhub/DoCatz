@@ -338,9 +338,10 @@ function api(): DoCatzApi {
       if (mcatzpInstalling) throw new Error('MCatzP is being installed');
       mcatzpInstalling = new AbortController();
       const report = (p: Parameters<Parameters<typeof mcatzpSetup.install>[0]>[0] | null) => send('app:mcatzpInstalling', p);
+      let movedAside = false;
       try {
         report({ phase: 'download', received: 0, total: 0 });
-        await mcatzpSetup.install(report, mcatzpInstalling.signal);
+        movedAside = await mcatzpSetup.install(report, mcatzpInstalling.signal);
       } catch (e) {
         // Cancel is an answer, not a failure.
         if (!mcatzpInstalling?.signal.aborted) throw e;
@@ -349,7 +350,7 @@ function api(): DoCatzApi {
         report(null);
       }
       void checkMcatzpUpdate();
-      return mcatzpSetup.setupState();
+      return { ...(await mcatzpSetup.setupState()), movedAside };
     },
     mcatzpUninstall: async () => {
       if (mcatzpInstalling) throw new Error('MCatzP is being installed');
