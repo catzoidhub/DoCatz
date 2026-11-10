@@ -1,9 +1,10 @@
-import { app, clipboard, dialog, ipcMain, Notification, shell } from 'electron';
+import { app, clipboard, ipcMain, Notification, shell } from 'electron';
 import { execFile, spawn } from 'node:child_process';
 import { binDir } from './paths';
 import { isLinux, isWin } from './platform';
 import { runInLinuxTerminal } from './linuxterm';
 import { offerAppImageInstall } from './appimage';
+import { messageBox, openDialog, saveDialog } from './dialogs';
 import { createWriteStream, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { basename, join } from 'node:path';
 import { pipeline } from 'node:stream/promises';
@@ -503,7 +504,7 @@ function api(): DoCatzApi {
     engineCancel: async () => engine.cancel(),
     engineSetupWsl: () => engine.setupWsl(),
     restartComputer: async () => {
-      const r = await dialog.showMessageBox(win()!, { type: 'question', buttons: ['Restart Now', 'Later'], defaultId: 0, cancelId: 1, message: 'Restart Windows now?', detail: 'Save your work in other apps first. Windows finishes installing WSL while it restarts; open DoCatz again afterwards to start the engine.' });
+      const r = await messageBox(win(), { type: 'question', buttons: ['Restart Now', 'Later'], defaultId: 0, cancelId: 1, message: 'Restart Windows now?', detail: 'Save your work in other apps first. Windows finishes installing WSL while it restarts; open DoCatz again afterwards to start the engine.' });
       if (r.response !== 0) return false;
       await run('shutdown.exe', ['/r', '/t', '5', '/c', 'DoCatz: restarting to finish installing WSL'], { timeout: 15_000 });
       return true;
@@ -554,14 +555,14 @@ function api(): DoCatzApi {
     },
     files: (id, path) => needEngine(() => ops.listFiles(id, path)),
     fileSave: async (id, path) => {
-      const r = await dialog.showSaveDialog(win()!, { defaultPath: join(app.getPath('downloads'), `${basename(path) || 'root'}.tar`), filters: [{ name: 'Tar archive', extensions: ['tar'] }] });
+      const r = await saveDialog(win(), { defaultPath: join(app.getPath('downloads'), `${basename(path) || 'root'}.tar`), filters: [{ name: 'Tar archive', extensions: ['tar'] }] });
       if (r.canceled || !r.filePath) return null;
       await pipeline(await ops.archive(id, path), createWriteStream(r.filePath));
       return r.filePath;
     },
     projects: () => needEngine(() => projects()),
     composePick: async () => {
-      const r = await dialog.showOpenDialog(win()!, { title: 'Open a compose file', properties: ['openFile'], filters: [{ name: 'Compose file', extensions: ['yml', 'yaml'] }] });
+      const r = await openDialog(win(), { title: 'Open a compose file', properties: ['openFile'], filters: [{ name: 'Compose file', extensions: ['yml', 'yaml'] }] });
       return r.canceled ? null : (r.filePaths[0] ?? null);
     },
     composeRun: (file, action, token) => runs.compose([file], null, action, token),
