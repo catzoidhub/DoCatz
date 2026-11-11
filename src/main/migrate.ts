@@ -9,7 +9,8 @@ import { isLinux, isWin } from './platform';
 import { run } from './proc';
 
 /**
- * Move from another Docker (DoCatz TODO #11): Docker Desktop, OrbStack, Colima or Rancher Desktop on this computer.
+ * Move from another Docker (DoCatz TODO #11): Docker Desktop, OrbStack, Colima or Rancher Desktop on this computer
+ * (Podman on Linux, #103).
  * Images go across as they are (`docker save` on the other engine piped into `docker load` on DoCatz's), volumes are
  * made again on DoCatz with the same name and labels (a compose project finds its own) and their files copied with
  * tar through a small container on each side. Nothing is removed from the other engine: both can stay side by side,
@@ -17,12 +18,12 @@ import { run } from './proc';
  * Windows.
  */
 
-const HELPER = 'alpine:3.20';
+export const HELPER = 'alpine:3.20';
 const local = process.env.LOCALAPPDATA ?? join(homedir(), 'AppData', 'Local');
 const programs = process.env.ProgramFiles ?? 'C:\\Program Files';
 
 /** Where each engine listens, and how to tell it is installed when it is not running. */
-function known(): { id: DcMigrateSourceId; name: string; hosts: string[]; installed: () => boolean }[] {
+function known(): { id: DcMigrateSourceId; name: string; hosts: string[]; installed: () => boolean; hint?: string }[] {
   if (isWin)
     return [
       {
@@ -50,6 +51,14 @@ function known(): { id: DcMigrateSourceId; name: string; hosts: string[]; instal
       { id: 'docker-desktop', name: 'Docker Desktop', hosts: [`unix://${join(home, '.docker', 'desktop', 'docker.sock')}`], installed: () => existsSync('/opt/docker-desktop') },
       { id: 'rancher', name: 'Rancher Desktop', hosts: [`unix://${join(home, '.rd', 'docker.sock')}`], installed: () => existsSync('/opt/rancher-desktop') },
       { id: 'colima', name: 'Colima', hosts: colima, installed: () => colima.length > 0 || ['/usr/local/bin/colima', '/usr/bin/colima'].some(existsSync) },
+      // #103: Podman answers the Docker API on its socket — the user's own (rootless) first, else the system's
+      {
+        id: 'podman',
+        name: 'Podman',
+        hosts: [`unix://${join(process.env.XDG_RUNTIME_DIR || `/run/user/${process.getuid?.() ?? 1000}`, 'podman', 'podman.sock')}`, 'unix:///run/podman/podman.sock'],
+        installed: () => ['/usr/bin/podman', '/usr/local/bin/podman'].some(existsSync),
+        hint: 'Turn on its socket: systemctl --user enable --now podman.socket',
+      },
     ];
   return [
     { id: 'docker-desktop', name: 'Docker Desktop', hosts: [`unix://${join(home, '.docker', 'run', 'docker.sock')}`], installed: () => existsSync('/Applications/Docker.app') },
@@ -92,7 +101,7 @@ export async function migrateSources(): Promise<DcMigrateSource[]> {
         break;
       }
     }
-    if (host || k.installed()) out.push({ id: k.id, name: k.name, host, version, running: !!host });
+    if (host || k.installed()) out.push({ id: k.id, name: k.name, host, version, running: !!host, ...(k.hint && !host ? { hint: k.hint } : {}) });
   }
   return out;
 }
@@ -148,7 +157,7 @@ export async function migrateInventory(id: DcMigrateSourceId): Promise<DcMigrate
 }
 
 /** `a | b`, counting the bytes that pass; rejects with the failing side's last words. */
-function pipe(a: string[], b: string[], onBytes: (n: number) => void, signal: AbortSignal): Promise<void> {
+export function pipe(a: string[], b: string[], onBytes: (n: number) => void, signal: AbortSignal): Promise<void> {
   return new Promise((resolve, reject) => {
     const from = spawn(dockerBin(), a, { windowsHide: true });
     const to = spawn(dockerBin(), b, { windowsHide: true });

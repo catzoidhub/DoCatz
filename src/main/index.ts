@@ -19,6 +19,7 @@ import * as mcatzpSetup from './mcatzp/install';
 import { writeBridge } from './bridge';
 import { listDatabases, updateDatabases } from './dbservices';
 import { migrate, migrateInventory, migrateSources } from './migrate';
+import { exportVolume, importVolume, readArchive, volumeWriters } from './volumefile';
 import { apiSource, serviceSpec } from './apisource';
 import { removeContext, setPath as setCliPath } from './cli';
 import { findCatzoidApp, installCatzoidApp, installedVersion, installSteps, openCatzoidApp, platformId, siteAsset } from './companion';
@@ -255,6 +256,28 @@ const SIBLING_REPO: Record<SiblingApp, string> = { devcatz: 'catzoidhub/DevCatz'
 let siblingTask: TaskProgress | null = null;
 let migrateAbort: AbortController | null = null;
 let migrateTask: TaskProgress | null = null;
+/** Exporting or importing a volume (#102): one at a time. */
+let volumeAbort: AbortController | null = null;
+let volumeTask: TaskProgress | null = null;
+/** Archives the user picked: an import reads only these. */
+const pickedArchives = new Set<string>();
+/** Runs an export or import with its steps on 'app:volume'. */
+async function volumeJob(title: string, steps: string[], work: (set: (p: Partial<TaskProgress>) => void, signal: AbortSignal) => Promise<void>): Promise<void> {
+  if (volumeAbort) throw new Error('A volume is already being copied');
+  const abort = (volumeAbort = new AbortController());
+  let task: TaskProgress = { kind: 'volume', title, steps, step: 0 };
+  const set = (p: Partial<TaskProgress>) => send('app:volume', (volumeTask = task = { ...task, ...p }));
+  set({});
+  try {
+    await needEngine(() => work(set, abort.signal));
+    set({ step: steps.length, done: true, detail: '', fraction: undefined });
+  } catch (e) {
+    set({ done: true, cancelled: abort.signal.aborted, error: abort.signal.aborted ? 'Cancelled' : (e as Error).message });
+    throw e;
+  } finally {
+    volumeAbort = null;
+  }
+}
 let siblingLatest: { at: number; latest: Record<SiblingApp, string | null> } | null = null;
 let siblingAbort: AbortController | null = null;
 let mcatzp: Mcatzp;
@@ -588,6 +611,30 @@ function api(): DoCatzApi {
     imagePull: (ref, token) => needEngine(() => runs.pull(ref, token)),
     volumes: () => needEngine(() => ops.listVolumes()),
     volumeRemove: (name) => needEngine(() => ops.volumeRemove(name)),
+    volumeWriters: (name) => needEngine(() => volumeWriters(name)),
+    volumeExport: async (name) => {
+      if (volumeAbort) throw new Error('A volume is already being copied');
+      if (!(await needEngine(() => ops.listVolumes())).some((v) => v.name === name)) throw new Error(`No volume ${name}`);
+      const day = new Date().toISOString().slice(0, 10);
+      const r = await saveDialog(win(), { title: `Export ${name}`, defaultPath: join(app.getPath('downloads'), `${name}-${day}.tar.gz`), filters: [{ name: 'Volume archive', extensions: ['tar.gz', 'tgz'] }] });
+      if (r.canceled || !r.filePath) return null;
+      const file = /\.(tar\.gz|tgz)$/i.test(r.filePath) ? r.filePath : `${r.filePath}.tar.gz`;
+      await volumeJob(`Exporting ${name}`, ['Getting ready', `Copying ${name}`, 'Writing the manifest'], (set, signal) => exportVolume(name, file, app.getVersion(), set, signal));
+      return basename(file);
+    },
+    volumeImportPick: async () => {
+      const r = await openDialog(win(), { title: 'Import a volume', properties: ['openFile'], filters: [{ name: 'Volume archive', extensions: ['gz', 'tgz', 'tar'] }] });
+      if (r.canceled || !r.filePaths[0]) return null;
+      pickedArchives.add(r.filePaths[0]);
+      return needEngine(() => readArchive(r.filePaths[0]));
+    },
+    volumeImport: async (file, name, replace, confirm) => {
+      if (!pickedArchives.has(file)) throw new Error('Pick the archive first');
+      if (replace && confirm !== name) throw new Error(`Type ${name} to replace its contents`);
+      await volumeJob(`Importing ${name}`, ['Getting ready', replace ? `Replacing ${name}’s files` : `Filling ${name}`, 'Finishing'], (set, signal) => importVolume(file, name, replace, set, signal));
+      void refresh();
+    },
+    volumeCancel: async () => volumeAbort?.abort(),
     networks: () => needEngine(() => ops.listNetworks()),
     networkRemove: (id) => needEngine(() => ops.networkRemove(id)),
     prunePreview: (kind) => needEngine(() => ops.prunePreview(kind)),
@@ -678,7 +725,7 @@ app.whenReady().then(async () => {
       open: (route) => openWindow(route),
       refresh: () => void refresh(),
     },
-    { databasePasswords: () => listDatabases().map((d) => d.password), logsTail: (id, tail) => ops.logsTail(id, tail), run: (token) => recentRuns.get(token) ?? null, runs: () => [...recentRuns.values()].reverse(), tasks: () => ({ migrate: migrateTask, sibling: siblingTask }) },
+    { databasePasswords: () => listDatabases().map((d) => d.password), logsTail: (id, tail) => ops.logsTail(id, tail), run: (token) => recentRuns.get(token) ?? null, runs: () => [...recentRuns.values()].reverse(), tasks: () => ({ migrate: migrateTask, sibling: siblingTask, volume: volumeTask }) },
   );
   void mcatzp.set(settings().mcatzp.on).catch(() => undefined);
   setTimeout(() => void checkMcatzpUpdate(), 30_000);

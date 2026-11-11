@@ -20,6 +20,8 @@ const c = computed(() => s.value?.config);
 const isMac = computed(() => s.value?.backend === 'lima');
 /** Linux (#101): the system's Docker Engine, no VM — no limits to set and no Reset. */
 const isSystem = computed(() => s.value?.backend === 'system');
+/** The engines DoCatz can move from on this platform (#103: said when none is there). */
+const otherNames = computed(() => (isSystem.value ? 'Docker Desktop, Rancher Desktop, Colima or Podman' : s.value?.backend === 'wsl' ? 'Docker Desktop or Rancher Desktop' : 'Docker Desktop, OrbStack, Colima or Rancher Desktop'));
 const busy = ref('');
 const wslTask = computed(() => s.value?.task?.title === 'Installing WSL');
 async function run(name: string, fn: () => Promise<unknown>, done?: string) {
@@ -215,15 +217,23 @@ const copy = (t: string) => {
         </div>
 
         <!-- move from another Docker (#11) -->
-        <div v-if="others.length" class="card">
+        <div class="card">
           <div class="card-body gap-2">
             <h2>Move from another Docker</h2>
             <p class="text-xs opacity-60">Copy images and volumes onto DoCatz’s engine. The other one keeps them, so both can stay side by side.</p>
+            <!-- #103: an empty list says why, rather than hiding the card -->
+            <p v-if="!others.length" class="text-sm opacity-70">
+              <template v-if="isSystem">DoCatz uses this computer’s Docker Engine, so its images and volumes are already here.</template>
+              <template v-else>No other Docker on this computer.</template>
+              {{ otherNames }} appear here when installed.
+              <button class="btn btn-ghost btn-xs ml-1" @click="lookAgain">Look again</button>
+            </p>
             <ul class="divide-y divide-base-300/50">
               <li v-for="o in others" :key="o.id" class="flex items-center gap-3 py-2">
                 <span class="min-w-0 flex-1">
                   <span class="block text-sm font-medium">{{ o.name }}</span>
                   <span class="block text-xs opacity-55">{{ o.running ? `Running · Docker ${o.version}` : 'Installed, not running — start it to move from it' }}</span>
+                  <span v-if="o.hint" class="selectable block font-mono text-[11px] opacity-55">{{ o.hint }}</span>
                 </span>
                 <button v-if="o.running" class="btn btn-sm" @click="moving = o">Choose what to move…</button>
                 <button v-else class="btn btn-ghost btn-sm" @click="lookAgain">Look again</button>

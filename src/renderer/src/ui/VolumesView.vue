@@ -1,14 +1,15 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue';
-import type { DcVolume } from '@shared/types';
+import type { DcVolume, DcVolumeArchive } from '@shared/types';
 import { api, attempt, bytes, changes, engineUp, errorText, notify } from '../store';
 import EngineGate from './EngineGate.vue';
 import PruneDialog from './PruneDialog.vue';
 import DcNavButtons from './DcNavButtons.vue';
 import CatMood from './CatMood.vue';
 import CopyName from './CopyName.vue';
+import VolumeFileDialog from './VolumeFileDialog.vue';
 
-/** Volumes (DoCatz TODO #14): name, compose project, size, who uses it; remove (typed) and clean up unused. */
+/** Volumes (DoCatz TODO #14): name, compose project, size, who uses it; remove (typed) and clean up unused; export / import (#102). */
 const list = ref<DcVolume[]>([]);
 const loading = ref(false);
 const query = ref('');
@@ -36,6 +37,12 @@ async function remove() {
   await attempt(() => api.volumeRemove(v.name), `${v.name} removed`);
 }
 const pruning = ref(false);
+const exporting = ref<DcVolume | null>(null);
+const importing = ref<DcVolumeArchive | null>(null);
+async function pickArchive() {
+  const a = await attempt(() => api.volumeImportPick());
+  if (a) importing.value = a;
+}
 </script>
 
 <template>
@@ -45,6 +52,7 @@ const pruning = ref(false);
       <div class="no-drag"><DcNavButtons /></div>
       <div><h1 class="text-base font-semibold tracking-tight">Volumes</h1><p class="text-xs opacity-55">{{ list.length }} · {{ bytes(total) }}</p></div>
       <span class="flex-1" />
+      <button class="no-drag btn btn-sm" @click="pickArchive">Import…</button>
       <button class="no-drag btn btn-sm" @click="pruning = true">Clean up…</button>
     </header>
     <div class="flex shrink-0 items-center gap-2 px-4 py-2">
@@ -53,14 +61,14 @@ const pruning = ref(false);
     </div>
     <div class="min-h-0 flex-1 overflow-y-auto px-2">
       <table class="table table-sm">
-        <thead><tr><th>Volume</th><th class="w-36">Project</th><th class="w-24 text-right">Size</th><th>Used by</th><th class="w-12" /></tr></thead>
+        <thead><tr><th>Volume</th><th class="w-36">Project</th><th class="w-24 text-right">Size</th><th>Used by</th><th class="w-36" /></tr></thead>
         <tbody>
           <tr v-for="v in shown" :key="v.name" class="group">
             <td class="max-w-80 truncate font-mono text-xs" :title="v.name">{{ v.name }}</td>
             <td class="text-xs">{{ v.project ?? '—' }}</td>
             <td class="text-right text-xs tabular-nums">{{ bytes(v.size) }}</td>
             <td class="text-xs"><span v-if="v.containers.length">{{ v.containers.join(', ') }}</span><span v-else class="opacity-45">unused</span></td>
-            <td class="text-right"><button class="btn btn-ghost btn-xs text-error opacity-0 group-hover:opacity-100" :disabled="v.containers.length > 0" :title="v.containers.length ? 'Remove the containers using it first' : 'Remove'" @click="removing = v">Remove</button></td>
+            <td class="text-right whitespace-nowrap"><button class="btn btn-ghost btn-xs opacity-0 group-hover:opacity-100 focus:opacity-100" @click="exporting = v">Export…</button><button class="btn btn-ghost btn-xs text-error opacity-0 group-hover:opacity-100" :disabled="v.containers.length > 0" :title="v.containers.length ? 'Remove the containers using it first' : 'Remove'" @click="removing = v">Remove</button></td>
           </tr>
           <tr v-if="!shown.length"><td colspan="5" class="py-8 text-center text-sm opacity-55">No volumes{{ query ? ' match' : '' }}.</td></tr>
         </tbody>
@@ -80,6 +88,8 @@ const pruning = ref(false);
       </form>
       <div class="modal-backdrop" @click="removing = null" />
     </dialog>
+    <VolumeFileDialog v-if="exporting" mode="export" :volume="exporting" @close="exporting = null" />
+    <VolumeFileDialog v-if="importing" mode="import" :archive="importing" @close="importing = null" @done="load" />
     <PruneDialog v-if="pruning" kind="volumes" @close="pruning = false" @done="load" />
   </section>
 </template>

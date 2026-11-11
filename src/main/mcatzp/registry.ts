@@ -8,6 +8,6 @@ import { destructiveActions } from './destructive';
 export function allActions(): ActionDef[] {
   const api = new Proxy({}, { get: () => () => { throw new Error('The registry is only listed here'); } }) as DoCatzApi;
   const scopes: Scopes = { project: () => true, loose: true, logs: true, resources: true, envValues: true, secretName: () => false, changes: true, all: true };
-  const reads: EngineReads = { databasePasswords: () => [], logsTail: () => Promise.resolve([]), run: () => null, runs: () => [], tasks: () => ({ migrate: null, sibling: null }) };
+  const reads: EngineReads = { databasePasswords: () => [], logsTail: () => Promise.resolve([]), run: () => null, runs: () => [], tasks: () => ({ migrate: null, sibling: null, volume: null }) };
   return [...readActions(api, scopes, reads), ...changeActions(api, scopes, reads), ...destructiveActions(api, scopes, reads)];
 }

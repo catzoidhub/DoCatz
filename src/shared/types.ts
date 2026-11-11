@@ -401,6 +401,28 @@ export interface DcNetwork {
   subnet: string;
   containers: string[];
 }
+/** Beside an exported volume (#102): what makes it the same volume again. */
+export interface DcVolumeManifest {
+  kind: 'docatz-volume';
+  version: 1;
+  name: string;
+  driver: string;
+  labels: Record<string, string>;
+  /** Its size when exported (bytes, 0 when unknown). */
+  size: number;
+  /** DoCatz's version that wrote it. */
+  docatz: string;
+  exported: string;
+}
+/** An archive picked for import: its manifest when one is beside it, the name to suggest, the names already used. */
+export interface DcVolumeArchive {
+  file: string;
+  fileName: string;
+  size: number;
+  manifest: DcVolumeManifest | null;
+  name: string;
+  taken: string[];
+}
 export type DcPruneKind = 'containers' | 'images' | 'volumes' | 'networks' | 'build-cache';
 /** Prune with a preview of what goes (#14). */
 export interface DcPrunePreview {
@@ -670,7 +692,7 @@ export interface DcGateway {
 
 // ------------------------------------------------------------ move from another Docker (#11)
 
-export type DcMigrateSourceId = 'docker-desktop' | 'orbstack' | 'colima' | 'rancher';
+export type DcMigrateSourceId = 'docker-desktop' | 'orbstack' | 'colima' | 'rancher' | 'podman';
 /** Another Docker engine on this computer: running (with its address) or installed and stopped. */
 export interface DcMigrateSource {
   id: DcMigrateSourceId;
@@ -678,6 +700,8 @@ export interface DcMigrateSource {
   host: string | null;
   version: string | null;
   running: boolean;
+  /** Installed but not answering: what turns it on (Podman's socket). */
+  hint?: string;
 }
 export interface DcMigrateInventory {
   images: { ref: string; id: string; size: number; inDocatz: boolean }[];
@@ -828,6 +852,15 @@ export interface DoCatzApi {
   imagePull(ref: string, token: string): Promise<void>;
   volumes(): Promise<DcVolume[]>;
   volumeRemove(name: string): Promise<void>;
+  /** Running containers that mount the volume (#102: a copy of a database still writing can be half way). */
+  volumeWriters(name: string): Promise<string[]>;
+  /** Asks where (save dialog), then writes the volume as .tar.gz + manifest; steps via onVolume; the file's name, or null when the dialog was closed. */
+  volumeExport(name: string): Promise<string | null>;
+  /** Asks for an archive (open dialog) and reads its manifest; null when the dialog was closed. */
+  volumeImportPick(): Promise<DcVolumeArchive | null>;
+  /** An archive from volumeImportPick into a new volume, or with `replace` into an existing one (`confirm` = its name); steps via onVolume. */
+  volumeImport(file: string, name: string, replace: boolean, confirm?: string): Promise<void>;
+  volumeCancel(): Promise<void>;
   networks(): Promise<DcNetwork[]>;
   networkRemove(id: string): Promise<void>;
   prunePreview(kind: DcPruneKind): Promise<DcPrunePreview>;
@@ -877,7 +910,7 @@ export const API_METHODS: (keyof DoCatzApi)[] = [
   'appInfo', 'aboutInfo', 'updateState', 'updateCheck', 'updateDownload', 'updateCancel', 'updateSkip', 'updateInstall', 'updateConfigure', 'reportPreview', 'reportSend', 'captureWindow', 'reportError', 'reportSettings', 'reportConfigure', 'uninstallPlan', 'uninstallRun', 'settings', 'setSettings', 'setAiKey', 'aiModels', 'aiProbe', 'aiTest', 'aiCancel', 'aiAsk', 'aiPreviewAsk', 'aiExplainLog', 'aiPreviewLog', 'aiFile', 'aiPreviewFile', 'openUrl', 'browsers', 'reveal', 'openSibling', 'mcatzpActivity', 'mcatzpClearActivity', 'mcatzpRevoke', 'mcatzpSetup', 'mcatzpInstall', 'mcatzpUninstall', 'mcatzpInstallCancel', 'mcatzpApprovals', 'mcatzpTargets', 'mcatzpAddToClient', 'mcatzpRemoveFromClient', 'mcatzpUpdate', 'mcatzpPending', 'mcatzpAnswer', 'copyText', 'apiSource', 'siblingVersions', 'migrateSources', 'migrateInventory', 'migrateRun', 'migrateCancel', 'devcatzGateways', 'databases', 'siblingInstall', 'siblingInstallCancel', 'runInTerminal',
   'engineState', 'engineStart', 'engineStop', 'engineRestart', 'engineReset', 'engineConfigure', 'engineCancel', 'engineSetupWsl', 'restartComputer', 'engineLog', 'contextSet', 'cliInstall', 'cliPath', 'diskUsage',
   'containers', 'container', 'containerEnv', 'containerAction', 'containerRemove', 'stats', 'logsFollow', 'logsStop', 'termOpen', 'termInput', 'termResize', 'termClose', 'files', 'fileSave', 'projects', 'composePick', 'composeRun', 'composeProject', 'runCancel', 'readText', 'writeText',
-  'images', 'imageRemove', 'imagePull', 'volumes', 'volumeRemove', 'networks', 'networkRemove', 'prunePreview', 'prune',
+  'images', 'imageRemove', 'imagePull', 'volumes', 'volumeRemove', 'volumeWriters', 'volumeExport', 'volumeImportPick', 'volumeImport', 'volumeCancel', 'networks', 'networkRemove', 'prunePreview', 'prune',
   'projectPrefs', 'setProjectPrefs',
   'envState', 'envRead', 'envWrite', 'envCreate', 'envLock', 'envRemove', 'envDrift', 'setDomainName',
   'builds', 'build', 'buildLogs', 'buildRemove',

@@ -53,7 +53,7 @@ test('container_logs masks secrets of projects not shared, and refuses what is n
     envRead: async () => ({ content: 'MAIL_PASSWORD=from-dotenv-file\n', mtime: 0 }),
   } as unknown as DoCatzApi;
   const line = 'x own-password y private-token-value z from-dotenv-file db-pass-value';
-  const tools = readActions(api, { project: (n) => n === 'shared', loose: false, logs: true, resources: true, envValues: true, secretName: () => false, changes: false, all: false }, { databasePasswords: () => ['db-pass-value'], logsTail: async () => [{ stream: 'stdout', time: 't', text: line }], run: () => null, runs: () => [], tasks: () => ({ migrate: null, sibling: null }) });
+  const tools = readActions(api, { project: (n) => n === 'shared', loose: false, logs: true, resources: true, envValues: true, secretName: () => false, changes: false, all: false }, { databasePasswords: () => ['db-pass-value'], logsTail: async () => [{ stream: 'stdout', time: 't', text: line }], run: () => null, runs: () => [], tasks: () => ({ migrate: null, sibling: null, volume: null }) });
   const logs = tools.find((t) => t.name === 'container_logs')!;
   const ctx = { client: 'test', signal: new AbortController().signal };
   const out = (await logs.run({ container: 'a' }, ctx)).text;
@@ -62,7 +62,7 @@ test('container_logs masks secrets of projects not shared, and refuses what is n
 });
 
 test('logs off: refused, naming where to turn them on', async () => {
-  const tools = readActions({ containers: async () => [] } as unknown as DoCatzApi, { project: () => true, loose: true, logs: false, resources: true, envValues: true, secretName: () => false, changes: false, all: true }, { databasePasswords: () => [], logsTail: async () => [], run: () => null, runs: () => [], tasks: () => ({ migrate: null, sibling: null }) });
+  const tools = readActions({ containers: async () => [] } as unknown as DoCatzApi, { project: () => true, loose: true, logs: false, resources: true, envValues: true, secretName: () => false, changes: false, all: true }, { databasePasswords: () => [], logsTail: async () => [], run: () => null, runs: () => [], tasks: () => ({ migrate: null, sibling: null, volume: null }) });
   await expect(tools.find((t) => t.name === 'container_logs')!.run({ container: 'a' }, { client: 't', signal: new AbortController().signal }) as Promise<unknown>).rejects.toThrow(/Settings → MCatzP/);
 });
 
@@ -78,7 +78,7 @@ test('the Monitoring tool counts the whole engine but names only what is shared'
     containers: async () => [c('web', 'shared'), c('db', 'shared'), c('other', 'private'), { ...c('off', 'shared'), state: 'exited' }],
     stats: async () => [stat('web', 10), stat('db', 30), stat('other', 50)],
   } as unknown as DoCatzApi;
-  const reads = { databasePasswords: () => [], logsTail: async () => '', run: () => null, runs: () => [], tasks: () => ({ migrate: null, sibling: null }) };
+  const reads = { databasePasswords: () => [], logsTail: async () => '', run: () => null, runs: () => [], tasks: () => ({ migrate: null, sibling: null, volume: null }) };
   const tools = readActions(api, { project: (n) => n === 'shared', loose: false, logs: true, resources: true, envValues: true, secretName: () => false, changes: true, all: false } as never, reads);
   const tool = tools.find((t) => t.name === 'get_monitoring')!;
   const ctx = { client: 'test', signal: new AbortController().signal };
