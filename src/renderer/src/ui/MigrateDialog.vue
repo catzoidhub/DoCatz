@@ -60,7 +60,8 @@ function close() {
     <div class="modal-box win-fit flex max-h-[calc(100vh-4rem)] w-[40rem] max-w-[95vw] flex-col gap-4">
       <div>
         <h3 class="text-lg font-semibold tracking-tight">Move from {{ source.name }}</h3>
-        <p class="text-sm opacity-70">Copies onto DoCatz’s engine. {{ source.name }} keeps everything, so both can stay side by side; each has its own docker context.</p>
+        <!-- Podman (#103) has no docker context: it answers on its own socket -->
+        <p class="text-sm opacity-70">Copies onto DoCatz’s engine. {{ source.name }} keeps everything, so both can stay side by side{{ source.id === 'podman' ? '' : '; each has its own docker context' }}.</p>
       </div>
 
       <TaskSteps v-if="task" :task="task" class="min-h-0 overflow-y-auto" />
