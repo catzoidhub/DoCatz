@@ -60,7 +60,7 @@ function close() {
         <ul class="max-h-40 space-y-0.5 overflow-y-auto font-mono text-xs">
           <li v-for="i in images" :key="i.id" class="flex gap-2"><span class="min-w-0 flex-1 truncate">{{ i.tags[0] ?? i.id.slice(7, 19) }}</span><span class="opacity-55">{{ bytes(i.size) }}</span></li>
         </ul>
-        <p class="text-xs opacity-60">{{ bytes(size) }} before compressing.</p>
+        <p class="text-xs opacity-60">Docker counts {{ bytes(size) }}{{ refs.length > 1 ? ' together' : '' }}; layers shared between images go in once, and the file is compressed, so it comes out smaller.</p>
       </template>
       <p v-else class="text-sm opacity-70">An image already here with the same tag gets the archive’s in its place; the old one stays, untagged, until cleaned up.</p>
 

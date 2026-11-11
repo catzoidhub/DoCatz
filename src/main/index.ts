@@ -257,6 +257,33 @@ const SIBLING_REPO: Record<SiblingApp, string> = { devcatz: 'catzoidhub/DevCatz'
 let siblingTask: TaskProgress | null = null;
 let migrateAbort: AbortController | null = null;
 let migrateTask: TaskProgress | null = null;
+/**
+ * A task's progress to the window at most every 150 ms (a copy reports every 64 KB chunk: thousands of IPC events for a
+ * 200 MB volume, found on Windows 2026-11-11). A new step, the end or an error goes at once; the last line is never lost.
+ */
+function throttledTask(channel: string, keep: (t: TaskProgress) => void): (t: TaskProgress) => void {
+  let last = 0;
+  let step = -1;
+  let timer: ReturnType<typeof setTimeout> | null = null;
+  let pending: TaskProgress | null = null;
+  const flush = () => {
+    timer = null;
+    if (!pending) return;
+    last = Date.now();
+    send(channel, pending);
+    pending = null;
+  };
+  return (t) => {
+    keep(t);
+    pending = t;
+    const urgent = t.step !== step || t.done || !!t.error;
+    step = t.step;
+    if (urgent || Date.now() - last >= 150) {
+      if (timer) clearTimeout(timer);
+      flush();
+    } else if (!timer) timer = setTimeout(flush, 150 - (Date.now() - last));
+  };
+}
 /** Exporting or importing a volume or images (#102, #104): one at a time. */
 let fileAbort: AbortController | null = null;
 let fileTask: TaskProgress | null = null;
@@ -267,7 +294,8 @@ async function fileJob<T>(title: string, steps: string[], weights: number[], wor
   if (fileAbort) throw new Error('An export or import is already running');
   const abort = (fileAbort = new AbortController());
   let task: TaskProgress = { kind: 'file', title, steps, weights, step: 0 };
-  const set = (p: Partial<TaskProgress>) => send('app:file-job', (fileTask = task = { ...task, ...p }));
+  const out = throttledTask('app:file-job', (t) => (fileTask = t));
+  const set = (p: Partial<TaskProgress>) => out((task = { ...task, ...p }));
   set({});
   try {
     const r = await needEngine(() => work(set, abort.signal));
@@ -462,7 +490,8 @@ function api(): DoCatzApi {
       migrateAbort = new AbortController();
       const items = [...images.map((i) => `Image ${i}`), ...volumes.map((v) => `Volume ${v}`)];
       let task: TaskProgress = { kind: 'migrate', title: 'Moving to DoCatz', steps: items, step: 0 };
-      const set = (p: Partial<TaskProgress>) => send('app:migrate', (migrateTask = task = { ...task, ...p }));
+      const out = throttledTask('app:migrate', (t) => (migrateTask = t));
+      const set = (p: Partial<TaskProgress>) => out((task = { ...task, ...p }));
       set({});
       try {
         const failed = await needEngine(() => migrate(source, images, volumes, set, migrateAbort!.signal));

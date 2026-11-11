@@ -243,12 +243,21 @@ export async function migrate(id: DcMigrateSourceId, images: string[], volumes: 
         const c = await docker(mine, ['volume', 'create', ...Object.entries(labels).flatMap(([k, v]) => ['--label', `${k}=${v}`]), name]);
         if (c.code !== 0) throw new Error(c.stderr.trim() || 'the volume could not be made');
       }
-      await pipe(
-        ['-H', host, 'run', '--rm', '-v', `${name}:/from:ro`, HELPER, 'tar', '-C', '/from', '-cf', '-', '.'],
-        ['-H', mine, 'run', '--rm', '-i', '--label', HELPER_LABEL, '-v', `${name}:/to`, HELPER, 'tar', '-C', '/to', '-xpf', '-'],
-        (n) => set({ detail: `${name} · ${mb(n)}${size ? ` of ${mb(size)}` : ''}`, fraction: size ? Math.min(n / size, 1) : undefined }),
-        signal,
-      );
+      // Into DoCatz's engine with `docker cp -a -` to a helper that is only created: `docker run -i … tar -x` never
+      // ends on Windows, where the WSL engine's named pipe cannot carry the end of stdin (volumefile.ts, 745d421).
+      const c = await docker(mine, ['create', '--label', HELPER_LABEL, '-v', `${name}:/to`, HELPER, 'true']);
+      if (c.code !== 0) throw new Error(c.stderr.trim().split('\n').pop() || 'the copy could not start');
+      const box = c.stdout.trim().split('\n').pop() ?? '';
+      try {
+        await pipe(
+          ['-H', host, 'run', '--rm', '-v', `${name}:/from:ro`, HELPER, 'tar', '-C', '/from', '-cf', '-', '.'],
+          ['-H', mine, 'cp', '-a', '-', `${box}:/to`],
+          (n) => set({ detail: `${name} · ${mb(n)}${size ? ` of ${mb(size)}` : ''}`, fraction: size ? Math.min(n / size, 1) : undefined }),
+          signal,
+        );
+      } finally {
+        await docker(mine, ['rm', '-f', box]).catch(() => null);
+      }
     } catch (e) {
       if (signal.aborted) throw e;
       failed.push(`${name}: ${(e as Error).message}`);
