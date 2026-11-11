@@ -81,8 +81,9 @@ function shape(c: ApiContainer, urlFor: UrlFor): DcContainer {
 
 export async function listContainers(urlFor: UrlFor): Promise<DcContainer[]> {
   const list = await docker.get<ApiContainer[]>('/containers/json', { all: true });
-  // DoCatz's own router (domains for containers without a published port) is not one of the user's containers.
-  return list.filter((c) => !c.Labels?.['com.mrcatz.docatz.router']).map((c) => shape(c, urlFor)).sort((a, b) => (a.project ?? '￿').localeCompare(b.project ?? '￿') || a.name.localeCompare(b.name));
+  // DoCatz's own router (domains for containers without a published port) and the helpers that copy a volume's files
+  // (#102) are not the user's containers.
+  return list.filter((c) => !c.Labels?.['com.mrcatz.docatz.router'] && !c.Labels?.['com.mrcatz.docatz.helper']).map((c) => shape(c, urlFor)).sort((a, b) => (a.project ?? '￿').localeCompare(b.project ?? '￿') || a.name.localeCompare(b.name));
 }
 
 /** The folders and files on the computer that running containers mount. */
@@ -384,7 +385,8 @@ export async function listVolumes(): Promise<DcVolume[]> {
     docker.get<ApiContainer[]>('/containers/json', { all: true }),
     docker.get<{ Volumes?: ApiVolume[] | null }>('/system/df', { type: 'volume' }).catch(() => ({ Volumes: [] as ApiVolume[] })),
   ]);
-  const sizes = new Map((df.Volumes ?? []).map((v) => [v.Name, v.UsageData?.Size ?? null]));
+  // -1: Docker has not measured it yet
+  const sizes = new Map((df.Volumes ?? []).map((v) => [v.Name, v.UsageData && v.UsageData.Size >= 0 ? v.UsageData.Size : null]));
   const users = new Map<string, string[]>();
   for (const c of conts) for (const m of c.Mounts ?? []) if (m.Type === 'volume' && m.Name) users.set(m.Name, [...(users.get(m.Name) ?? []), (c.Names[0] ?? '').replace(/^\//, '')]);
   return (Volumes ?? [])

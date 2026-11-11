@@ -21,7 +21,7 @@ const writers = ref<string[]>([]);
 let off: (() => void) | null = null;
 
 onMounted(async () => {
-  off = api.onVolume((t) => (task.value = t));
+  off = api.onFileJob((t) => (task.value = t));
   if (props.mode === 'export') writers.value = await api.volumeWriters(props.volume.name).catch(() => []);
 });
 onUnmounted(() => off?.());

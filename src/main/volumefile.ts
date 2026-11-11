@@ -8,7 +8,7 @@ import { createGunzip, createGzip } from 'node:zlib';
 import type { DcVolumeArchive, DcVolumeManifest, TaskProgress } from '@shared/types';
 import { dockerBin } from './cli';
 import { listVolumes } from './docker/ops';
-import { HELPER } from './migrate';
+import { HELPER, HELPER_LABEL } from './migrate';
 import { dockerHost } from './paths';
 import { run } from './proc';
 
@@ -58,12 +58,12 @@ export async function exportVolume(name: string, file: string, version: string, 
   const ins = await docker(['volume', 'inspect', name, '--format', '{{json .}}']);
   if (ins.code !== 0) throw new Error(`No volume ${name}`);
   const v = JSON.parse(ins.stdout.trim()) as { Driver: string; Labels: Record<string, string> | null };
-  const size = (await listVolumes().catch(() => [])).find((x) => x.name === name)?.size ?? 0;
+  const size = Math.max(0, (await listVolumes().catch(() => [])).find((x) => x.name === name)?.size ?? 0);
   set({ step: 0 });
   await helper(set);
   set({ step: 1, detail: size ? mb(size) : '', fraction: 0 });
   const part = `${file}.part`;
-  const child = spawn(dockerBin(), ['-H', dockerHost(), 'run', '--rm', '-v', `${name}:/from:ro`, HELPER, 'tar', '-C', '/from', '-cf', '-', '.'], { windowsHide: true });
+  const child = spawn(dockerBin(), ['-H', dockerHost(), 'run', '--rm', '--label', HELPER_LABEL, '-v', `${name}:/from:ro`, HELPER, 'tar', '-C', '/from', '-cf', '-', '.'], { windowsHide: true });
   let err = '';
   child.stderr.on('data', (d) => (err += d));
   const exited = new Promise<number>((resolve) => child.on('close', (c) => resolve(c ?? 1)));
@@ -142,7 +142,7 @@ export async function importVolume(file: string, name: string, replace: boolean,
   const gz = head[0] === 0x1f && head[1] === 0x8b;
   set({ step: 1, detail: mb(a.size), fraction: 0 });
   const script = `${replace ? 'find /to -mindepth 1 -delete && ' : ''}tar -C /to -xpf -`;
-  const child = spawn(dockerBin(), ['-H', dockerHost(), 'run', '--rm', '-i', '-v', `${name}:/to`, HELPER, 'sh', '-c', script], { windowsHide: true });
+  const child = spawn(dockerBin(), ['-H', dockerHost(), 'run', '--rm', '-i', '--label', HELPER_LABEL, '-v', `${name}:/to`, HELPER, 'sh', '-c', script], { windowsHide: true });
   let err = '';
   child.stderr.on('data', (d) => (err += d));
   child.stdin.on('error', () => undefined);

@@ -19,6 +19,8 @@ import { run } from './proc';
  */
 
 export const HELPER = 'alpine:3.20';
+/** On every helper container DoCatz runs on its own engine: the Containers list leaves them out. */
+export const HELPER_LABEL = 'com.mrcatz.docatz.helper=1';
 const local = process.env.LOCALAPPDATA ?? join(homedir(), 'AppData', 'Local');
 const programs = process.env.ProgramFiles ?? 'C:\\Program Files';
 
@@ -243,7 +245,7 @@ export async function migrate(id: DcMigrateSourceId, images: string[], volumes: 
       }
       await pipe(
         ['-H', host, 'run', '--rm', '-v', `${name}:/from:ro`, HELPER, 'tar', '-C', '/from', '-cf', '-', '.'],
-        ['-H', mine, 'run', '--rm', '-i', '-v', `${name}:/to`, HELPER, 'tar', '-C', '/to', '-xpf', '-'],
+        ['-H', mine, 'run', '--rm', '-i', '--label', HELPER_LABEL, '-v', `${name}:/to`, HELPER, 'tar', '-C', '/to', '-xpf', '-'],
         (n) => set({ detail: `${name} · ${mb(n)}${size ? ` of ${mb(size)}` : ''}`, fraction: size ? Math.min(n / size, 1) : undefined }),
         signal,
       );

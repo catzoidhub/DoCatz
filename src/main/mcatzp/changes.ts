@@ -1,6 +1,8 @@
 import { randomUUID } from 'node:crypto';
 import type { ActionDef, ActionContext, CallResult } from '@catzoid/mcatzp-host';
 import type { DcComposeAction, DcContainer, DoCatzApi, McatzpAsk, SiblingApp, TaskProgress } from '@shared/types';
+// relative: the tests load this file without the @shared alias
+import { taskPercent } from '../../shared/task';
 import { type EngineReads, envNames, knownSecrets, projectFiles, reply, type Scopes } from './actions';
 import { MASK, maskText } from './mask';
 import { isLinux } from '../platform';
@@ -51,7 +53,7 @@ export const progressLine = (line: string, known: string[]) =>
 
 /** A task of the app as a line: the percent is the whole job, so it never goes down. */
 const taskLine = (t: TaskProgress | null): FollowLine | null =>
-  t ? { message: [t.title, t.steps[t.step], t.detail].filter(Boolean).join(': '), percent: Math.round(((t.step + (t.fraction ?? 0)) / Math.max(1, t.steps.length)) * 100), done: false } : null;
+  t ? { message: [t.title, t.steps[t.step], t.detail].filter(Boolean).join(': '), percent: taskPercent(t), done: false } : null;
 
 /** Waits for long work while the client can follow it; then answers and the work goes on. */
 export async function follow(ctx: ActionContext, line: () => FollowLine | null | Promise<FollowLine | null>, still: string, known: string[] = []): Promise<{ done: boolean; error?: string }> {
@@ -108,18 +110,18 @@ export function changeActions(api: DoCatzApi, scopes: Scopes, reads: EngineReads
     if (v.project && !scopes.project(v.project)) throw new Error(NOT_SHARED(`Project ${v.project}`));
     return v;
   };
-  /** An export or import: answers when done, or soon with "still"; the copy goes on in DoCatz. */
-  const volumeWork = async <T>(ctx: ActionContext, work: Promise<T>, done: (r: T) => unknown): Promise<CallResult> => {
+  /** An export or import (volume or images): answers when done, or soon with "still"; the copy goes on in DoCatz. */
+  const fileWork = async <T>(ctx: ActionContext, work: Promise<T>, done: (r: T) => unknown): Promise<CallResult> => {
     let end: { r: T } | null = null;
     let error: string | null = null;
     work.then((r) => (end = { r }), (e: Error) => (error = e.message));
     ctx.signal.addEventListener('abort', () => ctx.signal.reason === 'cancelled' && void api.volumeCancel(), { once: true });
     await follow(ctx, () => (end || error ? { message: '', done: true } : (() => {
-      const t = reads.tasks().volume;
+      const t = reads.tasks().file;
       return t && !t.done ? taskLine(t) : null;
     })()), 'Still copying');
     if (error) throw new Error(error);
-    return ok(end ? done((end as { r: T }).r) : { finished: false, note: 'Still copying, or DoCatz is waiting for the user to pick the file: it shows on the Volumes page; list_volumes shows the result.' });
+    return ok(end ? done((end as { r: T }).r) : { finished: false, note: 'Still copying, or DoCatz is waiting for the user to pick the file: it shows in DoCatz; list_volumes / list_images show the result.' });
   };
   const change = (name: string, title: string, description: string, input: Record<string, unknown>, preview: (a: Record<string, unknown>) => Promise<Q>, run: ActionDef['run'], session = false): ChangeAction => ({ name, title, description, tier: 'change', input, allowSession: session, preview, run });
   const stopper = (name: string, title: string, description: string, input: Record<string, unknown>, run: ActionDef['run']): ChangeAction => ({ name, title, description, tier: 'change', input, noDialog: true, preview: async () => ({ title, facts: [], page: null }), run });
@@ -558,7 +560,7 @@ export function changeActions(api: DoCatzApi, scopes: Scopes, reads: EngineReads
       },
       async (a, ctx) => {
         const v = await volumeOf(a.volume);
-        return volumeWork(ctx, api.volumeExport(v.name), (f) => (f ? { volume: v.name, file: f } : { volume: v.name, saved: false, note: 'The user closed the save dialog' }));
+        return fileWork(ctx, api.volumeExport(v.name), (f) => (f ? { volume: v.name, file: f } : { volume: v.name, saved: false, note: 'The user closed the save dialog' }));
       },
     ),
     change(
@@ -577,10 +579,47 @@ export function changeActions(api: DoCatzApi, scopes: Scopes, reads: EngineReads
         if (!pick) return ok({ imported: false, note: 'The user closed the file dialog' });
         const name = typeof a.volume === 'string' ? a.volume : pick.name;
         if (pick.taken.includes(name)) throw new Error(`A volume named ${name} exists: call again with another \`volume\`, or replace_volume_from_file`);
-        return volumeWork(ctx, api.volumeImport(pick.file, name, false), () => ({ volume: name, imported: true, from: pick.fileName }));
+        return fileWork(ctx, api.volumeImport(pick.file, name, false), () => ({ volume: name, imported: true, from: pick.fileName }));
       },
     ),
-    stopper('cancel_volume_copy', 'Stop exporting or importing a volume', 'Stops an export or import under way. A half-made export file is removed; a new volume half filled is removed too.', OBJECT(), async () => {
+    change(
+      'export_images',
+      'Export images',
+      'Saves one or more images (`docker save`) as a .tar.gz, for an image no registry has, a computer without internet, or a version kept before an update. After Allow, DoCatz asks the user where to save it. The answer comes as soon as it can and the copy goes on; cancel_volume_copy stops it.',
+      OBJECT({ images: { type: 'array', minItems: 1, maxItems: 50, items: IMAGE_REF, description: 'Tags (or ids) from list_images.' } }, ['images']),
+      async (a) => {
+        resources();
+        const refs = a.images as string[];
+        const all = await api.images();
+        const found = refs.map((r) => all.find((i) => i.tags.includes(r) || i.id === r || i.id.replace(/^sha256:/, '').startsWith(r)));
+        const missing = refs.filter((_, k) => !found[k]);
+        if (missing.length) throw new Error(`No image ${missing.join(', ')} (list_images shows them)`);
+        const size = found.reduce((n, i) => n + (i?.size ?? 0), 0);
+        return { title: refs.length === 1 ? `Export ${refs[0]}?` : `Export ${refs.length} images?`, facts: [...fact('Images', refs.join(', ')), ...fact('Size', `${Math.round(size / 1e6)} MB before compressing`), ...fact('Then', 'DoCatz asks where to save it')], page: 'images' };
+      },
+      async (a, ctx) => {
+        resources();
+        const refs = a.images as string[];
+        return fileWork(ctx, api.imageExport(refs), (f) => (f ? { images: refs, file: f } : { images: refs, saved: false, note: 'The user closed the save dialog' }));
+      },
+    ),
+    change(
+      'import_images',
+      'Import images',
+      'Loads the images in an archive (a DoCatz export or any `docker save` tar, plain or gzipped). After Allow, DoCatz asks the user for the file. An image already here with the same tag gets the archive\'s in its place (the old one stays, untagged).',
+      OBJECT(),
+      async () => {
+        resources();
+        return { title: 'Import images from a file?', facts: [...fact('Then', 'DoCatz asks for the file'), ...fact('Same tag', 'The archive\'s image takes the tag')], page: 'images' };
+      },
+      async (_a, ctx) => {
+        resources();
+        const pick = await api.imageImportPick();
+        if (!pick) return ok({ imported: false, note: 'The user closed the file dialog' });
+        return fileWork(ctx, api.imageImport(pick.file), (loaded) => ({ imported: true, images: loaded, from: pick.fileName }));
+      },
+    ),
+    stopper('cancel_volume_copy', 'Stop an export or import', 'Stops a volume or images export or import under way. A half-made export file is removed; a new volume half filled is removed too.', OBJECT(), async () => {
       await api.volumeCancel();
       return ok({ cancelling: true });
     }),

@@ -42,8 +42,8 @@ const bridge = {
   onMcatzpUpdate: (cb: (version: string | null) => void) => on('app:mcatzpUpdate', cb),
   /** Moving images and volumes from another Docker (#11), as it goes. */
   onMigrate: (cb: (t: TaskProgress | null) => void) => on('app:migrate', cb),
-  /** A volume exported or imported (#102), as it goes. */
-  onVolume: (cb: (t: TaskProgress | null) => void) => on('app:volume', cb),
+  /** A volume or images exported or imported (#102, #104), as it goes. */
+  onFileJob: (cb: (t: TaskProgress | null) => void) => on('app:file-job', cb),
   /** The settings changed outside the window (another Catzoid app changed the shared theme / AI connection). */
   onSettings: (cb: (s: DoCatzSettings) => void) => on('app:settings', cb),
   onUpdate: (cb: (s: DcUpdateState) => void) => on('app:update', cb),

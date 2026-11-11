@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue';
 import type { TaskProgress } from '@shared/types';
+import { taskPercent } from '@shared/task';
 
 /**
  * The steps of a long job (engine setup, CLI install, domain setup …), as DevCatz's TaskStepper (user, 2026-11-10: the
@@ -8,13 +9,8 @@ import type { TaskProgress } from '@shared/types';
  * done ✓, the current one with its detail and download bar.
  */
 const props = defineProps<{ task: TaskProgress }>();
-/** Finished steps plus the current step's own share (a download's fraction); 100 once done. */
-const percent = computed(() => {
-  const t = props.task;
-  if (t.done && !t.error) return 100;
-  const n = Math.max(1, t.steps.length);
-  return Math.min(100, Math.round(((Math.min(t.step, n) + (t.fraction ?? 0)) / n) * 100));
-});
+/** Finished steps plus the current step's own share (a download's fraction), by the steps' weights; 100 once done. */
+const percent = computed(() => taskPercent(props.task));
 </script>
 
 <template>

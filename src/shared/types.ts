@@ -210,6 +210,8 @@ export interface TaskProgress {
   detail?: string;
   /** 0–1 while a download runs. */
   fraction?: number;
+  /** How much of the whole job each step is (same length as steps); equal when left out. */
+  weights?: number[];
   done?: boolean;
   error?: string;
   cancelled?: boolean;
@@ -413,6 +415,12 @@ export interface DcVolumeManifest {
   /** DoCatz's version that wrote it. */
   docatz: string;
   exported: string;
+}
+/** An image archive picked for import (#104). */
+export interface DcImageArchive {
+  file: string;
+  fileName: string;
+  size: number;
 }
 /** An archive picked for import: its manifest when one is beside it, the name to suggest, the names already used. */
 export interface DcVolumeArchive {
@@ -854,13 +862,19 @@ export interface DoCatzApi {
   volumeRemove(name: string): Promise<void>;
   /** Running containers that mount the volume (#102: a copy of a database still writing can be half way). */
   volumeWriters(name: string): Promise<string[]>;
-  /** Asks where (save dialog), then writes the volume as .tar.gz + manifest; steps via onVolume; the file's name, or null when the dialog was closed. */
+  /** Asks where (save dialog), then writes the volume as .tar.gz + manifest; steps via onFileJob; the file's name, or null when the dialog was closed. */
   volumeExport(name: string): Promise<string | null>;
   /** Asks for an archive (open dialog) and reads its manifest; null when the dialog was closed. */
   volumeImportPick(): Promise<DcVolumeArchive | null>;
-  /** An archive from volumeImportPick into a new volume, or with `replace` into an existing one (`confirm` = its name); steps via onVolume. */
+  /** An archive from volumeImportPick into a new volume, or with `replace` into an existing one (`confirm` = its name); steps via onFileJob. */
   volumeImport(file: string, name: string, replace: boolean, confirm?: string): Promise<void>;
   volumeCancel(): Promise<void>;
+  /** Asks where (save dialog), then `docker save` of the images (tags or ids) as .tar.gz (#104); steps via onFileJob; the file's name, or null when the dialog was closed. */
+  imageExport(refs: string[]): Promise<string | null>;
+  /** Asks for an image archive (open dialog); null when it was closed. */
+  imageImportPick(): Promise<DcImageArchive | null>;
+  /** `docker load` of an archive from imageImportPick; steps via onFileJob; the images it brought. */
+  imageImport(file: string): Promise<string[]>;
   networks(): Promise<DcNetwork[]>;
   networkRemove(id: string): Promise<void>;
   prunePreview(kind: DcPruneKind): Promise<DcPrunePreview>;
@@ -910,7 +924,7 @@ export const API_METHODS: (keyof DoCatzApi)[] = [
   'appInfo', 'aboutInfo', 'updateState', 'updateCheck', 'updateDownload', 'updateCancel', 'updateSkip', 'updateInstall', 'updateConfigure', 'reportPreview', 'reportSend', 'captureWindow', 'reportError', 'reportSettings', 'reportConfigure', 'uninstallPlan', 'uninstallRun', 'settings', 'setSettings', 'setAiKey', 'aiModels', 'aiProbe', 'aiTest', 'aiCancel', 'aiAsk', 'aiPreviewAsk', 'aiExplainLog', 'aiPreviewLog', 'aiFile', 'aiPreviewFile', 'openUrl', 'browsers', 'reveal', 'openSibling', 'mcatzpActivity', 'mcatzpClearActivity', 'mcatzpRevoke', 'mcatzpSetup', 'mcatzpInstall', 'mcatzpUninstall', 'mcatzpInstallCancel', 'mcatzpApprovals', 'mcatzpTargets', 'mcatzpAddToClient', 'mcatzpRemoveFromClient', 'mcatzpUpdate', 'mcatzpPending', 'mcatzpAnswer', 'copyText', 'apiSource', 'siblingVersions', 'migrateSources', 'migrateInventory', 'migrateRun', 'migrateCancel', 'devcatzGateways', 'databases', 'siblingInstall', 'siblingInstallCancel', 'runInTerminal',
   'engineState', 'engineStart', 'engineStop', 'engineRestart', 'engineReset', 'engineConfigure', 'engineCancel', 'engineSetupWsl', 'restartComputer', 'engineLog', 'contextSet', 'cliInstall', 'cliPath', 'diskUsage',
   'containers', 'container', 'containerEnv', 'containerAction', 'containerRemove', 'stats', 'logsFollow', 'logsStop', 'termOpen', 'termInput', 'termResize', 'termClose', 'files', 'fileSave', 'projects', 'composePick', 'composeRun', 'composeProject', 'runCancel', 'readText', 'writeText',
-  'images', 'imageRemove', 'imagePull', 'volumes', 'volumeRemove', 'volumeWriters', 'volumeExport', 'volumeImportPick', 'volumeImport', 'volumeCancel', 'networks', 'networkRemove', 'prunePreview', 'prune',
+  'images', 'imageRemove', 'imagePull', 'volumes', 'volumeRemove', 'volumeWriters', 'volumeExport', 'volumeImportPick', 'volumeImport', 'volumeCancel', 'imageExport', 'imageImportPick', 'imageImport', 'networks', 'networkRemove', 'prunePreview', 'prune',
   'projectPrefs', 'setProjectPrefs',
   'envState', 'envRead', 'envWrite', 'envCreate', 'envLock', 'envRemove', 'envDrift', 'setDomainName',
   'builds', 'build', 'buildLogs', 'buildRemove',

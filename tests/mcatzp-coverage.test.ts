@@ -48,7 +48,7 @@ test('secret values never have a read tool', () => {
   for (const [method, place] of Object.entries(MCATZP_COVERAGE)) if (['setAiKey', 'termOpen', 'termInput', 'runInTerminal'].includes(method)) expect(`${method}: ${place.startsWith('tool:')}`).toBe(`${method}: false`);
 });
 
-const noReads = { databasePasswords: () => [], logsTail: async () => [], run: () => null, runs: () => [], tasks: () => ({ migrate: null, sibling: null, volume: null }) };
+const noReads = { databasePasswords: () => [], logsTail: async () => [], run: () => null, runs: () => [], tasks: () => ({ migrate: null, sibling: null, file: null }) };
 const scopesFor = (changes: boolean) => ({ project: (n: string) => n === 'shared', loose: false, logs: true, resources: true, envValues: true, secretName: () => false, changes, all: false });
 const ctx = { client: 't', signal: new AbortController().signal };
 const fake = {

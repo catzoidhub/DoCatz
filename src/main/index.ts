@@ -19,6 +19,7 @@ import * as mcatzpSetup from './mcatzp/install';
 import { writeBridge } from './bridge';
 import { listDatabases, updateDatabases } from './dbservices';
 import { migrate, migrateInventory, migrateSources } from './migrate';
+import { exportImages, importImages, readImageArchive } from './imagefile';
 import { exportVolume, importVolume, readArchive, volumeWriters } from './volumefile';
 import { apiSource, serviceSpec } from './apisource';
 import { removeContext, setPath as setCliPath } from './cli';
@@ -256,26 +257,27 @@ const SIBLING_REPO: Record<SiblingApp, string> = { devcatz: 'catzoidhub/DevCatz'
 let siblingTask: TaskProgress | null = null;
 let migrateAbort: AbortController | null = null;
 let migrateTask: TaskProgress | null = null;
-/** Exporting or importing a volume (#102): one at a time. */
-let volumeAbort: AbortController | null = null;
-let volumeTask: TaskProgress | null = null;
+/** Exporting or importing a volume or images (#102, #104): one at a time. */
+let fileAbort: AbortController | null = null;
+let fileTask: TaskProgress | null = null;
 /** Archives the user picked: an import reads only these. */
 const pickedArchives = new Set<string>();
-/** Runs an export or import with its steps on 'app:volume'. */
-async function volumeJob(title: string, steps: string[], work: (set: (p: Partial<TaskProgress>) => void, signal: AbortSignal) => Promise<void>): Promise<void> {
-  if (volumeAbort) throw new Error('A volume is already being copied');
-  const abort = (volumeAbort = new AbortController());
-  let task: TaskProgress = { kind: 'volume', title, steps, step: 0 };
-  const set = (p: Partial<TaskProgress>) => send('app:volume', (volumeTask = task = { ...task, ...p }));
+/** Runs an export or import with its steps on 'app:file-job'; `weights` say how much of the job each step is. */
+async function fileJob<T>(title: string, steps: string[], weights: number[], work: (set: (p: Partial<TaskProgress>) => void, signal: AbortSignal) => Promise<T>): Promise<T> {
+  if (fileAbort) throw new Error('An export or import is already running');
+  const abort = (fileAbort = new AbortController());
+  let task: TaskProgress = { kind: 'file', title, steps, weights, step: 0 };
+  const set = (p: Partial<TaskProgress>) => send('app:file-job', (fileTask = task = { ...task, ...p }));
   set({});
   try {
-    await needEngine(() => work(set, abort.signal));
+    const r = await needEngine(() => work(set, abort.signal));
     set({ step: steps.length, done: true, detail: '', fraction: undefined });
+    return r;
   } catch (e) {
     set({ done: true, cancelled: abort.signal.aborted, error: abort.signal.aborted ? 'Cancelled' : (e as Error).message });
     throw e;
   } finally {
-    volumeAbort = null;
+    fileAbort = null;
   }
 }
 let siblingLatest: { at: number; latest: Record<SiblingApp, string | null> } | null = null;
@@ -613,13 +615,13 @@ function api(): DoCatzApi {
     volumeRemove: (name) => needEngine(() => ops.volumeRemove(name)),
     volumeWriters: (name) => needEngine(() => volumeWriters(name)),
     volumeExport: async (name) => {
-      if (volumeAbort) throw new Error('A volume is already being copied');
+      if (fileAbort) throw new Error('An export or import is already running');
       if (!(await needEngine(() => ops.listVolumes())).some((v) => v.name === name)) throw new Error(`No volume ${name}`);
       const day = new Date().toISOString().slice(0, 10);
       const r = await saveDialog(win(), { title: `Export ${name}`, defaultPath: join(app.getPath('downloads'), `${name}-${day}.tar.gz`), filters: [{ name: 'Volume archive', extensions: ['tar.gz', 'tgz'] }] });
       if (r.canceled || !r.filePath) return null;
       const file = /\.(tar\.gz|tgz)$/i.test(r.filePath) ? r.filePath : `${r.filePath}.tar.gz`;
-      await volumeJob(`Exporting ${name}`, ['Getting ready', `Copying ${name}`, 'Writing the manifest'], (set, signal) => exportVolume(name, file, app.getVersion(), set, signal));
+      await fileJob(`Exporting ${name}`, ['Getting ready', `Copying ${name}`, 'Writing the manifest'], [1, 18, 1], (set, signal) => exportVolume(name, file, app.getVersion(), set, signal));
       return basename(file);
     },
     volumeImportPick: async () => {
@@ -631,10 +633,33 @@ function api(): DoCatzApi {
     volumeImport: async (file, name, replace, confirm) => {
       if (!pickedArchives.has(file)) throw new Error('Pick the archive first');
       if (replace && confirm !== name) throw new Error(`Type ${name} to replace its contents`);
-      await volumeJob(`Importing ${name}`, ['Getting ready', replace ? `Replacing ${name}’s files` : `Filling ${name}`, 'Finishing'], (set, signal) => importVolume(file, name, replace, set, signal));
+      await fileJob(`Importing ${name}`, ['Getting ready', replace ? `Replacing ${name}’s files` : `Filling ${name}`, 'Finishing'], [1, 18, 1], (set, signal) => importVolume(file, name, replace, set, signal));
       void refresh();
     },
-    volumeCancel: async () => volumeAbort?.abort(),
+    volumeCancel: async () => fileAbort?.abort(),
+    imageExport: async (refs) => {
+      if (fileAbort) throw new Error('An export or import is already running');
+      if (!refs.length) throw new Error('Pick at least one image');
+      const day = new Date().toISOString().slice(0, 10);
+      const first = (refs[0].split('/').pop() ?? 'image').replace(/[:@]/g, '-').replace(/[^\w.-]+/g, '-');
+      const r = await saveDialog(win(), { title: refs.length === 1 ? `Export ${refs[0]}` : `Export ${refs.length} images`, defaultPath: join(app.getPath('downloads'), `${refs.length === 1 ? first : `images-${refs.length}`}-${day}.tar.gz`), filters: [{ name: 'Image archive', extensions: ['tar.gz', 'tgz'] }] });
+      if (r.canceled || !r.filePath) return null;
+      const file = /\.(tar\.gz|tgz)$/i.test(r.filePath) ? r.filePath : `${r.filePath}.tar.gz`;
+      await fileJob(refs.length === 1 ? `Exporting ${refs[0]}` : `Exporting ${refs.length} images`, [refs.length === 1 ? `Saving ${refs[0]}` : `Saving ${refs.length} images`], [1], (set, signal) => exportImages(refs, file, set, signal));
+      return basename(file);
+    },
+    imageImportPick: async () => {
+      const r = await openDialog(win(), { title: 'Import images', properties: ['openFile'], filters: [{ name: 'Image archive', extensions: ['gz', 'tgz', 'tar'] }] });
+      if (r.canceled || !r.filePaths[0]) return null;
+      pickedArchives.add(r.filePaths[0]);
+      return readImageArchive(r.filePaths[0]);
+    },
+    imageImport: async (file) => {
+      if (!pickedArchives.has(file)) throw new Error('Pick the archive first');
+      const loaded = await fileJob(`Importing ${basename(file)}`, [`Loading ${basename(file)}`], [1], (set, signal) => importImages(file, set, signal));
+      void refresh();
+      return loaded;
+    },
     networks: () => needEngine(() => ops.listNetworks()),
     networkRemove: (id) => needEngine(() => ops.networkRemove(id)),
     prunePreview: (kind) => needEngine(() => ops.prunePreview(kind)),
@@ -725,7 +750,7 @@ app.whenReady().then(async () => {
       open: (route) => openWindow(route),
       refresh: () => void refresh(),
     },
-    { databasePasswords: () => listDatabases().map((d) => d.password), logsTail: (id, tail) => ops.logsTail(id, tail), run: (token) => recentRuns.get(token) ?? null, runs: () => [...recentRuns.values()].reverse(), tasks: () => ({ migrate: migrateTask, sibling: siblingTask, volume: volumeTask }) },
+    { databasePasswords: () => listDatabases().map((d) => d.password), logsTail: (id, tail) => ops.logsTail(id, tail), run: (token) => recentRuns.get(token) ?? null, runs: () => [...recentRuns.values()].reverse(), tasks: () => ({ migrate: migrateTask, sibling: siblingTask, file: fileTask }) },
   );
   void mcatzp.set(settings().mcatzp.on).catch(() => undefined);
   setTimeout(() => void checkMcatzpUpdate(), 30_000);

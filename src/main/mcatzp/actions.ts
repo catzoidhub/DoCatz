@@ -52,7 +52,7 @@ export interface EngineReads {
   /** The latest ones, the newest first. */
   runs(): DcRun[];
   /** Moving from another Docker, installing another Catzoid app, exporting / importing a volume: while they go or as they ended. */
-  tasks(): { migrate: TaskProgress | null; sibling: TaskProgress | null; volume: TaskProgress | null };
+  tasks(): { migrate: TaskProgress | null; sibling: TaskProgress | null; file: TaskProgress | null };
 }
 
 /** A long job in words a client can pass on: where it is, how far, how it ended. */
