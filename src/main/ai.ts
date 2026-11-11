@@ -1,6 +1,10 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { aiProvider, DC_ASK_ARGS, DC_ASK_KINDS, type DcAiPreview, type DcAiProvider, type DcAiTurn, type DcAskAction, type DcAskAnswer, type DcAskRequest, type DcContainer, type DcContainerDetail, type DcFileAnswer, type DcFileRequest, type DcLogAnswer, type DcLogRequest, type EngineState } from '@shared/types';
+import { readFileSync } from 'node:fs';
+import { arch, release } from 'node:os';
+import { basename } from 'node:path';
 import { words } from '@shared/platform';
+import { isLinux, isMac, isWin } from './platform';
 import { aiKey, needFeature, settings } from './settings';
 
 /**
@@ -33,6 +37,37 @@ const ASK_SCHEMA = {
   required: ['explanation', 'actions'],
   additionalProperties: false,
 };
+/**
+ * The computer the user is on, said in every prompt (from DevCatz's Linux bug, its TODO §39: a prompt that says
+ * "macOS" everywhere got Mac paths and words in answers on Linux): the OS with its version or distribution, the
+ * processor and the shell, so a command in an answer runs where the user is.
+ */
+let computer: string | null = null;
+export function computerLine(): string {
+  if (computer) return computer;
+  let os: string = words.os;
+  if (isMac) os = `macOS ${process.getSystemVersion?.() ?? release()}`;
+  else if (isWin) os = `Windows (build ${release()})`;
+  else if (isLinux) {
+    try {
+      const pretty = /^PRETTY_NAME="?([^"\n]+)"?/m.exec(readFileSync('/etc/os-release', 'utf8'))?.[1];
+      os = pretty ? `Linux, ${pretty}` : 'Linux';
+    } catch {
+      os = 'Linux';
+    }
+  }
+  const shell = isWin ? 'PowerShell' : basename(process.env.SHELL || (isMac ? 'zsh' : 'bash'));
+  return (computer = `The user's computer: ${os}, ${arch()}, shell ${shell}. Commands and paths in an answer must be for this computer; never assume another OS.`);
+}
+
+/** What the engine actions do, said for the engine there really is. */
+const engineHelp = (backend: EngineState['backend']) =>
+  backend === 'system'
+    ? "- start-engine / stop-engine: {} — this computer's own Docker Engine (the system service, no VM). Stopping it asks for the password and stops every container, and Docker for every other app too."
+    : backend === 'wsl'
+      ? '- start-engine / stop-engine: {} — DoCatz\'s Docker engine in WSL 2 (Windows\' own Linux). Stopping it stops every container.'
+      : '- start-engine / stop-engine: {} — the Linux VM that runs Docker. Stopping it stops every container.';
+
 const ASK_HELP = [
   'Actions DoCatz can run (only these kinds; args are strings, "" when unused):',
   '- start-container / stop-container / restart-container: {container} — a container name from the list.',
@@ -41,7 +76,6 @@ const ASK_HELP = [
   '- open-url: {container} — opens its domain (https://<service>.<project>.docatz.<tld>) in the browser; only for containers that have one.',
   '- compose-up / compose-restart: {project} — a compose project from the list (up recreates changed services, detached).',
   '- compose-down: {project} — DESTRUCTIVE: stops and removes the project\'s containers and networks (volumes stay).',
-  '- start-engine / stop-engine: {} — the Linux VM that runs Docker. Stopping it stops every container.',
   '- prune: {what: "containers" | "images" | "volumes" | "networks" | "build-cache"} — DESTRUCTIVE: DoCatz shows exactly what goes first (stopped containers / unused images / unused volumes …).',
   '- pull-image: {image} — e.g. postgres:17.',
   '- open-section: {section: "containers" | "images" | "volumes" | "networks" | "engine"}.',
@@ -148,13 +182,16 @@ export class AskAi {
       '- Use the container and project names below exactly; never invent them. When the request names something not listed, say so.',
       '- Order actions as they should run (start the engine before what needs it). One to four actions; none when nothing fits.',
       '- explanation: one or two sentences, in the language the user wrote in.',
-      ...ASK_HELP,
+      ...ASK_HELP.slice(0, 7),
+      engineHelp(engine.backend),
+      ...ASK_HELP.slice(7),
       '',
       `Engine: ${engine.status}${engine.docker ? ` (Docker ${engine.docker.version}, ${engine.docker.cpus} CPUs)` : ''}.`,
       engine.status === 'running' ? `Containers (${list.length}):\n${list.map(line).join('\n') || '(none)'}` : 'The engine is not running, so no containers are listed: propose start-engine first when the request needs Docker.',
       projects.length ? `Compose projects: ${projects.join(', ')}` : '',
       `The user is on ${req.where.section}${here ? `, container ${here.name}` : ''}.`,
       `DoCatz: theme ${settings().theme === 'system' ? 'Auto' : settings().theme}.`,
+      computerLine(),
     ]
       .filter(Boolean)
       .join('\n');
@@ -197,12 +234,13 @@ export class AskAi {
   private async logParts(req: DcLogRequest): Promise<{ system: string; turns: DcAiTurn[] }> {
     const c = await this.ctx.container(req.containerId);
     const system = [
-      'You explain container problems for DoCatz, a Docker engine and container manager. The user picked log lines from one container and maybe asked a question.',
+      `You explain container problems for DoCatz, a Docker engine and container manager for ${words.os}. The user picked log lines from one container and maybe asked a question.`,
       'Answer with JSON {"summary", "cause", "steps", "fix"}: what happened, why in plain words, what to do step by step, and a fix (a compose snippet, a Dockerfile line or a command) when one fits — DoCatz shows it, never runs it.',
       'Write in the language the user wrote in (English when they asked nothing).',
       '',
       `Container ${c.name}: image ${c.image}, ${c.state} (${c.status}), exit code ${c.exitCode ?? '—'}, restarts ${c.restartCount}, restart policy ${c.restartPolicy}${c.project ? `, compose ${c.project}/${c.service}` : ''}, platform ${c.platform}.`,
       `Command: ${c.entrypoint} ${c.command}`.trim(),
+      computerLine(),
     ].join('\n');
     const lines = maskSecrets(req.lines.slice(-400).join('\n')).slice(-40_000);
     return { system, turns: [{ role: 'user', text: `${req.prompt.trim() || 'Explain what went wrong.'}\n\nLog lines:\n${lines}` }] };
@@ -234,6 +272,7 @@ export class AskAi {
       '- Never put real secrets in the file: use ${VARIABLE} references and say which ones the user must set.',
       req.kind === 'compose' ? '- Publish web ports as "127.0.0.1:<host>:<container>" unless asked otherwise; DoCatz gives each service https://<service>.<project>.docatz.localhost.' : '- Prefer small official base images, a non-root user and multi-stage builds where they fit.',
       '- explanation in the language the user wrote in.',
+      computerLine(),
     ].join('\n');
     const parts = [req.prompt.trim() || 'Fix the file.'];
     if (req.error) parts.push(`It fails with:\n${maskSecrets(req.error).slice(0, 8000)}`);

@@ -4,6 +4,7 @@ import type { DcContainer, DcPruneKind, DoCatzApi } from '@shared/types';
 import { knownSecrets, reply, type EngineReads, type Scopes } from './actions';
 import { type ChangeAction, CONTAINER, fact, type Fact, follow, NOT_SHARED, OBJECT, PROJECT, S } from './changes';
 import { maskText } from './mask';
+import { isWin } from '../platform';
 
 /**
  * What is really gone (TODO #94): the user types a name, every time, checked again in the main process, and "allow for
@@ -131,6 +132,36 @@ export function destructiveActions(api: DoCatzApi, scopes: Scopes, reads: Engine
       },
     ),
     typed(
+      'replace_volume_from_file',
+      'Replace a volume\'s files from an archive',
+      'Removes every file in an existing volume and puts an archive\'s files in their place (a DoCatz export, or any .tar / .tar.gz). After Allow, DoCatz asks the user for the file. Its containers must be stopped. cancel_volume_copy stops it, leaving the volume half filled.',
+      OBJECT({ volume: S("The volume's name (see list_volumes).") }, ['volume']),
+      async (a) => {
+        resources();
+        const v = (await api.volumes()).find((x) => x.name === String(a.volume));
+        if (!v) throw new Error(`No volume ${String(a.volume)} (list_volumes shows them)`);
+        if (v.project && !scopes.project(v.project)) throw new Error(NOT_SHARED(`Project ${v.project}`));
+        const writers = await api.volumeWriters(v.name);
+        if (writers.length) throw new Error(`${v.name} is in use by ${writers.join(', ')}: stop ${writers.length === 1 ? 'it' : 'them'} first`);
+        return { title: `Replace ${v.name}'s files?`, facts: [...fact('Project', v.project), ...fact('Size', size(v.size)), ...fact('Data', 'Its files now are gone, the archive\'s take their place'), ...fact('Then', 'DoCatz asks for the file')], page: null, typeName: v.name };
+      },
+      async (a, ctx) => {
+        resources();
+        const v = (await api.volumes()).find((x) => x.name === String(a.volume));
+        if (!v) throw new Error(`No volume ${String(a.volume)}`);
+        if (v.project && !scopes.project(v.project)) throw new Error(NOT_SHARED(`Project ${v.project}`));
+        const pick = await api.volumeImportPick();
+        if (!pick) return ok({ replaced: false, note: 'The user closed the file dialog' });
+        let done = false;
+        let error: string | null = null;
+        void api.volumeImport(pick.file, v.name, true, v.name).then(() => (done = true), (e: Error) => (error = e.message));
+        ctx.signal.addEventListener('abort', () => ctx.signal.reason === 'cancelled' && void api.volumeCancel(), { once: true });
+        await follow(ctx, () => (done || error ? { message: '', done: true } : null), 'Still copying');
+        if (error) throw new Error(error);
+        return ok(done ? { volume: v.name, replaced: true, from: pick.fileName } : { finished: false, note: 'Still copying: it shows on the Volumes page.' });
+      },
+    ),
+    typed(
       'remove_network',
       'Remove a network',
       'Removes a network. Docker\'s own networks cannot be removed.',
@@ -174,7 +205,7 @@ export function destructiveActions(api: DoCatzApi, scopes: Scopes, reads: Engine
       ...typed(
       'reset_engine',
       'Reset the engine',
-      'Deletes the VM and its disk: every container, image and volume on this engine, in every project. The next start makes a new one.',
+      `Deletes ${isWin ? "DoCatz's WSL distribution" : 'the VM'} and its disk: every container, image and volume on this engine, in every project. The next start makes a new one.`,
       OBJECT(),
       async () => {
         if (!scopes.all) throw new Error('Reset touches every project: the user shares all of them first, in DoCatz, Settings → MCatzP, or resets in DoCatz');

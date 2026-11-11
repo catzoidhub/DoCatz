@@ -3,6 +3,7 @@ import type { ActionDef, ActionContext, CallResult } from '@catzoid/mcatzp-host'
 import type { DcComposeAction, DcContainer, DoCatzApi, McatzpAsk, SiblingApp, TaskProgress } from '@shared/types';
 import { type EngineReads, envNames, knownSecrets, projectFiles, reply, type Scopes } from './actions';
 import { MASK, maskText } from './mask';
+import { isLinux } from '../platform';
 
 /**
  * DoCatz's changes for MCatzP (TODO #94): each calls the same `api()` method its UI uses and asks first, in a dialog
@@ -100,6 +101,26 @@ export function changeActions(api: DoCatzApi, scopes: Scopes, reads: EngineReads
     if (!scopes.resources) throw new Error('Images, volumes, networks and builds are not shared: the user can turn them on in DoCatz, Settings → MCatzP.');
   };
 
+  const volumeOf = async (ref: unknown) => {
+    resources();
+    const v = (await api.volumes()).find((x) => x.name === String(ref));
+    if (!v) throw new Error(`No volume ${String(ref)} (list_volumes shows them)`);
+    if (v.project && !scopes.project(v.project)) throw new Error(NOT_SHARED(`Project ${v.project}`));
+    return v;
+  };
+  /** An export or import: answers when done, or soon with "still"; the copy goes on in DoCatz. */
+  const volumeWork = async <T>(ctx: ActionContext, work: Promise<T>, done: (r: T) => unknown): Promise<CallResult> => {
+    let end: { r: T } | null = null;
+    let error: string | null = null;
+    work.then((r) => (end = { r }), (e: Error) => (error = e.message));
+    ctx.signal.addEventListener('abort', () => ctx.signal.reason === 'cancelled' && void api.volumeCancel(), { once: true });
+    await follow(ctx, () => (end || error ? { message: '', done: true } : (() => {
+      const t = reads.tasks().volume;
+      return t && !t.done ? taskLine(t) : null;
+    })()), 'Still copying');
+    if (error) throw new Error(error);
+    return ok(end ? done((end as { r: T }).r) : { finished: false, note: 'Still copying, or DoCatz is waiting for the user to pick the file: it shows on the Volumes page; list_volumes shows the result.' });
+  };
   const change = (name: string, title: string, description: string, input: Record<string, unknown>, preview: (a: Record<string, unknown>) => Promise<Q>, run: ActionDef['run'], session = false): ChangeAction => ({ name, title, description, tier: 'change', input, allowSession: session, preview, run });
   const stopper = (name: string, title: string, description: string, input: Record<string, unknown>, run: ActionDef['run']): ChangeAction => ({ name, title, description, tier: 'change', input, noDialog: true, preview: async () => ({ title, facts: [], page: null }), run });
 
@@ -398,12 +419,12 @@ export function changeActions(api: DoCatzApi, scopes: Scopes, reads: EngineReads
     ),
 
     // ---- the engine
-    change('start_engine', 'Start the engine', 'Starts the Docker engine. It may take a minute: the answer comes as soon as it can; get_engine shows how it goes.', OBJECT(), async () => ({ title: 'Start the engine?', facts: [], page: 'engine' }), async (_a, ctx) => {
+    change('start_engine', 'Start the engine', `Starts the Docker engine${isLinux ? " (this computer's Docker Engine; the system asks for the password, and installs it the first time)" : ''}. It may take a minute: the answer comes as soon as it can; get_engine shows how it goes.`, OBJECT(), async () => ({ title: 'Start the engine?', facts: [], page: 'engine' }), async (_a, ctx) => {
       const r = await followEngine(ctx, api.engineStart(), 'Still starting: get_engine shows how it goes.');
       if (r.done && r.error) throw new Error(r.error);
       return ok(r.done ? { running: true } : { running: false, note: r.error });
     }),
-    change('stop_engine', 'Stop the engine', 'Stops the Docker engine: every running container stops with it.', OBJECT(), async () => {
+    change('stop_engine', 'Stop the engine', isLinux ? "Stops this computer's Docker Engine (the system service; the system asks for the password): every running container stops with it, and Docker for every other app too." : 'Stops the Docker engine: every running container stops with it.', OBJECT(), async () => {
       const running = (await api.containers().catch(() => [])).filter((c) => c.state === 'running').length;
       return { title: 'Stop the engine?', facts: fact('Stops', `${running} running container${running === 1 ? '' : 's'}`), page: 'engine' };
     }, async () => {
@@ -492,7 +513,7 @@ export function changeActions(api: DoCatzApi, scopes: Scopes, reads: EngineReads
       'migrate_run',
       'Move from another Docker',
       'Copies images and volumes from another Docker engine onto DoCatz\'s; the other keeps them. It may take long: the answer comes as soon as it can and it goes on, showing in Engine. cancel_migrate stops it.',
-      OBJECT({ source: { type: 'string', enum: ['docker-desktop', 'orbstack', 'colima', 'rancher'], description: 'The engine (see list_migrate_sources).' }, images: { type: 'array', maxItems: 200, items: S('An image from migrate_inventory.') }, volumes: { type: 'array', maxItems: 200, items: S('A volume from migrate_inventory.') } }, ['source']),
+      OBJECT({ source: { type: 'string', enum: ['docker-desktop', 'orbstack', 'colima', 'rancher', 'podman'], description: 'The engine (see list_migrate_sources).' }, images: { type: 'array', maxItems: 200, items: S('An image from migrate_inventory.') }, volumes: { type: 'array', maxItems: 200, items: S('A volume from migrate_inventory.') } }, ['source']),
       async (a) => {
         resources();
         const images = (a.images as string[] | undefined) ?? [];
@@ -521,6 +542,46 @@ export function changeActions(api: DoCatzApi, scopes: Scopes, reads: EngineReads
     ),
     stopper('cancel_migrate', 'Stop moving from another Docker', 'Stops a copy under way. What was copied stays.', OBJECT(), async () => {
       await api.migrateCancel();
+      return ok({ cancelling: true });
+    }),
+
+    // ---- a volume to a file and back (#102): the user picks the file in DoCatz's own dialog, a client never names a path
+    change(
+      'export_volume',
+      'Export a volume',
+      'Saves a volume\'s files as a .tar.gz with a manifest beside it, for a backup or another computer. After Allow, DoCatz asks the user where to save it. The answer comes as soon as it can and the copy goes on; cancel_volume_copy stops it.',
+      OBJECT({ volume: S("The volume's name (see list_volumes).") }, ['volume']),
+      async (a) => {
+        const v = await volumeOf(a.volume);
+        const writers = await api.volumeWriters(v.name);
+        return { title: `Export volume ${v.name}?`, facts: [...fact('Project', v.project), ...fact('Size', v.size ? `${Math.round(v.size / 1e6)} MB` : null), ...fact('In use', writers.join(', ') && `${writers.join(', ')} running: a database still writing can be copied half way`), ...fact('Then', 'DoCatz asks where to save it')], page: 'volumes' };
+      },
+      async (a, ctx) => {
+        const v = await volumeOf(a.volume);
+        return volumeWork(ctx, api.volumeExport(v.name), (f) => (f ? { volume: v.name, file: f } : { volume: v.name, saved: false, note: 'The user closed the save dialog' }));
+      },
+    ),
+    change(
+      'import_volume',
+      'Import a volume',
+      'Makes a new volume from an archive (a DoCatz export, or any .tar / .tar.gz). After Allow, DoCatz asks the user for the file. `volume` names the new volume; left out, the name in the archive\'s manifest. An existing volume is never touched here: replace_volume_from_file does that.',
+      OBJECT({ volume: { type: 'string', minLength: 2, maxLength: 200, pattern: '^[a-zA-Z0-9][a-zA-Z0-9_.-]+$', description: 'The new volume\'s name.' } }),
+      async (a) => {
+        resources();
+        if (typeof a.volume === 'string' && (await api.volumes()).some((v) => v.name === a.volume)) throw new Error(`A volume named ${a.volume} exists: pick another name, or replace_volume_from_file`);
+        return { title: typeof a.volume === 'string' ? `Import a volume as ${a.volume}?` : 'Import a volume?', facts: [...fact('Name', typeof a.volume === 'string' ? a.volume : 'From the archive'), ...fact('Then', 'DoCatz asks for the file')], page: 'volumes' };
+      },
+      async (a, ctx) => {
+        resources();
+        const pick = await api.volumeImportPick();
+        if (!pick) return ok({ imported: false, note: 'The user closed the file dialog' });
+        const name = typeof a.volume === 'string' ? a.volume : pick.name;
+        if (pick.taken.includes(name)) throw new Error(`A volume named ${name} exists: call again with another \`volume\`, or replace_volume_from_file`);
+        return volumeWork(ctx, api.volumeImport(pick.file, name, false), () => ({ volume: name, imported: true, from: pick.fileName }));
+      },
+    ),
+    stopper('cancel_volume_copy', 'Stop exporting or importing a volume', 'Stops an export or import under way. A half-made export file is removed; a new volume half filled is removed too.', OBJECT(), async () => {
+      await api.volumeCancel();
       return ok({ cancelling: true });
     }),
 
