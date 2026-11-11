@@ -14,7 +14,7 @@ import { run } from './proc';
 
 /**
  * A volume to a file and back (DoCatz TODO #102). The files go through a throwaway container with the volume mounted
- * (the helper #11 Migrate uses), as a plain tar on its stdout / stdin; DoCatz compresses and writes the file itself, so
+ * (the helper #11 Migrate uses), as a plain tar on its stdout (export) or through `docker cp -a -` (import); DoCatz compresses and writes the file itself, so
  * the path is this computer's own on every platform (no host path ever reaches the engine, WSL or Lima alike). Beside
  * the archive a small manifest keeps what makes the volume the same again: its name and labels (a compose project
  * finds its own volume by them). An archive without one — any tar or .tar.gz — imports too.
@@ -141,28 +141,46 @@ export async function importVolume(file: string, name: string, replace: boolean,
   await fh.read(head, 0, 2, 0).finally(() => fh.close());
   const gz = head[0] === 0x1f && head[1] === 0x8b;
   set({ step: 1, detail: mb(a.size), fraction: 0 });
-  const script = `${replace ? 'find /to -mindepth 1 -delete && ' : ''}tar -C /to -xpf -`;
-  const child = spawn(dockerBin(), ['-H', dockerHost(), 'run', '--rm', '-i', '--label', HELPER_LABEL, '-v', `${name}:/to`, HELPER, 'sh', '-c', script], { windowsHide: true });
-  let err = '';
-  child.stderr.on('data', (d) => (err += d));
-  child.stdin.on('error', () => undefined);
-  const exited = new Promise<number>((resolve) => child.on('close', (c) => resolve(c ?? 1)));
-  const stop = () => child.kill();
+  // The files go in with `docker cp -a -` into a helper that is only created (never started) with the volume mounted:
+  // an HTTP upload with its own end. `docker run -i … tar -x` needed the CLI to half-close the connection when its stdin
+  // ended, which the WSL engine's named pipe cannot carry — on Windows tar waited for more forever at 100 % (found on the
+  // Windows PC, 2026-11-11). `-a` keeps the files' owners, as tar -p did.
+  let box = '';
+  let child: ReturnType<typeof spawn> | null = null;
+  let exited: Promise<number> = Promise.resolve(0);
+  const stop = () => child?.kill();
   signal.addEventListener('abort', stop, { once: true });
   try {
+    if (replace) {
+      const w = await docker(['run', '--rm', '--label', HELPER_LABEL, '-v', `${name}:/to`, HELPER, 'find', '/to', '-mindepth', '1', '-delete'], 600_000);
+      if (w.code !== 0) throw new Error(last(w.stderr) || `${name}’s old files could not be removed`);
+    }
+    if (signal.aborted) throw new Error('Cancelled');
+    const c = await docker(['create', '--label', HELPER_LABEL, '-v', `${name}:/to`, HELPER, 'true']);
+    if (c.code !== 0) throw new Error(last(c.stderr) || 'the copy could not start');
+    box = last(c.stdout);
+    const cp = spawn(dockerBin(), ['-H', dockerHost(), 'cp', '-a', '-', `${box}:/to`], { windowsHide: true });
+    child = cp;
+    let err = '';
+    cp.stderr.on('data', (d) => (err += d));
+    cp.stdin.on('error', () => undefined);
+    exited = new Promise<number>((resolve) => cp.on('close', (code) => resolve(code ?? 1)));
     const progress = counter((n) => set({ detail: `${mb(n)} of ${mb(a.size)}`, fraction: Math.min(n / Math.max(1, a.size), 1) }));
-    await (gz ? pipeline(createReadStream(file), progress, createGunzip(), child.stdin) : pipeline(createReadStream(file), progress, child.stdin));
+    await (gz ? pipeline(createReadStream(file), progress, createGunzip(), cp.stdin) : pipeline(createReadStream(file), progress, cp.stdin));
     const code = await exited;
     if (signal.aborted) throw new Error('Cancelled');
     if (code) throw new Error(last(err) || `the copy stopped (exit ${code})`);
     set({ step: 2, detail: '', fraction: undefined });
   } catch (e) {
-    child.kill();
+    child?.kill();
     await exited.catch(() => 1);
+    if (box) await docker(['rm', '-f', box]).catch(() => null);
+    box = '';
     if (made) await docker(['volume', 'rm', name]).catch(() => null);
     const m = signal.aborted ? 'Cancelled' : (e as Error).message;
     throw new Error(replace && !made && m !== 'Cancelled' ? `${m} (${name}’s old files were already removed)` : replace && m === 'Cancelled' ? `Cancelled: ${name} holds only part of the archive` : m);
   } finally {
     signal.removeEventListener('abort', stop);
+    if (box) await docker(['rm', '-f', box]).catch(() => null);
   }
 }
