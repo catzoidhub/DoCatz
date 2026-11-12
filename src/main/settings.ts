@@ -23,6 +23,10 @@ const FEATURES = DC_AI_FEATURES.map((f) => f.id);
 
 type Stored = Omit<DoCatzSettings, 'ai'> & { ai: Omit<DoCatzSettings['ai'], 'keys'> };
 
+const num = (n: unknown) => (typeof n === 'number' && Number.isFinite(n) && n >= 0 ? n : undefined);
+/** Support Catzoid's corner card (Catzoid #94): DoCatz's own, never shared. */
+const supportOf = (s: Partial<Stored>) => ({ supportSince: num(s.supportSince), supportLater: num(s.supportLater), supportLaterAt: num(s.supportLaterAt), supportOff: s.supportOff === true });
+
 const names = (a: unknown) => (Array.isArray(a) ? [...new Set(a.filter((x): x is string => typeof x === 'string' && x.length > 0 && x.length < 300))] : []);
 const envNamesOf = (a: unknown) => names(a).filter((n) => /^[A-Za-z_][\w.]*$/.test(n));
 function mcatzpOf(m: Partial<McatzpSettings> | undefined): McatzpSettings {
@@ -38,6 +42,7 @@ function local(): Stored {
     theme: THEMES.includes(s.theme as Theme) ? (s.theme as Theme) : 'system',
     browser: typeof s.browser === 'string' ? s.browser : '',
     mcatzp: mcatzpOf(s.mcatzp),
+    ...supportOf(s),
     ai: { enabled: ai.enabled === true, provider: PROVIDERS.includes(ai.provider) ? ai.provider : 'anthropic', models: ai.models ?? {}, baseUrls: ai.baseUrls ?? {}, off: Array.isArray(ai.off) ? ai.off.filter((f): f is DcAiFeature => FEATURES.includes(f)) : [] },
   };
 }
@@ -51,6 +56,7 @@ function stored(): Stored {
     theme: sh.theme && THEMES.includes(sh.theme) ? sh.theme : s.theme,
     browser: typeof sh.browser === 'string' ? sh.browser : s.browser,
     mcatzp: s.mcatzp,
+    ...supportOf(s),
     ai: { enabled: s.ai.enabled, provider: PROVIDERS.includes(provider) ? provider : 'anthropic', models: sh.ai?.models ?? s.ai.models, baseUrls: sh.ai?.baseUrls ?? s.ai.baseUrls, off: s.ai.off },
   };
 }
@@ -85,6 +91,10 @@ export function setSettings(patch: DoCatzSettingsPatch): DoCatzSettings {
     if (!validBrowser(b)) throw new Error('That browser is not installed here');
     s.browser = b;
   }
+  if (patch.supportSince !== undefined) s.supportSince = num(patch.supportSince);
+  if (patch.supportLater !== undefined) s.supportLater = Math.min(num(patch.supportLater) ?? 0, 2);
+  if (patch.supportLaterAt !== undefined) s.supportLaterAt = num(patch.supportLaterAt);
+  if (patch.supportOff !== undefined) s.supportOff = patch.supportOff === true;
   const ai = patch.ai;
   if (ai) {
     if (ai.enabled !== undefined) s.ai.enabled = ai.enabled === true;

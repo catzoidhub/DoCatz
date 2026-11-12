@@ -754,6 +754,8 @@ app.whenReady().then(async () => {
   // Linux AppImage run from Downloads: the install window first (it restarts DoCatz from ~/Applications; Catzoid #93).
   if (await offerAppImageInstall(app.isPackaged ? process.resourcesPath : join(app.getAppPath(), 'resources'))) return;
   if (app.isPackaged) app.setAsDefaultProtocolClient('docatz');
+  // Support Catzoid (Catzoid #94): the corner card counts its 7 days from the first run that knows about it.
+  if (!settings().supportSince) setSettings({ supportSince: Date.now() });
   const impl = api() as unknown as Record<string, (...args: unknown[]) => unknown>;
   for (const m of API_METHODS) ipcMain.handle(`docatz:${m}`, async (_e, ...args) => impl[m](...args));
   updater.onChange = (s) => {

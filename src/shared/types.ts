@@ -14,6 +14,15 @@ export interface DoCatzSettings {
   mcatzp: McatzpSettings;
   /** Browser for container addresses and other web links (Settings → General → Open with): an installed browser's app / .exe / .desktop file; '' = the system default. DoCatz's own, per computer. */
   browser: string;
+  /**
+   * Support Catzoid (Catzoid #94), DoCatz's own: when this DoCatz first ran with the feature (the corner card waits 7
+   * days after it), how many times the card was put off with Not now, when that last was, and whether it is off for
+   * good (Don't show again, or the user already joined / donated from it). Settings → About keeps the links either way.
+   */
+  supportSince?: number;
+  supportLater?: number;
+  supportLaterAt?: number;
+  supportOff?: boolean;
 }
 
 /** An installed web browser (Settings → General → Open with), as DevCatz's. */
@@ -78,7 +87,7 @@ export const DC_AI_FEATURES: { id: DcAiFeature; label: string; hint: string; sen
   { id: 'logs', label: 'Explain with AI in Logs', hint: 'Explains why a container fails or keeps restarting from the log lines you pick, and what to change.', sends: 'the log lines you pick (obvious secrets masked), the container’s image, state, exit code and restart count' },
   { id: 'compose', label: 'Write and fix compose files and Dockerfiles', hint: 'A compose file or Dockerfile from plain words, or a fix for one that fails — always shown before anything is saved.', sends: 'the file open in the editor (obvious secrets masked) and your request' },
 ];
-export type DoCatzSettingsPatch = { theme?: Theme; ai?: Partial<Omit<DcAiSettings, 'keys'>>; mcatzp?: Partial<Omit<McatzpSettings, 'clients'>>; browser?: string };
+export type DoCatzSettingsPatch = { theme?: Theme; ai?: Partial<Omit<DcAiSettings, 'keys'>>; mcatzp?: Partial<Omit<McatzpSettings, 'clients'>>; browser?: string } & Pick<DoCatzSettings, 'supportSince' | 'supportLater' | 'supportLaterAt' | 'supportOff'>;
 
 /** Settings → MCatzP: the local channel an AI client reaches DoCatz through. DoCatz's own, per computer. */
 export interface McatzpSettings {

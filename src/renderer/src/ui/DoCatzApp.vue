@@ -18,6 +18,8 @@ import ComposeDialog from './ComposeDialog.vue';
 import DcUpdateDialog from './DcUpdateDialog.vue';
 import DcReportDialog from './DcReportDialog.vue';
 import DcWelcome from './DcWelcome.vue';
+import SupportNudge from './SupportNudge.vue';
+import CatHeart from './CatHeart.vue';
 import SiblingInstall from './SiblingInstall.vue';
 import McatzpPairDialog from './McatzpPairDialog.vue';
 import { back, forward } from './nav';
@@ -99,6 +101,11 @@ function openRoute(route: string) {
       if (g.project && here(g.project)) openProject.value = g.project;
       else if (g.container && here(g.container)) openContainer.value = g.container;
     });
+  } else if (head === 'support') {
+    // Support Catzoid (Catzoid #94): the heart in the rail → Settings → About, scrolled to its card.
+    settingsTab.value = 'about';
+    section.value = 'settings';
+    setTimeout(() => document.getElementById('support-catzoid')?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 150);
   } else if (head === 'settings') {
     section.value = 'settings';
     if (arg) settingsTab.value = arg as typeof settingsTab.value;
@@ -219,6 +226,10 @@ function openAppMenu(e: MouseEvent) {
         </button>
       </div>
       <div class="mb-2 h-px w-12 shrink-0 bg-base-content/15" />
+      <!-- Support Catzoid (Catzoid #94): small and quiet, always there; no badge, no animation. -->
+      <button class="support-heart mb-1 grid size-8 shrink-0 place-items-center rounded-[10px]" title="Support Catzoid" @click="openRoute('support')">
+        <CatHeart class="size-5" />
+      </button>
       <button class="rail-item relative shrink-0" :class="{ 'is-active': section === 'settings' }" style="--rail-c: var(--c-settings)" :title="`Settings (${keyLabel('mod+,')})`" @click="section = 'settings'">
         <span class="rail-icon"><svg class="size-5" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" clip-rule="evenodd" :d="ICONS.cog" /></svg></span>
         Settings
@@ -249,6 +260,7 @@ function openAppMenu(e: MouseEvent) {
     <DcReportDialog v-if="ready && reportOpen" :kind="reportOpen" @close="reportOpen = null" />
     <DcWelcome v-if="ready" />
     <SiblingInstall />
+    <SupportNudge v-if="ready" />
     <McatzpPairDialog />
 
     <!-- Asked once, after the first error: send crash reports? (Catzoid #65) -->

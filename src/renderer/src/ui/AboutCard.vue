@@ -1,9 +1,10 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue';
-import type { AboutInfo, SiblingApp } from '@shared/types';
+import type { AboutInfo } from '@shared/types';
 import { words } from '@shared/platform';
 import { api, attempt, notify, REPO, reportOpen, SLOGAN, update, updateOpen } from '../store';
 import DcUninstallDialog from './DcUninstallDialog.vue';
+import SupportCard from './SupportCard.vue';
 import devcatzLogo from '../assets/logos/devcatz.png';
 import dbcatzLogo from '../assets/logos/dbcatz.png';
 import dialcatzLogo from '../assets/logos/dialcatz.png';
@@ -20,23 +21,6 @@ const LICENCE = { name: 'GPL-3.0', url: 'https://www.gnu.org/licenses/gpl-3.0.ht
 
 const info = ref<AboutInfo | null>(null);
 onMounted(async () => (info.value = (await attempt(() => api.aboutInfo())) ?? null));
-/** The siblings' installed versions and the newest the site has for this computer (#60): "1.0.3 · 1.0.4 available". */
-const versions = ref<Record<SiblingApp, { installed: string | null; latest: string | null }> | null>(null);
-onMounted(async () => (versions.value = await api.siblingVersions().catch(() => null)));
-const newer = (a: string, b: string) => {
-  const pa = a.split('.').map(Number);
-  const pb = b.split('.').map(Number);
-  for (let i = 0; i < 3; i++) if ((pa[i] ?? 0) !== (pb[i] ?? 0)) return (pa[i] ?? 0) > (pb[i] ?? 0);
-  return false;
-};
-function versionLine(name: string): { text: string; fresh: boolean } | null {
-  const v = versions.value?.[name.toLowerCase() as SiblingApp];
-  if (!v) return null;
-  if (!v.installed) return { text: v.latest ? `not installed · ${v.latest}` : 'not installed', fresh: false };
-  if (v.latest && newer(v.latest, v.installed)) return { text: `${v.installed} · ${v.latest} available`, fresh: true };
-  return { text: v.installed, fresh: false };
-}
-
 /** The build, with its OS: "macOS Apple silicon", "macOS Intel", "Windows x64", "Linux ARM64" — never the architecture alone. */
 const arch = computed(() => {
   const a = info.value?.arch;
@@ -113,6 +97,8 @@ const uninstalling = ref(false);
     </div>
   </div>
 
+  <SupportCard />
+
   <div class="card">
     <div class="card-body gap-3">
       <div class="flex items-center gap-2">
@@ -133,7 +119,6 @@ const uninstalling = ref(false);
             <span class="min-w-0">
               <span class="block text-sm font-medium leading-tight">{{ f.name }}</span>
               <span class="block text-[11px] leading-tight opacity-55">{{ f.what }}</span>
-              <span v-if="versionLine(f.name)" class="block text-[11px] leading-tight" :class="versionLine(f.name)!.fresh ? 'font-medium text-[var(--primary-ink)]' : 'opacity-45'">{{ versionLine(f.name)!.text }}</span>
             </span>
           </button>
         </li>
