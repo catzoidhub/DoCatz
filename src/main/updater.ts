@@ -1,4 +1,4 @@
-import { app, Notification } from 'electron';
+import { app, net, Notification } from 'electron';
 import { randomUUID } from 'node:crypto';
 import { autoUpdater, CancellationToken, type ProgressInfo, type UpdateInfo } from 'electron-updater';
 import type { DcUpdateChannel, DcUpdateSettings, DcUpdateState } from '@shared/types';
@@ -47,7 +47,7 @@ export const installId = () => stored().installId;
 export const updateChannel = (): DcUpdateChannel => stored().channel;
 
 
-/** Release notes from the feed: a string, or one entry per version in between. */
+/** Release notes from the feed (GitHub's release when the site did not answer; the site's latest*.yml has none). */
 function notesOf(info: UpdateInfo): string {
   const n = info.releaseNotes;
   if (!n) return '';
@@ -67,7 +67,7 @@ export class Updater {
 
   constructor() {
     const s = stored();
-    this.state = { status: 'idle', current: app.getVersion(), lastChecked: s.lastChecked, settings: this.settings(), downloadUrl: '' };
+    this.state = { status: 'idle', current: app.getVersion(), lastChecked: s.lastChecked, settings: this.settings(), downloadUrl: '', notesUrl: '' };
     autoUpdater.autoDownload = false;
     autoUpdater.autoInstallOnAppQuit = true;
     autoUpdater.logger = null;
@@ -86,7 +86,12 @@ export class Updater {
   }
 
   get(): DcUpdateState {
-    return { ...this.state, settings: this.settings(), downloadUrl: platformId() ? `${siteBase()}/download/docatz/${platformId()}` : `${siteBase()}/docatz` };
+    return {
+      ...this.state,
+      settings: this.settings(),
+      downloadUrl: platformId() ? `${siteBase()}/download/docatz/${platformId()}` : `${siteBase()}/docatz`,
+      notesUrl: `${siteBase()}/docatz/download#versions`,
+    };
   }
 
   private set(patch: Partial<DcUpdateState>): void {
@@ -103,6 +108,7 @@ export class Updater {
 
   stop(): void {
     if (this.timer) clearInterval(this.timer);
+    this.stopNotes();
   }
 
   private async auto(): Promise<void> {
@@ -166,9 +172,68 @@ export class Updater {
     const mine = (u: string) =>
       process.platform === 'win32' ? u.endsWith('.exe') : process.platform === 'linux' ? u.endsWith(linuxKind) && (process.arch === 'arm64') === arm(u) : u.endsWith('.zip') && (process.arch === 'arm64') === arm(u);
     const size = info.files?.find((f) => mine(f.url))?.size;
-    this.set({ status: 'available', version: info.version, notes: notesOf(info), size, releaseDate: info.releaseDate, lastChecked, source: this.source });
+    this.set({ status: 'available', version: info.version, notes: await this.notesSince(info), size, releaseDate: info.releaseDate, lastChecked, source: this.source });
+    this.lastInfo = info;
+    this.retryNotes();
     if (!manual && stored().skipped !== info.version) this.notify('available');
     return this.get();
+  }
+
+  /**
+   * Release notes of every version after the installed one, from the site's API (`<site>/api/docatz/releases`), else
+   * the feed's own (only GitHub's release carries any). "Sometimes no notes" (user, 2026-11-18, all four apps; as
+   * DevCatz): the site's feed has no notes, and one slow request or the site's GitHub cache not having the new release
+   * yet left What's New empty until the next check 6 h later. Now: three tries, and while the newest version's notes
+   * are missing they are fetched again every 5 minutes (an hour at most) and when What's New opens.
+   */
+  private async notesSince(info: UpdateInfo): Promise<string> {
+    const beta = stored().channel === 'beta';
+    const current = app.getVersion();
+    for (let attempt = 0; attempt < 3; attempt++) {
+      if (attempt) await new Promise((r) => setTimeout(r, attempt * 3000));
+      try {
+        const res = await net.fetch(`${siteBase()}/api/docatz/releases`, { signal: AbortSignal.timeout(15_000) });
+        if (!res.ok) continue;
+        const list = (await res.json()) as { version: string; notes?: string | null }[];
+        const out = list.filter((r) => newer(r.version, current) && !newer(r.version, info.version) && (beta || !r.version.includes('-')));
+        if (out.some((r) => r.version === info.version && r.notes?.trim())) {
+          return out.length === 1 ? (out[0].notes ?? '') : out.map((r) => `## ${r.version}\n\n${r.notes ?? ''}`).join('\n\n');
+        }
+        break; // answered, but without this release's notes yet: the retries below pick them up
+      } catch {
+        /* next try */
+      }
+    }
+    return notesOf(info);
+  }
+
+  private lastInfo: UpdateInfo | null = null;
+  private notesTimer: ReturnType<typeof setInterval> | null = null;
+  private notesMissing = () => !!this.state.version && !this.state.notes?.trim();
+
+  /** Fetches the notes again while they are missing: every 5 minutes for an hour, and when What's New opens. */
+  async refreshNotes(): Promise<void> {
+    const info = this.lastInfo;
+    if (!info || !this.notesMissing() || !['available', 'downloading', 'downloaded'].includes(this.state.status)) return this.stopNotes();
+    const notes = await this.notesSince(info);
+    if (info !== this.lastInfo) return;
+    if (notes.trim()) this.set({ notes });
+    if (!this.notesMissing()) this.stopNotes();
+  }
+
+  private retryNotes(): void {
+    this.stopNotes();
+    if (!this.notesMissing()) return;
+    let left = 12;
+    this.notesTimer = setInterval(() => {
+      if (--left < 0) return this.stopNotes();
+      void this.refreshNotes();
+    }, 5 * 60_000);
+  }
+
+  private stopNotes(): void {
+    if (this.notesTimer) clearInterval(this.notesTimer);
+    this.notesTimer = null;
   }
 
   async download(): Promise<void> {

@@ -15,6 +15,7 @@ export const MCATZP_COVERAGE: Record<keyof DoCatzApi, string> = {
   updateSkip: 'tool: skip_update',
   updateInstall: 'never: restarts the app the client is using; the user installs',
   updateConfigure: 'tool: set_update_prefs',
+  updateNotes: 'not a tool',
   reportPreview: 'not a tool: the user reports a bug themselves',
   reportSend: 'never: a report goes out in the user\'s name',
   captureWindow: 'not a tool: for the bug report',

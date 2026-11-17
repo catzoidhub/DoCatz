@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue';
+import { computed, onMounted, ref } from 'vue';
 import { api, attempt, engine, runs, update } from '../store';
 import icon from '../assets/logos/docatz.png';
 
@@ -11,6 +11,10 @@ import icon from '../assets/logos/docatz.png';
 const emit = defineEmits<{ close: [] }>();
 const u = computed(() => update.value);
 const confirming = ref(false);
+/** The newest version's notes did not load yet (site slow, or its release cache behind): try again now. */
+onMounted(() => {
+  if (u.value?.status === 'available' && !u.value.notes?.trim()) void api.updateNotes().catch(() => undefined);
+});
 
 const mb = (b?: number) => (b ? `${(b / 1048576).toFixed(b > 104857600 ? 0 : 1)} MB` : '');
 const speed = computed(() => (u.value?.progress?.bytesPerSecond ? `${mb(u.value.progress.bytesPerSecond)}/s` : ''));
@@ -93,6 +97,11 @@ async function skip() {
           <div v-else class="h-1.5" />
         </template>
       </div>
+
+      <p v-else-if="u?.status === 'available'" class="rounded-xl border border-base-300/60 bg-base-200/40 px-4 py-3 text-sm opacity-75">
+        The notes did not load yet ·
+        <a class="link link-primary" @click.prevent="api.openUrl(u.notesUrl)">Read them on the site</a>
+      </p>
 
       <div v-if="u?.status === 'downloading'" class="space-y-1.5">
         <progress class="progress progress-primary w-full" :value="u.progress?.percent ?? 0" max="100" />

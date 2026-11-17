@@ -337,6 +337,7 @@ function api(): DoCatzApi {
     aboutInfo: async () => ({ version: app.getVersion(), arch: process.arch, macos: process.getSystemVersion(), electron: process.versions.electron, chrome: process.versions.chrome, node: process.versions.node, site: siteBase(), dataDir: app.getPath('userData') }),
     updateState: async () => updater.get(),
     updateCheck: async () => updater.check(true),
+    updateNotes: async () => (await updater.refreshNotes(), updater.get()),
     updateDownload: async () => updater.download(),
     updateCancel: async () => updater.cancel(),
     updateSkip: async (version) => updater.skip(version),

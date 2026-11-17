@@ -635,6 +635,8 @@ export interface DcUpdateState {
   settings: DcUpdateSettings;
   /** Where "Download from the site" goes: <site>/download/docatz/<platform>. */
   downloadUrl: string;
+  /** The notes on the site (<site>/docatz/download#versions), for when they did not load yet. */
+  notesUrl: string;
 }
 export interface DcUninstallPlan {
   /** What goes, in plain words, with its path (or Keychain item). */
@@ -734,6 +736,8 @@ export interface DoCatzApi {
   aboutInfo(): Promise<AboutInfo>;
   updateState(): Promise<DcUpdateState>;
   updateCheck(): Promise<DcUpdateState>;
+  /** Fetches the newest version's notes again when they are missing (What's New opened). */
+  updateNotes(): Promise<DcUpdateState>;
   updateDownload(): Promise<void>;
   updateCancel(): Promise<void>;
   updateSkip(version: string): Promise<DcUpdateState>;
@@ -930,7 +934,7 @@ export interface DoCatzApi {
 
 /** Every method of the bridge, registered as `docatz:<name>` IPC handlers. */
 export const API_METHODS: (keyof DoCatzApi)[] = [
-  'appInfo', 'aboutInfo', 'updateState', 'updateCheck', 'updateDownload', 'updateCancel', 'updateSkip', 'updateInstall', 'updateConfigure', 'reportPreview', 'reportSend', 'captureWindow', 'reportError', 'reportSettings', 'reportConfigure', 'uninstallPlan', 'uninstallRun', 'settings', 'setSettings', 'setAiKey', 'aiModels', 'aiProbe', 'aiTest', 'aiCancel', 'aiAsk', 'aiPreviewAsk', 'aiExplainLog', 'aiPreviewLog', 'aiFile', 'aiPreviewFile', 'openUrl', 'browsers', 'reveal', 'openSibling', 'mcatzpActivity', 'mcatzpClearActivity', 'mcatzpRevoke', 'mcatzpSetup', 'mcatzpInstall', 'mcatzpUninstall', 'mcatzpInstallCancel', 'mcatzpApprovals', 'mcatzpTargets', 'mcatzpAddToClient', 'mcatzpRemoveFromClient', 'mcatzpUpdate', 'mcatzpPending', 'mcatzpAnswer', 'copyText', 'apiSource', 'siblingVersions', 'migrateSources', 'migrateInventory', 'migrateRun', 'migrateCancel', 'devcatzGateways', 'databases', 'siblingInstall', 'siblingInstallCancel', 'runInTerminal',
+  'appInfo', 'aboutInfo', 'updateState', 'updateCheck', 'updateNotes', 'updateDownload', 'updateCancel', 'updateSkip', 'updateInstall', 'updateConfigure', 'reportPreview', 'reportSend', 'captureWindow', 'reportError', 'reportSettings', 'reportConfigure', 'uninstallPlan', 'uninstallRun', 'settings', 'setSettings', 'setAiKey', 'aiModels', 'aiProbe', 'aiTest', 'aiCancel', 'aiAsk', 'aiPreviewAsk', 'aiExplainLog', 'aiPreviewLog', 'aiFile', 'aiPreviewFile', 'openUrl', 'browsers', 'reveal', 'openSibling', 'mcatzpActivity', 'mcatzpClearActivity', 'mcatzpRevoke', 'mcatzpSetup', 'mcatzpInstall', 'mcatzpUninstall', 'mcatzpInstallCancel', 'mcatzpApprovals', 'mcatzpTargets', 'mcatzpAddToClient', 'mcatzpRemoveFromClient', 'mcatzpUpdate', 'mcatzpPending', 'mcatzpAnswer', 'copyText', 'apiSource', 'siblingVersions', 'migrateSources', 'migrateInventory', 'migrateRun', 'migrateCancel', 'devcatzGateways', 'databases', 'siblingInstall', 'siblingInstallCancel', 'runInTerminal',
   'engineState', 'engineStart', 'engineStop', 'engineRestart', 'engineReset', 'engineConfigure', 'engineCancel', 'engineSetupWsl', 'restartComputer', 'engineLog', 'contextSet', 'cliInstall', 'cliPath', 'diskUsage',
   'containers', 'container', 'containerEnv', 'containerAction', 'containerRemove', 'stats', 'logsFollow', 'logsStop', 'termOpen', 'termInput', 'termResize', 'termClose', 'files', 'fileSave', 'projects', 'composePick', 'composeRun', 'composeProject', 'runCancel', 'readText', 'writeText',
   'images', 'imageRemove', 'imagePull', 'volumes', 'volumeRemove', 'volumeWriters', 'volumeExport', 'volumeImportPick', 'volumeImport', 'volumeCancel', 'imageExport', 'imageImportPick', 'imageImport', 'networks', 'networkRemove', 'prunePreview', 'prune',
