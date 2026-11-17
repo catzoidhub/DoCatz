@@ -32,13 +32,22 @@ const supportOf = (s: Partial<Stored>) => ({
   supportOff: s.supportOff === true,
   supportRating: ratingOf(s.supportRating),
   supportRatingQueued: queuedOf(s.supportRatingQueued),
+  supportReplySeen: typeof s.supportReplySeen === 'string' ? s.supportReplySeen.slice(0, 40) : undefined,
 });
 const STATUSES: SupportRating['status'][] = ['none', 'pending', 'approved', 'hidden'];
 const starsOf = (n: unknown) => (typeof n === 'number' && Number.isInteger(n) && n >= 1 && n <= 5 ? n : 0);
 const textOf = (t: unknown) => (typeof t === 'string' && t.trim() ? t.slice(0, 1000) : null);
 function ratingOf(r: Partial<SupportRating> | null | undefined): SupportRating | null {
   if (!r || !starsOf(r.rating)) return null;
-  return { rating: starsOf(r.rating), text: textOf(r.text), status: STATUSES.includes(r.status as SupportRating['status']) ? r.status! : 'none', version: String(r.version ?? ''), sentAt: num(r.sentAt) ?? 0 };
+  return {
+    rating: starsOf(r.rating),
+    text: textOf(r.text),
+    status: STATUSES.includes(r.status as SupportRating['status']) ? r.status! : 'none',
+    version: String(r.version ?? ''),
+    sentAt: num(r.sentAt) ?? 0,
+    reply: typeof r.reply === 'string' && r.reply.trim() ? r.reply.slice(0, 2000) : null,
+    repliedAt: typeof r.repliedAt === 'string' ? r.repliedAt.slice(0, 40) : null,
+  };
 }
 function queuedOf(q: Partial<NonNullable<DoCatzSettings['supportRatingQueued']>> | null | undefined): DoCatzSettings['supportRatingQueued'] {
   return q && starsOf(q.rating) ? { rating: starsOf(q.rating), text: textOf(q.text), at: num(q.at) ?? 0 } : null;
@@ -121,6 +130,7 @@ export function setSettings(patch: DoCatzSettingsPatch): DoCatzSettings {
   if (patch.supportLater !== undefined) s.supportLater = Math.min(num(patch.supportLater) ?? 0, 2);
   if (patch.supportLaterAt !== undefined) s.supportLaterAt = num(patch.supportLaterAt);
   if (patch.supportOff !== undefined) s.supportOff = patch.supportOff === true;
+  if (typeof patch.supportReplySeen === 'string') s.supportReplySeen = patch.supportReplySeen.slice(0, 40);
   const ai = patch.ai;
   if (ai) {
     if (ai.enabled !== undefined) s.ai.enabled = ai.enabled === true;

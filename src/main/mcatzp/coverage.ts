@@ -18,6 +18,7 @@ export const MCATZP_COVERAGE: Record<keyof DoCatzApi, string> = {
   updateNotes: 'not a tool',
   activeJobs: 'not a tool: list_runs carries the runs',
   ratingSend: 'never: a rating goes out in the users name',
+  ratingRefresh: 'not a tool',
   reportPreview: 'not a tool: the user reports a bug themselves',
   reportSend: 'never: a report goes out in the user\'s name',
   captureWindow: 'not a tool: for the bug report',

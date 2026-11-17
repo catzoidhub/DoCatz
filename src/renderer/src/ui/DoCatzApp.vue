@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { currentOS, keyLabel } from '@shared/platform';
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
-import { aiOn, api, askOpen, mcatzpUpdate, startStatsPolling, attempt, composeFile, composeOpen, containerTab, containers, engine, findFocus, findText, gatewayFocus, gateways, init, openContainer, openProject, refreshGateways, reportOpen, reportsAsk, section, settingsTab, toast, update, updateOpen, type Section } from '../store';
+import { aiOn, api, askOpen, mcatzpUpdate, startStatsPolling, attempt, composeFile, composeOpen, containerTab, containers, engine, findFocus, findText, gatewayFocus, gateways, init, openContainer, openProject, refreshGateways, reportOpen, reportsAsk, section, settings, settingsTab, toast, update, updateOpen, type Section } from '../store';
 import askMark from '../assets/logos/ask-catzoid.svg';
 import CatMood from './CatMood.vue';
 import ContainersView from './ContainersView.vue';
@@ -68,6 +68,12 @@ const engineDot = computed(() => {
 });
 
 /** A place from a link or the tray: containers/<name>, compose/<path>, settings[/<tab>], engine … */
+/** The Catzoid team replied to this install's rating and it was not seen in Settings → About yet (Catzoid #96). */
+const replyDot = computed(() => {
+  const s = settings.value;
+  return !!s?.supportRating?.repliedAt && s.supportRating.repliedAt !== s.supportReplySeen;
+});
+
 function openRoute(route: string) {
   const [head, ...rest] = route.split('/');
   const arg = decodeURIComponent(rest.join('/'));
@@ -228,7 +234,8 @@ function openAppMenu(e: MouseEvent) {
       </div>
       <div class="mb-2 h-px w-12 shrink-0 bg-base-content/15" />
       <!-- Support Catzoid (Catzoid #94): small and quiet, always there; no badge, no animation. -->
-      <button class="support-heart mb-1 grid size-8 shrink-0 place-items-center rounded-[10px]" title="Support Catzoid" @click="openRoute('support')">
+      <button class="support-heart relative mb-1 grid size-8 shrink-0 place-items-center rounded-[10px]" :title="replyDot ? 'The Catzoid team replied to your rating' : 'Support Catzoid'" @click="openRoute('support')">
+        <span v-if="replyDot" class="absolute top-0.5 right-0.5 size-2 rounded-full bg-primary ring-2 ring-base-200" />
         <CatHeart class="size-5" />
       </button>
       <button class="rail-item relative shrink-0" :class="{ 'is-active': section === 'settings' }" style="--rail-c: var(--c-settings)" :title="`Settings (${keyLabel('mod+,')})`" @click="section = 'settings'">

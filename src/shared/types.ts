@@ -27,6 +27,8 @@ export interface DoCatzSettings {
   supportRating?: SupportRating | null;
   /** A rating sent without a connection: it goes by itself later. Main only. */
   supportRatingQueued?: { rating: number; text: string | null; at: number } | null;
+  /** The reply already shown in Settings → About (its repliedAt): the dot on the rail's heart goes. */
+  supportReplySeen?: string;
 }
 
 /** One rating of DoCatz (Catzoid #96). status: none = stars only; pending = the text waits for the team. */
@@ -36,6 +38,9 @@ export interface SupportRating {
   status: 'none' | 'pending' | 'approved' | 'hidden';
   version: string;
   sentAt: number;
+  /** The Catzoid team's reply (plain text, line breaks kept) and when it came, from the site. */
+  reply?: string | null;
+  repliedAt?: string | null;
 }
 
 /** An installed web browser (Settings → General → Open with), as DevCatz's. */
@@ -100,7 +105,7 @@ export const DC_AI_FEATURES: { id: DcAiFeature; label: string; hint: string; sen
   { id: 'logs', label: 'Explain with AI in Logs', hint: 'Explains why a container fails or keeps restarting from the log lines you pick, and what to change.', sends: 'the log lines you pick (obvious secrets masked), the container’s image, state, exit code and restart count' },
   { id: 'compose', label: 'Write and fix compose files and Dockerfiles', hint: 'A compose file or Dockerfile from plain words, or a fix for one that fails — always shown before anything is saved.', sends: 'the file open in the editor (obvious secrets masked) and your request' },
 ];
-export type DoCatzSettingsPatch = { theme?: Theme; ai?: Partial<Omit<DcAiSettings, 'keys'>>; mcatzp?: Partial<Omit<McatzpSettings, 'clients'>>; browser?: string } & Pick<DoCatzSettings, 'supportSince' | 'supportLater' | 'supportLaterAt' | 'supportOff'>;
+export type DoCatzSettingsPatch = { theme?: Theme; ai?: Partial<Omit<DcAiSettings, 'keys'>>; mcatzp?: Partial<Omit<McatzpSettings, 'clients'>>; browser?: string } & Pick<DoCatzSettings, 'supportSince' | 'supportLater' | 'supportLaterAt' | 'supportOff' | 'supportReplySeen'>;
 
 /** Settings → MCatzP: the local channel an AI client reaches DoCatz through. DoCatz's own, per computer. */
 export interface McatzpSettings {
@@ -786,6 +791,8 @@ export interface DoCatzApi {
   updateNotes(): Promise<DcUpdateState>;
   /** Rate DoCatz 1–5 with an optional review (Catzoid #96); queued when offline. */
   ratingSend(rating: number, text: string | null): Promise<{ sent: boolean; queued: boolean }>;
+  /** Reads this install's review from the site again: the team's reply and the status (Catzoid #96). */
+  ratingRefresh(): Promise<void>;
   updateDownload(): Promise<void>;
   updateCancel(): Promise<void>;
   updateSkip(version: string): Promise<DcUpdateState>;
@@ -984,7 +991,7 @@ export interface DoCatzApi {
 
 /** Every method of the bridge, registered as `docatz:<name>` IPC handlers. */
 export const API_METHODS: (keyof DoCatzApi)[] = [
-  'appInfo', 'aboutInfo', 'updateState', 'updateCheck', 'updateNotes', 'updateDownload', 'updateCancel', 'updateSkip', 'updateInstall', 'updateConfigure', 'ratingSend', 'reportPreview', 'reportSend', 'captureWindow', 'reportError', 'reportSettings', 'reportConfigure', 'uninstallPlan', 'uninstallRun', 'settings', 'setSettings', 'setAiKey', 'aiModels', 'aiProbe', 'aiTest', 'aiCancel', 'aiAsk', 'aiPreviewAsk', 'aiExplainLog', 'aiPreviewLog', 'aiFile', 'aiPreviewFile', 'openUrl', 'browsers', 'reveal', 'openSibling', 'mcatzpActivity', 'mcatzpClearActivity', 'mcatzpRevoke', 'mcatzpSetup', 'mcatzpInstall', 'mcatzpUninstall', 'mcatzpInstallCancel', 'mcatzpApprovals', 'mcatzpTargets', 'mcatzpAddToClient', 'mcatzpRemoveFromClient', 'mcatzpUpdate', 'mcatzpPending', 'mcatzpAnswer', 'copyText', 'apiSource', 'siblingVersions', 'migrateSources', 'migrateInventory', 'migrateRun', 'migrateCancel', 'devcatzGateways', 'databases', 'siblingInstall', 'siblingInstallCancel', 'runInTerminal',
+  'appInfo', 'aboutInfo', 'updateState', 'updateCheck', 'updateNotes', 'updateDownload', 'updateCancel', 'updateSkip', 'updateInstall', 'updateConfigure', 'ratingSend', 'ratingRefresh', 'reportPreview', 'reportSend', 'captureWindow', 'reportError', 'reportSettings', 'reportConfigure', 'uninstallPlan', 'uninstallRun', 'settings', 'setSettings', 'setAiKey', 'aiModels', 'aiProbe', 'aiTest', 'aiCancel', 'aiAsk', 'aiPreviewAsk', 'aiExplainLog', 'aiPreviewLog', 'aiFile', 'aiPreviewFile', 'openUrl', 'browsers', 'reveal', 'openSibling', 'mcatzpActivity', 'mcatzpClearActivity', 'mcatzpRevoke', 'mcatzpSetup', 'mcatzpInstall', 'mcatzpUninstall', 'mcatzpInstallCancel', 'mcatzpApprovals', 'mcatzpTargets', 'mcatzpAddToClient', 'mcatzpRemoveFromClient', 'mcatzpUpdate', 'mcatzpPending', 'mcatzpAnswer', 'copyText', 'apiSource', 'siblingVersions', 'migrateSources', 'migrateInventory', 'migrateRun', 'migrateCancel', 'devcatzGateways', 'databases', 'siblingInstall', 'siblingInstallCancel', 'runInTerminal',
   'engineState', 'engineStart', 'engineStop', 'engineRestart', 'engineReset', 'engineConfigure', 'engineCancel', 'engineSetupWsl', 'restartComputer', 'engineLog', 'contextSet', 'cliInstall', 'cliPath', 'diskUsage',
   'containers', 'container', 'containerEnv', 'containerAction', 'containerRemove', 'stats', 'logsFollow', 'logsStop', 'termOpen', 'termInput', 'termResize', 'termClose', 'files', 'fileSave', 'projects', 'composePick', 'composeRun', 'composeProject', 'runCancel', 'activeJobs', 'readText', 'writeText',
   'images', 'imageRemove', 'imagePull', 'volumes', 'volumeRemove', 'volumeWriters', 'volumeExport', 'volumeImportPick', 'volumeImport', 'volumeCancel', 'imageExport', 'imageImportPick', 'imageImport', 'networks', 'networkRemove', 'prunePreview', 'prune',

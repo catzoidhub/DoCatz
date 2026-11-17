@@ -345,6 +345,7 @@ function api(): DoCatzApi {
     updateSkip: async (version) => updater.skip(version),
     updateInstall: async (now) => updater.install(now),
     updateConfigure: async (patch) => updater.configure(patch),
+    ratingRefresh: async () => reviews.refresh(),
     ratingSend: async (rating, text) => reviews.send(Number(rating), typeof text === 'string' ? text : null),
     reportPreview: async (kind, message, email, shots) => reporter.preview(kind, message, email, Number(shots) || 0),
     reportSend: (kind, message, email, shots) => reporter.feedback(kind, message, email, Array.isArray(shots) ? shots : []),
