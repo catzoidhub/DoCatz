@@ -82,9 +82,11 @@ const LABEL: Record<string, string> = {
   telegram: 'Telegram Bot API',
   sonic: 'Sonic',
   sockudo: 'Sockudo',
+  garage: 'Garage',
+  ceph: 'Ceph',
 };
 
-/** A DevCatz service's own logo by its kind (gateways: jasmin, ntfy, gotify, postal, waha, telegram; servers: typesense, sonic, sockudo); null when there is none. */
+/** A DevCatz service's own logo by its kind (gateways: jasmin, ntfy, gotify, postal, waha, telegram; servers: typesense, sonic, sockudo; storage: garage, ceph); null when there is none. */
 export const gatewayLogo = (kind: string): string | null => LOGO[kind] ?? null;
 
 export function serviceLook(image: string): ServiceLook {

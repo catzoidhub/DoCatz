@@ -11,7 +11,7 @@ import { appDataDir } from './platform';
  * - Its servers with no Windows build (#62, Windows): Typesense, Sonic and Sockudo, as compose projects `devcatz-svc-<kind>`,
  *   listed in bridge.json's `services` in the same shape.
  * DevCatz lists every entry, installed or not, with no secrets. DoCatz shows the Docker ones. Their lifecycle stays
- * DevCatz's (its `link`, devcatz://gateways/<kind> or devcatz://services/<kind>, `?install=1`, `?action=…`), as DevCatz
+ * DevCatz's (its `link`, devcatz://gateways/<kind>, devcatz://services/<kind> or devcatz://storage/<kind> (Garage, Ceph; #110), `?install=1`, `?action=…`), as DevCatz
  * keeps `compose up` attached to them. DEVCATZ_BRIDGE points elsewhere, for tests.
  */
 
@@ -63,7 +63,7 @@ export function devcatzGateways(): DcGateway[] {
       project,
       container,
       // DevCatz's own link for it; a missing or odd one falls back to the page it has for that list
-      link: str(g.link, /^devcatz:\/\/(gateways|services)\/[a-z0-9-]{1,30}(\?[\w=&-]{0,60})?$/) ?? `devcatz://${from}/${kind}`,
+      link: str(g.link, /^devcatz:\/\/(gateways|services|storage)\/[a-z0-9-]{1,30}(\?[\w=&-]{0,60})?$/) ?? `devcatz://${from}/${kind}`,
     });
   }
   cache = { mtime, list };

@@ -68,6 +68,9 @@ identify what a container runs:
   seaweedfs, nats, centrifugo, mercure) — copied from DevCatz (`src/renderer/src/assets/logos`, sources listed there).
 - DevCatz's gateways (jasmin, ntfy, gotify, postal, waha, telegram) — copied from DevCatz (`src/renderer/src/assets/logos`,
   sources listed there), for their services in the DevCatz Services group.
+- DevCatz's object storage (garage, ceph; TODO #110) — copied from DevCatz (`src/renderer/src/assets/logos`):
+  garage.png from https://garagehq.deuxfleurs.fr/icons/favicon.svg (the PNG inside, 180 px; Garage, Deuxfleurs),
+  ceph.png from https://ceph.io/assets/favicons/android-chrome-192x192.png (Ceph).
 - The rest are the projects' GitHub organisation avatars, https://github.com/<org>.png?size=96: nginx (nginx),
   node (nodejs), python (python), golang (golang), php (php), rabbitmq (rabbitmq), memcached (memcached), mailpit
   (axllent), traefik (traefik), caddy (caddyserver), httpd (apache), cassandra (apache), grafana (grafana),
