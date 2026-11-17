@@ -1,7 +1,8 @@
 import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
-import { dirname, isAbsolute, join } from 'node:path';
+import { dirname, isAbsolute, join, relative } from 'node:path';
 import type { DcFramework, DcFrameworkName } from '@shared/types';
 import { cliInstalled, composeBin } from './cli';
+import { frameworkVersion } from './fwversion';
 import { dockerHost } from './paths';
 import { run } from './proc';
 
@@ -154,6 +155,11 @@ export function detectFramework(dir: string): DcFramework | null {
  * npm workspace names no framework. Then the folders between it and the context, then the context itself.
  */
 export function detectBuild(context: string, dockerfile?: string): DcFramework | null {
+  return detectBuildAt(context, dockerfile)?.fw ?? null;
+}
+
+/** detectBuild, with the folder the framework was found in (where its version is read, #108). */
+function detectBuildAt(context: string, dockerfile?: string): { fw: DcFramework; dir: string } | null {
   const df = dockerfile ? (isAbsolute(dockerfile) ? dockerfile : join(context, dockerfile)) : null;
   const dirs: string[] = [];
   for (let d = df ? dirname(df) : context; d.startsWith(context) && d.length >= context.length; d = dirname(d)) {
@@ -161,9 +167,9 @@ export function detectBuild(context: string, dockerfile?: string): DcFramework |
     if (d === context) break;
   }
   if (!dirs.includes(context)) dirs.push(context);
-  const found = dirs.map((d) => detectFramework(d)).filter((f): f is DcFramework => f !== null);
+  const found = dirs.map((dir) => ({ fw: detectFramework(dir), dir })).filter((f): f is { fw: DcFramework; dir: string } => f.fw !== null);
   // A specific framework wins over a bare language (node, php, python) found higher up.
-  return found.find((f) => !['node', 'php', 'python', 'ruby', 'static'].includes(f.framework) || f.library) ?? found[0] ?? null;
+  return found.find((f) => !['node', 'php', 'python', 'ruby', 'static'].includes(f.fw.framework) || f.fw.library) ?? found[0] ?? null;
 }
 
 /**
@@ -263,17 +269,44 @@ function workspaceAppOf(root: string, name: string, svc: ServiceCfg, dockerfile:
   return byName.length === 1 ? byName[0].dir : null;
 }
 
+/** A service's framework and where it lives: `dir` (the app's folder) inside `root` (the build context). */
+interface Found {
+  fw: DcFramework;
+  dir: string;
+  root: string;
+}
+/** Where versions are looked for: the repository holding the build context (a workspace's lockfile sits at its root,
+ * above an app built from `context: apps/web`), else the context itself. */
+function repoRoot(ctx: string): string {
+  for (let d = ctx; ; d = dirname(d)) {
+    if (existsSync(join(d, '.git'))) return d;
+    if (dirname(d) === d) return ctx;
+  }
+}
+
 interface Cached {
   key: string;
-  services: Record<string, DcFramework | null>;
+  services: Record<string, Found | null>;
 }
 const cache = new Map<string, Cached>();
 const pending = new Set<string>();
 
-/** project/service → framework, for the list; unknown projects are worked out in the background (`onLearned`). */
+/**
+ * project/service → framework, for the list; unknown projects are worked out in the background (`onLearned`). The
+ * version (#108) is read on each call from the project's own files — cached by their mtime in fwversion.ts, so a
+ * changed lockfile shows its new version without learning the project again.
+ */
 export function frameworkOf(project: string | null, service: string | null): DcFramework | null {
   if (!project || !service) return null;
-  return cache.get(project)?.services[service] ?? null;
+  const f = cache.get(project)?.services[service];
+  if (!f) return null;
+  let version: DcFramework['version'] = null;
+  try {
+    version = frameworkVersion(f.root, { dir: relative(f.root, f.dir) || '.', framework: f.fw.framework, library: f.fw.library });
+  } catch {
+    /* unreadable files: no version */
+  }
+  return { ...f.fw, version };
 }
 
 /** Learns the frameworks of a project's services from its compose files (once per change of those files). */
@@ -286,7 +319,7 @@ export async function learnProject(project: string, files: string[], onLearned: 
     const r = await run(composeBin(), [...files.flatMap((f) => ['-f', f]), '-p', project, 'config', '--format', 'json', '--no-interpolate'], { cwd: dirname(files[0]), env: { ...process.env, DOCKER_HOST: dockerHost() }, timeout: 30_000 });
     if (r.code !== 0) console.warn(`frameworks of ${project}: compose config failed`, r.stderr?.slice(0, 300));
     const cfg = r.code === 0 ? (JSON.parse(r.stdout) as { services?: Record<string, ServiceCfg> }) : null;
-    const services: Record<string, DcFramework | null> = {};
+    const services: Record<string, Found | null> = {};
     for (const [name, s] of Object.entries(cfg?.services ?? {})) {
       const ctx = typeof s.build === 'string' ? s.build : s.build?.context;
       const dockerfile = typeof s.build === 'object' ? s.build.dockerfile : undefined;
@@ -296,7 +329,9 @@ export async function learnProject(project: string, files: string[], onLearned: 
       }
       // A monorepo built from its root (`context: .`, a shared docker/ folder): the workspace app the service runs.
       const app = workspaceAppOf(ctx, name, s, dockerfile ? (isAbsolute(dockerfile) ? dockerfile : join(ctx, dockerfile)) : null);
-      services[name] = (app && detectFramework(app)) || detectBuild(ctx, dockerfile);
+      const own = app ? detectFramework(app) : null;
+      const at = own && app ? { fw: own, dir: app } : detectBuildAt(ctx, dockerfile);
+      services[name] = at ? { ...at, root: repoRoot(ctx) } : null;
     }
     cache.set(project, { key, services });
     onLearned();

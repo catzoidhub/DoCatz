@@ -10,7 +10,7 @@ import DcNavButtons from './DcNavButtons.vue';
 import ProjectEnv from './ProjectEnv.vue';
 import RunPanel from './RunPanel.vue';
 import ServiceMark from './ServiceMark.vue';
-import { frameworkTag } from '../frameworks';
+import { frameworkLabel } from '../frameworks';
 import { gatewayLogo } from './logos';
 import TimeChart, { type Series } from './TimeChart.vue';
 
@@ -196,7 +196,7 @@ const rateText = (v: number) => `${bytes(v)}/s`;
                   <ServiceMark :container="c" size="md" />
                   <span class="min-w-0">
                     <span class="block truncate text-sm font-medium leading-tight">{{ c.service }}</span>
-                    <span class="block truncate text-[11px] leading-tight opacity-60">{{ c.framework ? frameworkTag(c.framework.framework, c.framework.library).label : `image ${c.image}` }}</span>
+                    <span class="block truncate text-[11px] leading-tight opacity-60" :title="c.framework?.version ? frameworkLabel(c.framework, true) : undefined">{{ c.framework ? frameworkLabel(c.framework) : `image ${c.image}` }}</span>
                   </span>
                 </li>
               </ul>

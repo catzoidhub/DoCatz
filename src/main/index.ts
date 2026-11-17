@@ -39,8 +39,9 @@ import { browsersState, openWeb, refreshBrowsers } from './browsers';
 import { siteBase } from './shared';
 import { DocatzTray } from './tray';
 import { uninstallPlan, uninstallRun } from './uninstall';
-import { Updater } from './updater';
-import { appMenuPopup, applyMenu, mainWindow, menuKey, menuShortcuts, openWindow, setUpdateLabel } from './window';
+import { installId, Updater } from './updater';
+import { Reviews } from './reviews';
+import { appMenuPopup, applyMenu, mainWindow, menuKey, menuShortcuts, onWindowClosed, openWindow, setUpdateLabel } from './window';
 
 /**
  * DoCatz — a fast, light Docker engine and container manager, the fourth Catzoid app. Standalone; next to DevCatz,
@@ -59,6 +60,7 @@ const domains = new Domains();
 ops.setDomainNameLookup(domains.nameOf);
 const runs = new Runs();
 const updater = new Updater();
+const reviews = new Reviews();
 const reporter = new Reporter();
 const tray = new DocatzTray({
   open: (route) => openWindow(route),
@@ -343,6 +345,7 @@ function api(): DoCatzApi {
     updateSkip: async (version) => updater.skip(version),
     updateInstall: async (now) => updater.install(now),
     updateConfigure: async (patch) => updater.configure(patch),
+    ratingSend: async (rating, text) => reviews.send(Number(rating), typeof text === 'string' ? text : null),
     reportPreview: async (kind, message, email, shots) => reporter.preview(kind, message, email, Number(shots) || 0),
     reportSend: (kind, message, email, shots) => reporter.feedback(kind, message, email, Array.isArray(shots) ? shots : []),
     captureWindow: async () => {
@@ -358,6 +361,7 @@ function api(): DoCatzApi {
     uninstallRun: (confirm, shared) =>
       uninstallRun(confirm, shared, async (withShared) => {
         updater.stop();
+        reviews.stop();
         reporter.stop();
         for (const t of terms.values()) t.socket.destroy();
         stopEvents?.();
@@ -598,6 +602,7 @@ function api(): DoCatzApi {
       socket.on('error', () => socket.destroy());
       return session;
     },
+    activeJobs: async () => ({ runs: [...recentRuns.values()].filter((r) => !r.done), sibling: siblingTask && !siblingTask.done && !siblingTask.error ? siblingTask : null }),
     termInput: async (session, data) => {
       terms.get(session)?.socket.write(data);
     },
@@ -767,9 +772,25 @@ app.whenReady().then(async () => {
     openWindow();
     send('app:updateOpen', null);
   };
+  // The window in front opens What's New by itself (Catzoid #97): no notification on top of it.
+  updater.inFront = () => {
+    const w = mainWindow();
+    return !!w && w.isVisible() && w.isFocused();
+  };
+  reviews.onChange = () => send('app:settings', settings());
+  // The renderer is gone with its window (Catzoid #95): the log views and terminals it had open end too; the engine,
+  // compose runs, builds and installs live here and keep going.
+  onWindowClosed(() => {
+    for (const stop of follows.values()) stop();
+    follows.clear();
+    for (const t of terms.values()) t.socket.destroy();
+    terms.clear();
+  });
+  reviews.installId = installId;
   reporter.onAsk = () => send('app:reportsAsk', null);
   reporter.start();
   updater.start();
+  reviews.start();
   applySettings((s) => send('app:settings', s));
   mcatzp = new Mcatzp(
     api(),

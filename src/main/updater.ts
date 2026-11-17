@@ -1,7 +1,7 @@
 import { app, net, Notification } from 'electron';
 import { randomUUID } from 'node:crypto';
 import { autoUpdater, CancellationToken, type ProgressInfo, type UpdateInfo } from 'electron-updater';
-import type { DcUpdateChannel, DcUpdateSettings, DcUpdateState } from '@shared/types';
+import type { DcReleaseNotes, DcUpdateChannel, DcUpdateSettings, DcUpdateState } from '@shared/types';
 import { store } from './store';
 import { siteBase } from './shared';
 import { platformId } from './companion';
@@ -17,7 +17,6 @@ import { platformId } from './companion';
 const KEY = 'updates';
 const FIRST_CHECK = 30_000;
 const EVERY = 6 * 60 * 60_000;
-const DEFAULTS: DcUpdateSettings = { auto: true, notify: true, channel: 'stable', skipped: '' };
 
 interface Stored extends DcUpdateSettings {
   /** Anonymous install id, sent with update checks (X-Catzoid-Install) for version adoption counts. */
@@ -34,6 +33,8 @@ function stored(): Stored {
     notify: s.notify !== false,
     channel: s.channel === 'beta' ? 'beta' : 'stable',
     skipped: typeof s.skipped === 'string' ? s.skipped : '',
+    dialog: s.dialog !== false,
+    promptAt: typeof s.promptAt === 'number' ? s.promptAt : undefined,
     installId: typeof s.installId === 'string' && s.installId ? s.installId : randomUUID(),
     notified: typeof s.notified === 'string' ? s.notified : '',
     lastChecked: typeof s.lastChecked === 'number' ? s.lastChecked : undefined,
@@ -48,11 +49,12 @@ export const updateChannel = (): DcUpdateChannel => stored().channel;
 
 
 /** Release notes from the feed (GitHub's release when the site did not answer; the site's latest*.yml has none). */
-function notesOf(info: UpdateInfo): string {
+function notesOf(info: UpdateInfo): DcReleaseNotes[] {
   const n = info.releaseNotes;
-  if (!n) return '';
-  if (typeof n === 'string') return n;
-  return n.map((v) => `## ${v.version}\n\n${v.note ?? ''}`).join('\n\n');
+  const text = (t: string | null | undefined) => (t ?? '').replace(/<\/(p|li|h\d)>/g, '\n').replace(/<li>/g, '- ').replace(/<[^>]+>/g, '').trim();
+  if (!n) return [{ version: info.version, date: info.releaseDate ?? null, notes: '' }];
+  if (typeof n === 'string') return [{ version: info.version, date: info.releaseDate ?? null, notes: text(n) }];
+  return n.map((v) => ({ version: v.version, date: v.version === info.version ? (info.releaseDate ?? null) : null, notes: text(v.note) }));
 }
 
 export class Updater {
@@ -64,6 +66,8 @@ export class Updater {
   onChange: (s: DcUpdateState) => void = () => undefined;
   /** The notification was clicked: show the What's New dialog. */
   onOpen: () => void = () => undefined;
+  /** The window is in front and opens What's New by itself (Catzoid #97): the notification would only repeat it. */
+  inFront: () => boolean = () => false;
 
   constructor() {
     const s = stored();
@@ -81,8 +85,8 @@ export class Updater {
   }
 
   private settings(): DcUpdateSettings {
-    const { auto, notify, channel, skipped } = stored();
-    return { auto, notify, channel, skipped };
+    const { auto, notify, channel, skipped, dialog, promptAt } = stored();
+    return { auto, notify, channel, skipped, dialog, promptAt };
   }
 
   get(): DcUpdateState {
@@ -186,7 +190,7 @@ export class Updater {
    * yet left What's New empty until the next check 6 h later. Now: three tries, and while the newest version's notes
    * are missing they are fetched again every 5 minutes (an hour at most) and when What's New opens.
    */
-  private async notesSince(info: UpdateInfo): Promise<string> {
+  private async notesSince(info: UpdateInfo): Promise<DcReleaseNotes[]> {
     const beta = stored().channel === 'beta';
     const current = app.getVersion();
     for (let attempt = 0; attempt < 3; attempt++) {
@@ -194,10 +198,10 @@ export class Updater {
       try {
         const res = await net.fetch(`${siteBase()}/api/docatz/releases`, { signal: AbortSignal.timeout(15_000) });
         if (!res.ok) continue;
-        const list = (await res.json()) as { version: string; notes?: string | null }[];
+        const list = (await res.json()) as { version: string; date?: string | null; notes?: string | null }[];
         const out = list.filter((r) => newer(r.version, current) && !newer(r.version, info.version) && (beta || !r.version.includes('-')));
         if (out.some((r) => r.version === info.version && r.notes?.trim())) {
-          return out.length === 1 ? (out[0].notes ?? '') : out.map((r) => `## ${r.version}\n\n${r.notes ?? ''}`).join('\n\n');
+          return out.map((r) => ({ version: r.version, date: r.date ?? null, notes: r.notes ?? '' }));
         }
         break; // answered, but without this release's notes yet: the retries below pick them up
       } catch {
@@ -209,7 +213,7 @@ export class Updater {
 
   private lastInfo: UpdateInfo | null = null;
   private notesTimer: ReturnType<typeof setInterval> | null = null;
-  private notesMissing = () => !!this.state.version && !this.state.notes?.trim();
+  private notesMissing = () => !!this.state.version && !this.state.notes?.find((n) => n.version === this.state.version)?.notes.trim();
 
   /** Fetches the notes again while they are missing: every 5 minutes for an hour, and when What's New opens. */
   async refreshNotes(): Promise<void> {
@@ -217,7 +221,7 @@ export class Updater {
     if (!info || !this.notesMissing() || !['available', 'downloading', 'downloaded'].includes(this.state.status)) return this.stopNotes();
     const notes = await this.notesSince(info);
     if (info !== this.lastInfo) return;
-    if (notes.trim()) this.set({ notes });
+    if (notes.some((n) => n.notes.trim())) this.set({ notes });
     if (!this.notesMissing()) this.stopNotes();
   }
 
@@ -275,6 +279,8 @@ export class Updater {
     if (typeof patch.auto === 'boolean') next.auto = patch.auto;
     if (typeof patch.notify === 'boolean') next.notify = patch.notify;
     if (patch.channel === 'stable' || patch.channel === 'beta') next.channel = patch.channel;
+    if (typeof patch.dialog === 'boolean') next.dialog = patch.dialog;
+    if (typeof patch.promptAt === 'number' && Number.isFinite(patch.promptAt)) next.promptAt = Math.min(patch.promptAt, Date.now());
     save(next);
     this.set({});
     return this.get();
@@ -284,7 +290,7 @@ export class Updater {
   private notify(kind: 'available' | 'downloaded'): void {
     const s = stored();
     const v = this.state.version ?? '';
-    if (!s.notify || !Notification.isSupported()) return;
+    if (!s.notify || !Notification.isSupported() || (s.dialog && this.inFront())) return;
     if (kind === 'available') {
       if (s.notified === v) return;
       save({ notified: v });

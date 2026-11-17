@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue';
 import type { DcContainer } from '@shared/types';
-import { frameworkTag } from '../frameworks';
+import { frameworkLabel, frameworkTag } from '../frameworks';
 import { serviceLook } from './logos';
 
 /**
@@ -11,7 +11,7 @@ import { serviceLook } from './logos';
 const props = withDefaults(defineProps<{ container: Pick<DcContainer, 'image' | 'framework'>; size?: 'sm' | 'md' | 'lg'; dim?: boolean }>(), { size: 'md', dim: false });
 const fw = computed(() => (props.container.framework ? frameworkTag(props.container.framework.framework, props.container.framework.library) : null));
 const look = computed(() => serviceLook(props.container.image));
-const title = computed(() => fw.value?.label ?? look.value.label);
+const title = computed(() => (props.container.framework ? frameworkLabel(props.container.framework, true) : look.value.label));
 const box = computed(() => ({ sm: 'size-7 rounded-lg', md: 'size-8 rounded-lg', lg: 'size-9 rounded-xl' })[props.size]);
 const inner = computed(() => ({ sm: 'size-[18px]', md: 'size-5', lg: 'size-6' })[props.size]);
 </script>

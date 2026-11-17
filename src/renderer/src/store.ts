@@ -49,6 +49,32 @@ export const PROJECT_ICON = 'M3.196 12.87l-.825.483a.75.75 0 0 0 0 1.294l7.25 4.
 export const composeFile = ref<string | null>(null);
 export const composeOpen = ref(false);
 export const settingsTab = ref<'general' | 'domains' | 'ai' | 'mcatzp' | 'updates' | 'about'>('general');
+
+/**
+ * Where the user was (Catzoid #95, as DevCatz): closing the window ends the renderer, so the section, the open project or
+ * container and the Settings tab are kept in localStorage and a new window opens at the same place. A convenience only:
+ * a link (docatz://…) or a menu command still wins, and a container gone meanwhile shows the empty pane.
+ */
+const PLACE = 'docatz.place';
+const SECTIONS: Section[] = ['containers', 'images', 'volumes', 'networks', 'builds', 'engine', 'monitoring', 'commands', 'settings'];
+try {
+  const p = JSON.parse(localStorage.getItem(PLACE) ?? 'null') as { section?: Section; container?: string | null; project?: string | null; settings?: typeof settingsTab.value } | null;
+  if (p && SECTIONS.includes(p.section as Section)) {
+    section.value = p.section as Section;
+    if (typeof p.project === 'string') openProject.value = p.project;
+    else if (typeof p.container === 'string') openContainer.value = p.container;
+    if (p.settings && ['general', 'domains', 'ai', 'mcatzp', 'updates', 'about'].includes(p.settings)) settingsTab.value = p.settings;
+  }
+} catch {
+  /* no storage: start at Containers */
+}
+watch([section, openContainer, openProject, settingsTab], () => {
+  try {
+    localStorage.setItem(PLACE, JSON.stringify({ section: section.value, container: openContainer.value, project: openProject.value, settings: settingsTab.value }));
+  } catch {
+    /* no storage */
+  }
+});
 export const findText = ref('');
 export const findFocus = ref(0);
 
@@ -214,6 +240,8 @@ export const moveToGroup = (project: string, group: string | null) =>
 export const settings = ref<DoCatzSettings | null>(null);
 export const update = ref<DcUpdateState | null>(null);
 export const updateOpen = ref(false);
+/** The update dialog opened by itself (Catzoid #97): it then offers "Don't open this on its own". */
+export const updateOpenAuto = ref(false);
 export const reportOpen = ref<DcReportKind | null>(null);
 export const reportsAsk = ref(false);
 export const askOpen = ref(false);
@@ -274,6 +302,11 @@ export async function init(): Promise<void> {
   api.onRun((r) => {
     runs.value = { ...runs.value, [r.token]: r };
   });
+  // A new window (the last one was closed, Catzoid #95): what is still running in main shows at once.
+  void api.activeJobs().then((j) => {
+    for (const r of j.runs) if (!runs.value[r.token]) runs.value = { ...runs.value, [r.token]: r };
+    if (j.sibling && !siblingTask.value) siblingTask.value = j.sibling;
+  }).catch(() => undefined);
   await refreshContainers();
   window.addEventListener('error', (e) => void api.reportError(e.message, e.error?.stack ?? '').catch(() => undefined));
   window.addEventListener('unhandledrejection', (e) => {

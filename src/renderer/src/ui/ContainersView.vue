@@ -12,7 +12,7 @@ import RunPanel from './RunPanel.vue';
 import ProjectDetail from './ProjectDetail.vue';
 import ConfirmDialog from '../components/ConfirmDialog.vue';
 import ServiceMark from './ServiceMark.vue';
-import { frameworkTag } from '../frameworks';
+import { frameworkLabel } from '../frameworks';
 import { gatewayLogo } from './logos';
 
 /**
@@ -258,7 +258,9 @@ const run = computed(() => (runToken.value ? runs.value[runToken.value] : null))
 const dot = (c: DcContainer) => (c.state === 'running' ? (c.health === 'unhealthy' ? 'status-error' : c.health === 'starting' ? 'status-warning' : 'status-success') : c.state === 'paused' || c.state === 'restarting' ? 'status-warning' : c.state === 'dead' ? 'status-error' : '');
 /** A built image shows as what it was built from, not its bare id. */
 // a framework is only learnt for a service with `build:` — built from source, whatever its image is named (image: halo-api-dev)
-const imageLine = (c: DcContainer) => (/^[0-9a-f]{12}$/.test(c.image) || c.framework ? `built from source${c.framework ? ` · ${frameworkTag(c.framework.framework, c.framework.library).label}` : ''}` : c.image);
+const imageLine = (c: DcContainer) => (/^[0-9a-f]{12}$/.test(c.image) || c.framework ? `built from source${c.framework ? ` · ${frameworkLabel(c.framework)}` : ''}` : c.image);
+/** The full versions (#108) on hover: "Laravel 13.31.0 · Livewire 4.4.4 · Vue 3.5.42". */
+const imageTitle = (c: DcContainer) => (c.framework?.version ? `Built from ${frameworkLabel(c.framework, true)}` : undefined);
 const portLine = (c: DcContainer) => c.ports.filter((p) => p.public).map((p) => (p.public === p.private ? `${p.public}` : `${p.public}→${p.private}`)).join(' · ');
 
 function openCompose() {
@@ -388,7 +390,7 @@ function openCompose() {
                         <span class="truncate text-[13px] font-medium">{{ c.service ?? c.name }}</span>
                         <span v-if="c.health === 'unhealthy'" class="badge badge-error badge-soft badge-xs">unhealthy</span>
                       </div>
-                      <div class="truncate text-[11px] opacity-55">{{ imageLine(c) }}<template v-if="portLine(c)"> · {{ portLine(c) }}</template></div>
+                      <div class="truncate text-[11px] opacity-55" :title="imageTitle(c)">{{ imageLine(c) }}<template v-if="portLine(c)"> · {{ portLine(c) }}</template></div>
                     </div>
                     <span v-if="stats[c.id]" class="shrink-0 text-right font-mono text-[10px] leading-tight opacity-55 group-hover:hidden">{{ stats[c.id].cpu.toFixed(0) }}%<br />{{ bytes(stats[c.id].memUsed) }}</span>
                     <div class="shrink-0 items-center" :class="busy[c.id] ? 'flex' : 'hidden group-hover:flex'" @click.stop>
@@ -423,7 +425,7 @@ function openCompose() {
                 </span>
                 <div class="min-w-0 flex-1">
                   <div class="truncate text-[13px] font-medium">{{ c.name }}</div>
-                  <div class="truncate text-[11px] opacity-55">{{ imageLine(c) }}<template v-if="portLine(c)"> · {{ portLine(c) }}</template></div>
+                  <div class="truncate text-[11px] opacity-55" :title="imageTitle(c)">{{ imageLine(c) }}<template v-if="portLine(c)"> · {{ portLine(c) }}</template></div>
                 </div>
                 <span v-if="stats[c.id]" class="shrink-0 text-right font-mono text-[10px] leading-tight opacity-55">{{ stats[c.id].cpu.toFixed(0) }}%<br />{{ bytes(stats[c.id].memUsed) }}</span>
               </div>
@@ -468,7 +470,7 @@ function openCompose() {
                     </span>
                     <div class="min-w-0 flex-1">
                       <div class="truncate text-[13px] font-medium">{{ c.service ?? c.name }}</div>
-                      <div class="truncate text-[11px] opacity-55">{{ imageLine(c) }}<template v-if="portLine(c)"> · {{ portLine(c) }}</template></div>
+                      <div class="truncate text-[11px] opacity-55" :title="imageTitle(c)">{{ imageLine(c) }}<template v-if="portLine(c)"> · {{ portLine(c) }}</template></div>
                     </div>
                     <span v-if="stats[c.id]" class="shrink-0 text-right font-mono text-[10px] leading-tight opacity-55">{{ stats[c.id].cpu.toFixed(0) }}%<br />{{ bytes(stats[c.id].memUsed) }}</span>
                   </div>

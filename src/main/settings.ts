@@ -1,5 +1,5 @@
 import { nativeTheme, safeStorage } from 'electron';
-import { DC_AI_DEFAULTS, DC_AI_FEATURES, DC_AI_PROVIDERS, type DcAiFeature, type DoCatzSettings, type DoCatzSettingsPatch, type McatzpSettings, type DcAiProvider, type Theme } from '@shared/types';
+import { DC_AI_DEFAULTS, DC_AI_FEATURES, DC_AI_PROVIDERS, type SupportRating, type DcAiFeature, type DoCatzSettings, type DoCatzSettingsPatch, type McatzpSettings, type DcAiProvider, type Theme } from '@shared/types';
 import { store } from './store';
 import { readShared, setSharedKey, sharedKey, watchShared, writeShared } from './shared';
 import { validBrowser } from './browsers';
@@ -25,7 +25,24 @@ type Stored = Omit<DoCatzSettings, 'ai'> & { ai: Omit<DoCatzSettings['ai'], 'key
 
 const num = (n: unknown) => (typeof n === 'number' && Number.isFinite(n) && n >= 0 ? n : undefined);
 /** Support Catzoid's corner card (Catzoid #94): DoCatz's own, never shared. */
-const supportOf = (s: Partial<Stored>) => ({ supportSince: num(s.supportSince), supportLater: num(s.supportLater), supportLaterAt: num(s.supportLaterAt), supportOff: s.supportOff === true });
+const supportOf = (s: Partial<Stored>) => ({
+  supportSince: num(s.supportSince),
+  supportLater: num(s.supportLater),
+  supportLaterAt: num(s.supportLaterAt),
+  supportOff: s.supportOff === true,
+  supportRating: ratingOf(s.supportRating),
+  supportRatingQueued: queuedOf(s.supportRatingQueued),
+});
+const STATUSES: SupportRating['status'][] = ['none', 'pending', 'approved', 'hidden'];
+const starsOf = (n: unknown) => (typeof n === 'number' && Number.isInteger(n) && n >= 1 && n <= 5 ? n : 0);
+const textOf = (t: unknown) => (typeof t === 'string' && t.trim() ? t.slice(0, 1000) : null);
+function ratingOf(r: Partial<SupportRating> | null | undefined): SupportRating | null {
+  if (!r || !starsOf(r.rating)) return null;
+  return { rating: starsOf(r.rating), text: textOf(r.text), status: STATUSES.includes(r.status as SupportRating['status']) ? r.status! : 'none', version: String(r.version ?? ''), sentAt: num(r.sentAt) ?? 0 };
+}
+function queuedOf(q: Partial<NonNullable<DoCatzSettings['supportRatingQueued']>> | null | undefined): DoCatzSettings['supportRatingQueued'] {
+  return q && starsOf(q.rating) ? { rating: starsOf(q.rating), text: textOf(q.text), at: num(q.at) ?? 0 } : null;
+}
 
 const names = (a: unknown) => (Array.isArray(a) ? [...new Set(a.filter((x): x is string => typeof x === 'string' && x.length > 0 && x.length < 300))] : []);
 const envNamesOf = (a: unknown) => names(a).filter((n) => /^[A-Za-z_][\w.]*$/.test(n));
@@ -76,6 +93,15 @@ export function settings(): DoCatzSettings {
 export function setMcatzpClients(clients: McatzpSettings['clients']): void {
   const s = stored();
   s.mcatzp.clients = clients;
+  store.setExtra(KEY, s);
+}
+
+/** Your rating and the queued one (Catzoid #96): only the main process sets them (reviews.ts), from the site's answer. */
+export function setSupportRating(patch: Pick<DoCatzSettings, 'supportRating' | 'supportRatingQueued' | 'supportOff'>): void {
+  const s = stored();
+  if (patch.supportRating !== undefined) s.supportRating = ratingOf(patch.supportRating);
+  if (patch.supportRatingQueued !== undefined) s.supportRatingQueued = queuedOf(patch.supportRatingQueued);
+  if (patch.supportOff !== undefined) s.supportOff = patch.supportOff === true;
   store.setExtra(KEY, s);
 }
 

@@ -11,6 +11,7 @@ import LogsPane from './LogsPane.vue';
 import TermPane from './TermPane.vue';
 import FilesPane from './FilesPane.vue';
 import ServiceMark from './ServiceMark.vue';
+import { frameworkLabel } from '../frameworks';
 import TimeChart from './TimeChart.vue';
 
 /**
@@ -170,6 +171,7 @@ const memPct = computed(() => (props.stats && props.stats.memLimit ? (props.stat
               <h2>Container</h2>
               <dl class="selectable grid grid-cols-[9rem_1fr] gap-x-4 gap-y-1.5 text-sm">
                 <dt class="opacity-60">Image</dt><dd class="font-mono text-xs leading-5 break-all">{{ detail.image }} <span class="opacity-50">({{ detail.platform }})</span></dd>
+                <template v-if="c.framework"><dt class="opacity-60">Built from</dt><dd>{{ frameworkLabel(c.framework, true) }}<span v-if="c.framework.version && !c.framework.version.exact" class="text-xs opacity-50"> (declared, not installed)</span></dd></template>
                 <template v-if="detail.project"><dt class="opacity-60">Compose</dt><dd>{{ detail.project }} / {{ detail.service }} <a v-if="detail.workingDir" class="link text-xs opacity-70" @click="api.reveal(detail.workingDir)">{{ detail.workingDir }}</a></dd></template>
                 <dt class="opacity-60">Command</dt><dd class="font-mono text-xs leading-5 break-all">{{ [detail.entrypoint, detail.command].filter(Boolean).join(' ') || '—' }}</dd>
                 <dt class="opacity-60">Restart policy</dt><dd>{{ detail.restartPolicy }}<template v-if="detail.restartCount"> · restarted {{ detail.restartCount }}×</template></dd>

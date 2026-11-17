@@ -1,6 +1,7 @@
-import { app, BrowserWindow, Menu, nativeTheme, type MenuItemConstructorOptions } from 'electron';
+import { app, BrowserWindow, Menu, nativeTheme, screen, type MenuItemConstructorOptions } from 'electron';
 import { join } from 'node:path';
 import { isLinux, isWin } from './platform';
+import { store } from './store';
 
 /** Windows and Linux: the page draws its own title strip with the system buttons over its right end (no traffic lights). */
 const overlay = isWin || isLinux;
@@ -49,8 +50,41 @@ function titleBarOverlay(): { color: string; symbolColor: string; height: number
 }
 if (overlay) nativeTheme.on('updated', () => win && !win.isDestroyed() && win.setTitleBarOverlay(titleBarOverlay()));
 
+/**
+ * Closing the window ends it and its renderer (Catzoid #95, as DevCatz): the engine, compose runs, builds, installs and
+ * MCatzP live in the main process and keep going in the menu bar / tray; ~150 MB come back. The tray, the Dock and a
+ * docatz:// link make a new window where it was, at the place the renderer kept (store.ts, localStorage).
+ */
+type Bounds = { x: number; y: number; width: number; height: number; maximized?: boolean };
+const BOUNDS = 'windowBounds';
+const SIZE = { width: 1200, height: 760 };
+let quitting = false;
+/** The window is gone: what only it was watching (log follows, terminals) stops (index.ts). */
+let closedHook: () => void = () => undefined;
+export const onWindowClosed = (fn: () => void) => (closedHook = fn);
+app.on('before-quit', () => (quitting = true));
+
+/** The bounds the window was closed with, when they still fit on a connected display (else the size alone). */
+function savedBounds(): Partial<Bounds> & { width: number; height: number } {
+  const b = store.extra<Bounds>(BOUNDS);
+  if (!b || ![b.x, b.y, b.width, b.height].every(Number.isFinite) || b.width < 880 || b.height < 540) return SIZE;
+  const area = screen.getDisplayMatching(b).workArea;
+  const fits = b.x >= area.x - 50 && b.y >= area.y - 50 && b.x + b.width <= area.x + area.width + 50 && b.y + b.height <= area.y + area.height + 50;
+  return fits ? { x: b.x, y: b.y, width: b.width, height: b.height } : { width: b.width, height: b.height };
+}
+
+function saveBounds(w: BrowserWindow): void {
+  try {
+    const maximized = w.isMaximized();
+    store.setExtra(BOUNDS, { ...(maximized ? w.getNormalBounds() : w.getBounds()), maximized });
+  } catch {
+    /* already gone */
+  }
+}
+
 /** Opens (or brings forward) the window; `route` is a place in it (containers/<name>, engine, settings/about …). */
 export function openWindow(route?: string): void {
+  void app.dock?.show();
   if (win && !win.isDestroyed()) {
     if (win.isMinimized()) win.restore();
     win.show();
@@ -59,8 +93,7 @@ export function openWindow(route?: string): void {
     return;
   }
   win = new BrowserWindow({
-    width: 1200,
-    height: 760,
+    ...savedBounds(),
     minWidth: 880,
     minHeight: 540,
     title: 'DoCatz',
@@ -71,7 +104,10 @@ export function openWindow(route?: string): void {
     webPreferences: { preload, sandbox: false, contextIsolation: true },
   });
   const w = win;
-  w.once('ready-to-show', () => w.show());
+  w.once('ready-to-show', () => {
+    if (store.extra<Bounds>(BOUNDS)?.maximized) w.maximize();
+    w.show();
+  });
   w.webContents.on('render-process-gone', (_e, d) => console.error(`DoCatz renderer gone: ${d.reason} (exit ${d.exitCode})`));
   w.on('swipe', (_e, direction) => {
     if (direction === 'right') send('navBack');
@@ -81,8 +117,14 @@ export function openWindow(route?: string): void {
     if (cmd === 'browser-backward') send('navBack');
     else if (cmd === 'browser-forward') send('navForward');
   });
+  w.on('close', () => {
+    saveBounds(w);
+    // The app stays in the menu bar (tray on Windows / Linux); the Dock icon comes back with the window.
+    if (!quitting) app.dock?.hide();
+  });
   w.on('closed', () => {
     if (win === w) win = null;
+    closedHook();
   });
   const hash = route ? `route=${encodeURIComponent(route)}` : '';
   if (process.env.ELECTRON_RENDERER_URL) void w.loadURL(`${process.env.ELECTRON_RENDERER_URL}#${hash}`);

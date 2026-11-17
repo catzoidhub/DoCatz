@@ -104,6 +104,8 @@ function containerOut(c: DcContainer) {
     status: c.status,
     health: c.health,
     framework: c.framework?.library ?? c.framework?.framework ?? null,
+    // its version from the project's files (#108): { version, exact, extras? }; exact false = a declared range ("13" → 13.x)
+    frameworkVersion: c.framework?.version ?? null,
     url: c.url,
     // a database or mail server: its address for the rest of its project, no page
     inner: c.inner ?? null,

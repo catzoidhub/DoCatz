@@ -16,6 +16,8 @@ export const MCATZP_COVERAGE: Record<keyof DoCatzApi, string> = {
   updateInstall: 'never: restarts the app the client is using; the user installs',
   updateConfigure: 'tool: set_update_prefs',
   updateNotes: 'not a tool',
+  activeJobs: 'not a tool: list_runs carries the runs',
+  ratingSend: 'never: a rating goes out in the users name',
   reportPreview: 'not a tool: the user reports a bug themselves',
   reportSend: 'never: a report goes out in the user\'s name',
   captureWindow: 'not a tool: for the bug report',

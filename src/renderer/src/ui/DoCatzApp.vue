@@ -16,6 +16,7 @@ import DcSettings from './DcSettings.vue';
 import AskDocatz from './AskDocatz.vue';
 import ComposeDialog from './ComposeDialog.vue';
 import DcUpdateDialog from './DcUpdateDialog.vue';
+import UpdatePrompt from './UpdatePrompt.vue';
 import DcReportDialog from './DcReportDialog.vue';
 import DcWelcome from './DcWelcome.vue';
 import SupportNudge from './SupportNudge.vue';
@@ -257,6 +258,7 @@ function openAppMenu(e: MouseEvent) {
     <button v-if="ready && askOn && !askOpen" class="ask-fab no-drag" :title="`Ask DoCatz (${keyLabel('mod+K')}): say what to do in plain words`" aria-label="Ask DoCatz" @click="askOpen = true"><span><img :src="askMark" alt="" /></span></button>
     <ComposeDialog v-if="ready && composeOpen" @close="composeOpen = false" />
     <DcUpdateDialog v-if="ready && updateOpen" @close="updateOpen = false" />
+    <UpdatePrompt v-if="ready" />
     <DcReportDialog v-if="ready && reportOpen" :kind="reportOpen" @close="reportOpen = null" />
     <DcWelcome v-if="ready" />
     <SiblingInstall />

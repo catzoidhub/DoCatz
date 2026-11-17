@@ -23,6 +23,19 @@ export interface DoCatzSettings {
   supportLater?: number;
   supportLaterAt?: number;
   supportOff?: boolean;
+  /** Your rating (Catzoid #96): what the site answered — the cleaned text and whether it is shown yet. Main only. */
+  supportRating?: SupportRating | null;
+  /** A rating sent without a connection: it goes by itself later. Main only. */
+  supportRatingQueued?: { rating: number; text: string | null; at: number } | null;
+}
+
+/** One rating of DoCatz (Catzoid #96). status: none = stars only; pending = the text waits for the team. */
+export interface SupportRating {
+  rating: number;
+  text: string | null;
+  status: 'none' | 'pending' | 'approved' | 'hidden';
+  version: string;
+  sentAt: number;
 }
 
 /** An installed web browser (Settings → General → Open with), as DevCatz's. */
@@ -288,6 +301,28 @@ export interface DcFramework {
   framework: DcFrameworkName;
   /** A Go / Rust / Python / Node / Ruby app's own web framework (gin, axum, starlette, fastify, roda …), when recognised. */
   library: string | null;
+  /**
+   * The framework's (or `library`'s) version the project uses (TODO #108, as DevCatz §41), from its lockfile /
+   * installed packages; a declared range when nothing is installed (`exact: false`, shown as "13.x"). Null when unknown.
+   */
+  version?: FrameworkVersion | null;
+}
+
+/** A framework's version, read from the project's files (TODO #108; the same shape as DevCatz's). */
+export interface FrameworkVersion {
+  version: string;
+  exact: boolean;
+  /** Libraries that shape the project, with theirs (Laravel + Livewire / Inertia + Vue, Nuxt + Vue). */
+  extras?: { label: string; version: string; exact: boolean }[];
+}
+
+/** "13.2" (the list), "13.2.1" (full), "13.x" (from a range). */
+export function versionText(v: { version: string; exact: boolean } | null | undefined, full = false): string {
+  if (!v) return '';
+  if (!v.exact) return `${v.version}.x`;
+  if (full) return v.version;
+  const [maj, min] = v.version.split(/[.-]/);
+  return min !== undefined && /^\d+$/.test(min) ? `${maj}.${min}` : maj;
 }
 
 export interface DcPort {
@@ -619,12 +654,23 @@ export interface DcUpdateSettings {
   channel: DcUpdateChannel;
   /** "Skip this version": the automatic check stays quiet about it. */
   skipped: string;
+  /** What's New opens by itself when a new version is found (Catzoid #97); off = only the dot, Settings and the
+   * notification. Missing in older settings = on. */
+  dialog: boolean;
+  /** When the dialog last opened by itself: Later brings it back on the next launch or 24 h after this. */
+  promptAt?: number;
+}
+export interface DcReleaseNotes {
+  version: string;
+  date: string | null;
+  notes: string;
 }
 export interface DcUpdateState {
   status: 'idle' | 'checking' | 'none' | 'available' | 'downloading' | 'downloaded' | 'error';
   current: string;
   version?: string;
-  notes?: string;
+  /** Release notes of every version after the installed one, newest first (Markdown), as DevCatz's. */
+  notes?: DcReleaseNotes[];
   size?: number;
   releaseDate?: string;
   progress?: { percent: number; transferred: number; total: number; bytesPerSecond: number };
@@ -738,6 +784,8 @@ export interface DoCatzApi {
   updateCheck(): Promise<DcUpdateState>;
   /** Fetches the newest version's notes again when they are missing (What's New opened). */
   updateNotes(): Promise<DcUpdateState>;
+  /** Rate DoCatz 1–5 with an optional review (Catzoid #96); queued when offline. */
+  ratingSend(rating: number, text: string | null): Promise<{ sent: boolean; queued: boolean }>;
   updateDownload(): Promise<void>;
   updateCancel(): Promise<void>;
   updateSkip(version: string): Promise<DcUpdateState>;
@@ -863,6 +911,8 @@ export interface DoCatzApi {
   /** A compose action on a project DoCatz already runs (its files from the labels). */
   composeProject(project: string, action: DcComposeAction, token: string): Promise<void>;
   runCancel(token: string): Promise<void>;
+  /** Work still going in the main process (Catzoid #95): a new window picks up compose runs and a sibling install. */
+  activeJobs(): Promise<{ runs: DcRun[]; sibling: TaskProgress | null }>;
   /** A compose file / Dockerfile as text (for the editor). */
   readText(path: string): Promise<string>;
   writeText(path: string, text: string): Promise<void>;
@@ -934,9 +984,9 @@ export interface DoCatzApi {
 
 /** Every method of the bridge, registered as `docatz:<name>` IPC handlers. */
 export const API_METHODS: (keyof DoCatzApi)[] = [
-  'appInfo', 'aboutInfo', 'updateState', 'updateCheck', 'updateNotes', 'updateDownload', 'updateCancel', 'updateSkip', 'updateInstall', 'updateConfigure', 'reportPreview', 'reportSend', 'captureWindow', 'reportError', 'reportSettings', 'reportConfigure', 'uninstallPlan', 'uninstallRun', 'settings', 'setSettings', 'setAiKey', 'aiModels', 'aiProbe', 'aiTest', 'aiCancel', 'aiAsk', 'aiPreviewAsk', 'aiExplainLog', 'aiPreviewLog', 'aiFile', 'aiPreviewFile', 'openUrl', 'browsers', 'reveal', 'openSibling', 'mcatzpActivity', 'mcatzpClearActivity', 'mcatzpRevoke', 'mcatzpSetup', 'mcatzpInstall', 'mcatzpUninstall', 'mcatzpInstallCancel', 'mcatzpApprovals', 'mcatzpTargets', 'mcatzpAddToClient', 'mcatzpRemoveFromClient', 'mcatzpUpdate', 'mcatzpPending', 'mcatzpAnswer', 'copyText', 'apiSource', 'siblingVersions', 'migrateSources', 'migrateInventory', 'migrateRun', 'migrateCancel', 'devcatzGateways', 'databases', 'siblingInstall', 'siblingInstallCancel', 'runInTerminal',
+  'appInfo', 'aboutInfo', 'updateState', 'updateCheck', 'updateNotes', 'updateDownload', 'updateCancel', 'updateSkip', 'updateInstall', 'updateConfigure', 'ratingSend', 'reportPreview', 'reportSend', 'captureWindow', 'reportError', 'reportSettings', 'reportConfigure', 'uninstallPlan', 'uninstallRun', 'settings', 'setSettings', 'setAiKey', 'aiModels', 'aiProbe', 'aiTest', 'aiCancel', 'aiAsk', 'aiPreviewAsk', 'aiExplainLog', 'aiPreviewLog', 'aiFile', 'aiPreviewFile', 'openUrl', 'browsers', 'reveal', 'openSibling', 'mcatzpActivity', 'mcatzpClearActivity', 'mcatzpRevoke', 'mcatzpSetup', 'mcatzpInstall', 'mcatzpUninstall', 'mcatzpInstallCancel', 'mcatzpApprovals', 'mcatzpTargets', 'mcatzpAddToClient', 'mcatzpRemoveFromClient', 'mcatzpUpdate', 'mcatzpPending', 'mcatzpAnswer', 'copyText', 'apiSource', 'siblingVersions', 'migrateSources', 'migrateInventory', 'migrateRun', 'migrateCancel', 'devcatzGateways', 'databases', 'siblingInstall', 'siblingInstallCancel', 'runInTerminal',
   'engineState', 'engineStart', 'engineStop', 'engineRestart', 'engineReset', 'engineConfigure', 'engineCancel', 'engineSetupWsl', 'restartComputer', 'engineLog', 'contextSet', 'cliInstall', 'cliPath', 'diskUsage',
-  'containers', 'container', 'containerEnv', 'containerAction', 'containerRemove', 'stats', 'logsFollow', 'logsStop', 'termOpen', 'termInput', 'termResize', 'termClose', 'files', 'fileSave', 'projects', 'composePick', 'composeRun', 'composeProject', 'runCancel', 'readText', 'writeText',
+  'containers', 'container', 'containerEnv', 'containerAction', 'containerRemove', 'stats', 'logsFollow', 'logsStop', 'termOpen', 'termInput', 'termResize', 'termClose', 'files', 'fileSave', 'projects', 'composePick', 'composeRun', 'composeProject', 'runCancel', 'activeJobs', 'readText', 'writeText',
   'images', 'imageRemove', 'imagePull', 'volumes', 'volumeRemove', 'volumeWriters', 'volumeExport', 'volumeImportPick', 'volumeImport', 'volumeCancel', 'imageExport', 'imageImportPick', 'imageImport', 'networks', 'networkRemove', 'prunePreview', 'prune',
   'projectPrefs', 'setProjectPrefs',
   'envState', 'envRead', 'envWrite', 'envCreate', 'envLock', 'envRemove', 'envDrift', 'setDomainName',

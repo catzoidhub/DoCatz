@@ -15,6 +15,17 @@ import { aiKey, needFeature, settings } from './settings';
  */
 
 const TIMEOUT_MS = 120_000;
+
+/** ", built from Laravel 13.31.0 + Livewire 4.4.4" for the AI context (#108); "13.x (declared, not installed)" for a range. */
+function builtFrom(c: Pick<DcContainer, 'framework'>): string {
+  const f = c.framework;
+  if (!f) return '';
+  const name = f.library ?? f.framework;
+  const v = f.version;
+  if (!v) return `, built from ${name}`;
+  const text = (x: { version: string; exact: boolean }) => (x.exact ? x.version : `${x.version}.x (declared, not installed)`);
+  return `, built from ${name} ${[text(v), ...(v.extras ?? []).map((x) => `${x.label} ${text(x)}`)].join(' + ')}`;
+}
 const OK_SCHEMA = { type: 'object', properties: { ok: { type: 'boolean' } }, required: ['ok'], additionalProperties: false };
 /** Model ids that are not chat models (OpenAI, Gemini, Mistral, Groq … list them all together). */
 const NOT_CHAT = /embed|whisper|tts|transcribe|dall-e|image|imagen|moderation|audio|realtime|rerank|ocr|speech|veo|aqa|guard/i;
@@ -173,7 +184,7 @@ export class AskAi {
   private async askParts(req: DcAskRequest): Promise<{ system: string; turns: DcAiTurn[] }> {
     const engine = await this.ctx.engine();
     const list = engine.status === 'running' ? await this.ctx.containers().catch(() => [] as DcContainer[]) : [];
-    const line = (c: DcContainer) => `- ${c.name}: ${c.image}, ${c.state} (${c.status})${c.project ? `, compose ${c.project}/${c.service}` : ''}${c.ports.length ? `, ports ${c.ports.map((p) => (p.public ? `${p.public}→${p.private}` : `${p.private}`) + `/${p.type}`).join(' ')}` : ''}${c.url ? `, ${c.url}` : ''}`;
+    const line = (c: DcContainer) => `- ${c.name}: ${c.image}${builtFrom(c)}, ${c.state} (${c.status})${c.project ? `, compose ${c.project}/${c.service}` : ''}${c.ports.length ? `, ports ${c.ports.map((p) => (p.public ? `${p.public}→${p.private}` : `${p.private}`) + `/${p.type}`).join(' ')}` : ''}${c.url ? `, ${c.url}` : ''}`;
     const projects = [...new Set(list.map((c) => c.project).filter(Boolean))];
     const here = list.find((c) => c.id === req.where.container || c.name === req.where.container);
     const system = [
@@ -238,7 +249,7 @@ export class AskAi {
       'Answer with JSON {"summary", "cause", "steps", "fix"}: what happened, why in plain words, what to do step by step, and a fix (a compose snippet, a Dockerfile line or a command) when one fits — DoCatz shows it, never runs it.',
       'Write in the language the user wrote in (English when they asked nothing).',
       '',
-      `Container ${c.name}: image ${c.image}, ${c.state} (${c.status}), exit code ${c.exitCode ?? '—'}, restarts ${c.restartCount}, restart policy ${c.restartPolicy}${c.project ? `, compose ${c.project}/${c.service}` : ''}, platform ${c.platform}.`,
+      `Container ${c.name}: image ${c.image}${builtFrom(c)}, ${c.state} (${c.status}), exit code ${c.exitCode ?? '—'}, restarts ${c.restartCount}, restart policy ${c.restartPolicy}${c.project ? `, compose ${c.project}/${c.service}` : ''}, platform ${c.platform}.`,
       `Command: ${c.entrypoint} ${c.command}`.trim(),
       computerLine(),
     ].join('\n');

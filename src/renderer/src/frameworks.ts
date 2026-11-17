@@ -1,3 +1,4 @@
+import { versionText, type DcFramework } from '../../shared/types';
 import { STACK_ICONS, type StackIcon } from './stackicons';
 
 /**
@@ -121,4 +122,16 @@ const LIBRARIES: Record<string, [string, string]> = {
 export function frameworkTag(fw: string, library?: string | null): { label: string; icon: StackIcon } {
   const [label, icon] = (library && LIBRARIES[library]) || TAGS[fw] || ['JavaScript', 'javascript'];
   return { label, icon: STACK_ICONS[icon] ?? STACK_ICONS.javascript };
+}
+
+/**
+ * A framework with its version (TODO #108, as DevCatz's withVersion): "Laravel 13.31 · Livewire 4.4" in rows, and in
+ * full for tooltips — "Laravel 13.31.0 · Livewire 4.4.4 · Vue 3.5.42"; a range shows as "13.x". Built as one string:
+ * a template's `{{ label }}<template> {{ v }}</template>` loses the space.
+ */
+export function frameworkLabel(f: DcFramework, full = false): string {
+  const v = f.version;
+  const label = frameworkTag(f.framework, f.library).label;
+  if (!v) return label;
+  return [`${label} ${versionText(v, full)}`, ...(v.extras ?? []).map((x) => `${x.label} ${versionText(x, full)}`)].join(' · ');
 }
