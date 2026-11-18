@@ -1,5 +1,5 @@
 import { spawn } from 'node:child_process';
-import { closeSync, cpSync, existsSync, mkdirSync, openSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { closeSync, cpSync, existsSync, mkdirSync, openSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { createConnection } from 'node:net';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
@@ -119,6 +119,21 @@ export class LiteBackend implements Backend {
     // Downloaded files carry the quarantine flag; docatz-vmm is signed, this only spares a first-run prompt.
     await run('/usr/bin/xattr', ['-dr', 'com.apple.quarantine', dir()], { timeout: 30_000 });
     if (!(await this.installed())) throw new Error('The Lite engine does not answer as expected (version / protocol)');
+    this.pruneOld();
+  }
+
+  /**
+   * A new engine version in place: the older guests (about 300 MB each) and their downloaded archives go. The data disk
+   * (vm/data.img) is not touched — it carries over to the new version.
+   */
+  private pruneOld(): void {
+    try {
+      for (const v of readdirSync(dir('guest'))) if (v !== LITE.version) rmSync(join(dir('guest'), v), { recursive: true, force: true });
+      const dl = docatzDir('downloads');
+      for (const f of readdirSync(dl)) if (/^docatz-(vmm|guest)-\d/.test(f) && !f.includes(`-${LITE.version}-`)) rmSync(join(dl, f), { force: true });
+    } catch (e) {
+      console.warn('lite: old versions not removed:', (e as Error).message);
+    }
   }
 
   private saved(): Saved | null {
@@ -158,6 +173,7 @@ export class LiteBackend implements Backend {
     }
     r.step(0);
     if (!(await this.installed())) await this.install(r);
+    else this.pruneOld();
     if (r.signal.aborted) throw new Error('Cancelled');
     r.step(1);
     mkdirSync(vmDir(), { recursive: true });
