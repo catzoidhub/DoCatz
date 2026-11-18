@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
+import { currentOS } from '@shared/platform';
 import type { K8sDeployment, K8sPod, K8sService, K8sState, K8sWorkloads } from '@shared/types';
 import { ago, api, attempt, engineUp, errorText, notify, PROJECT_ICON } from '../store';
 import DcNavButtons from './DcNavButtons.vue';
@@ -166,7 +167,12 @@ async function deletePod() {
 // ------------------------------------------------------------------ the cluster
 
 const STATUS: Record<string, string> = { off: 'Off', stopped: 'Stopped', starting: 'Starting…', running: 'Running', stopping: 'Stopping…' };
-const useContext = computed(() => `export KUBECONFIG="$HOME/.kube/config:${s.value?.kubeconfig ?? ''}"\nkubectl config use-context docatz`);
+// Windows: PowerShell's own syntax and `;` between files (bash's `export … :` there was wrong; Windows PC, 2026-11-18).
+const useContext = computed(() =>
+  currentOS === 'windows'
+    ? `$env:KUBECONFIG = "$HOME\\.kube\\config;${s.value?.kubeconfig ?? ''}"\nkubectl config use-context docatz`
+    : `export KUBECONFIG="$HOME/.kube/config:${s.value?.kubeconfig ?? ''}"\nkubectl config use-context docatz`,
+);
 const userNs = <T extends { namespace: string }>(list: T[] | undefined) => (list ?? []).filter((x) => !SYSTEM_NS.has(x.namespace));
 const TILES = computed(() => [
   { label: 'Pods running', value: `${userNs(w.value?.pods).filter((p) => p.status === 'Running').length}/${userNs(w.value?.pods).length}` },
