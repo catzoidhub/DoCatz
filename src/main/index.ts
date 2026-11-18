@@ -3,7 +3,7 @@ import { execFile, spawn } from 'node:child_process';
 import { binDir } from './paths';
 import { isLinux, isWin } from './platform';
 import { runInLinuxTerminal } from './linuxterm';
-import { offerAppImageInstall } from './appimage';
+import { offerAppImageInstall, relaunchAppImage } from './appimage';
 import { messageBox, openDialog, saveDialog } from './dialogs';
 import { createWriteStream, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { basename, join } from 'node:path';
@@ -187,6 +187,15 @@ app.on('open-url', (e, url) => {
 app.on('activate', () => openWindow());
 // The engine and the menu bar stay when the window closes; Quit ends DoCatz (macOS keeps the VM running).
 app.on('window-all-closed', () => undefined);
+/**
+ * Restarts DoCatz (the helper switched, Standard ⇄ Lite). An AppImage runs from a /tmp mount that goes with this process:
+ * relaunching that path brought nothing back (Linux VM, 2026-11-18) — the AppImage file itself is started instead.
+ */
+function relaunchDoCatz(): void {
+  if (process.env.APPIMAGE) relaunchAppImage(process.env.APPIMAGE);
+  else app.relaunch();
+}
+
 /** DoCatz is quitting or installing an update: the helper is not started again when its channel closes. */
 let leaving = false;
 app.on('before-quit', () => {
@@ -230,7 +239,7 @@ async function switchHelper(on: boolean): Promise<void> {
   } else {
     await removeHelper(false);
   }
-  app.relaunch();
+  relaunchDoCatz();
   app.exit(0);
 }
 
@@ -255,7 +264,7 @@ async function switchEngine(kind: 'standard' | 'lite'): Promise<void> {
   await engine.stop().catch((e) => console.warn('engine stop:', (e as Error).message));
   await engine.configure({ kind });
   if (helper) await helper.call('helper.quit', false).catch(() => undefined);
-  app.relaunch();
+  relaunchDoCatz();
   app.exit(0);
 }
 

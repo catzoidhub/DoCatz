@@ -118,6 +118,34 @@ function page(icon: string, replacing: boolean): string {
 }
 
 /**
+ * Starts the AppImage `target` again once this DoCatz has gone (the caller exits right after): after the install
+ * window, and for a restart (the engine helper switched, Standard ⇄ Lite) — app.relaunch's child died with the old
+ * mount, so nothing came back (Linux VM, 2026-11-18).
+ */
+export function relaunchAppImage(target: string): void {
+  // Its own session: the old AppImage's runtime ends its children when it unmounts (app.relaunch's child died with it).
+  // A clean environment: the old runtime's APPDIR / APPIMAGE / ARGV0 and paths into its mount (gone once it exits)
+  // would make the new one look for its files there.
+  const mount = process.env.APPDIR ?? '\u0000';
+  const env: Record<string, string> = {};
+  for (const [k, v] of Object.entries(process.env)) {
+    if (v === undefined || ['APPDIR', 'APPIMAGE', 'ARGV0', 'OWD', 'CHROME_DESKTOP', 'GDK_BACKEND'].includes(k)) continue;
+    env[k] = v.includes(mount) ? v.split(':').filter((x) => !x.startsWith(mount)).join(':') : v;
+  }
+  mkdirSync(join(app.getPath('userData'), 'logs'), { recursive: true });
+  const log = openSync(join(app.getPath('userData'), 'logs', 'appimage-relaunch.log'), 'a');
+  // Started once this instance is gone: it still holds the single-instance lock, so the new one would quit at once.
+  // Every inherited descriptor above stderr is closed first: one into the old AppImage's mount (app.asar) kept that
+  // mount alive until the new DoCatz quit.
+  // bash: dash (Ubuntu's /bin/sh) reads `exec 10>&-` as running a command named 10, and the relaunch never happened.
+  const args = process.argv.slice(1).filter((x) => !x.startsWith('--appimage') && x !== '--no-sandbox');
+  // Without bash, only single-digit descriptors are closed (as DevCatz 9a82f28).
+  const shell = existsSync('/bin/bash') ? '/bin/bash' : '/bin/sh';
+  const close = shell === '/bin/bash' ? 'for fd in $(ls /proc/$$/fd); do [ "$fd" -gt 2 ] && eval "exec $fd>&-"; done' : 'for fd in 3 4 5 6 7 8 9; do eval "exec $fd>&-"; done';
+  spawn(shell, ['-c', `while kill -0 ${process.pid} 2>/dev/null; do sleep 0.2; done; ${close} 2>/dev/null; exec "$0" "$@"`, target, ...args], { detached: true, stdio: ['ignore', log, log], env, cwd: homedir() }).unref();
+}
+
+/**
  * Called once at start. Returns true when DoCatz is restarting from ~/Applications (or quitting): the caller stops.
  */
 export async function offerAppImageInstall(resources: string): Promise<boolean> {
@@ -186,26 +214,7 @@ export async function offerAppImageInstall(resources: string): Promise<boolean> 
     }
     chmodSync(target, 0o755);
     await writeAppImageEntry(target, resources);
-    // Its own session: the old AppImage's runtime ends its children when it unmounts (app.relaunch's child died with it).
-    // A clean environment: the old runtime's APPDIR / APPIMAGE / ARGV0 and paths into its mount (gone once it exits)
-    // would make the new one look for its files there.
-    const mount = process.env.APPDIR ?? '\u0000';
-    const env: Record<string, string> = {};
-    for (const [k, v] of Object.entries(process.env)) {
-      if (v === undefined || ['APPDIR', 'APPIMAGE', 'ARGV0', 'OWD', 'CHROME_DESKTOP', 'GDK_BACKEND'].includes(k)) continue;
-      env[k] = v.includes(mount) ? v.split(':').filter((x) => !x.startsWith(mount)).join(':') : v;
-    }
-    mkdirSync(join(app.getPath('userData'), 'logs'), { recursive: true });
-    const log = openSync(join(app.getPath('userData'), 'logs', 'appimage-relaunch.log'), 'a');
-    // Started once this instance is gone: it still holds the single-instance lock, so the new one would quit at once.
-    // Every inherited descriptor above stderr is closed first: one into the old AppImage's mount (app.asar) kept that
-    // mount alive until the new DoCatz quit.
-    // bash: dash (Ubuntu's /bin/sh) reads `exec 10>&-` as running a command named 10, and the relaunch never happened.
-    const args = process.argv.slice(1).filter((x) => !x.startsWith('--appimage') && x !== '--no-sandbox');
-    // Without bash, only single-digit descriptors are closed (as DevCatz 9a82f28).
-    const shell = existsSync('/bin/bash') ? '/bin/bash' : '/bin/sh';
-    const close = shell === '/bin/bash' ? 'for fd in $(ls /proc/$$/fd); do [ "$fd" -gt 2 ] && eval "exec $fd>&-"; done' : 'for fd in 3 4 5 6 7 8 9; do eval "exec $fd>&-"; done';
-    spawn(shell, ['-c', `while kill -0 ${process.pid} 2>/dev/null; do sleep 0.2; done; ${close} 2>/dev/null; exec "$0" "$@"`, target, ...args], { detached: true, stdio: ['ignore', log, log], env, cwd: homedir() }).unref();
+    relaunchAppImage(target);
     app.exit(0);
     return true;
   } catch (e) {

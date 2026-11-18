@@ -7,7 +7,7 @@ import { join } from 'node:path';
 import type { EngineConfig, EngineState } from '@shared/types';
 import type { EngineLike } from './enginehost';
 import { HELPER_PROTOCOL, HelperClient } from './helperproto';
-import { isMac, isWin } from './platform';
+import { isLinux, isMac, isWin } from './platform';
 
 /**
  * DoCatz's side of the engine helper (#107): starting it (a per-user launchd agent on macOS; on Windows a detached process
@@ -95,6 +95,52 @@ const writeLoginItem = () => reg('add', RUN_KEY, '/v', RUN_VALUE, '/t', 'REG_SZ'
 const removeLoginItem = () => reg('delete', RUN_KEY, '/v', RUN_VALUE, '/f');
 let loginItemSeen: boolean | null = null;
 
+/**
+ * Linux's login item (#107): a systemd user unit, ~/.config/systemd/user/docatz-engine.service, enabled (starts at login)
+ * and started now — systemd keeps the helper apart from DoCatz, as launchd does on macOS. Written each time the helper
+ * starts. An AppImage is mounted under /tmp only while something runs from it and its AppRun puts --no-sandbox before
+ * every argument (Node refuses it): the unit keeps `<AppImage> --appimage-mount` open for the helper's life and runs
+ * the mounted docatz as Node itself. The .deb and a development run start their binary and script directly.
+ */
+const UNIT = 'docatz-engine.service';
+const unitPath = () => join(process.env.XDG_CONFIG_HOME || join(homedir(), '.config'), 'systemd', 'user', UNIT);
+const systemctlUser = (...args: string[]) => new Promise<number>((resolve) => execFile('systemctl', ['--user', ...args], { timeout: 30_000 }, (e) => resolve(e ? 1 : 0)));
+/** A systemd unit value: `$` doubled (systemd expands $VAR), quoted. */
+const unitQuote = (s: string) => `"${s.replace(/\\/g, '\\\\').replace(/"/g, '\\"').replace(/\$/g, '$$$$')}"`;
+function unitFile(): string {
+  const env = Object.entries(helperEnv())
+    .map(([k, v]) => `Environment=${unitQuote(`${k}=${v}`)}`)
+    .join('\n');
+  const appImage = process.env.APPIMAGE;
+  const exec = appImage
+    ? // bash keeps the AppImage mounted (coproc) while the helper runs from it, and lets it go when the helper ends.
+      `/bin/bash -c ${unitQuote('coproc M { exec "$1" --appimage-mount; }; read -r D <&"${M[0]}" || exit 1; trap \'kill "$M_PID"\' EXIT; "$D/docatz" "$D/resources/app.asar/out/helper/index.js"')} docatz-engine ${unitQuote(appImage)}`
+    : `${unitQuote(process.execPath)} ${unitQuote(helperScript())}`;
+  return `[Unit]
+Description=DoCatz engine helper (keeps the engine, container domains and database ports running)
+
+[Service]
+Type=simple
+${env}
+ExecStart=${exec}
+Restart=on-failure
+RestartSec=3
+
+[Install]
+WantedBy=default.target
+`;
+}
+
+/** Linux: the unit written, enabled and (re)started; false when there is no systemd user session (the caller spawns it). */
+async function launchLinuxUnit(): Promise<boolean> {
+  if ((await systemctlUser('--version')) !== 0) return false;
+  mkdirSync(join(unitPath(), '..'), { recursive: true });
+  writeFileSync(unitPath(), unitFile());
+  await systemctlUser('daemon-reload');
+  await systemctlUser('enable', UNIT);
+  return (await systemctlUser('restart', UNIT)) === 0;
+}
+
 /** Starts the helper as its own process (Windows, Linux), with the environment it runs in. */
 function spawnHelper(): void {
   mkdirSync(join(app.getPath('userData'), 'logs'), { recursive: true });
@@ -119,6 +165,7 @@ async function launch(): Promise<void> {
     return;
   }
   if (isWin) loginItemSeen = (await writeLoginItem()) === 0;
+  if (isLinux && (await launchLinuxUnit())) return;
   spawnHelper();
 }
 
@@ -155,9 +202,14 @@ export async function removeHelper(stopEngine: boolean): Promise<void> {
     await removeLoginItem();
     loginItemSeen = false;
   }
+  if (isLinux && existsSync(unitPath())) {
+    await systemctlUser('disable', '--now', UNIT);
+    rmSync(unitPath(), { force: true });
+    await systemctlUser('daemon-reload');
+  }
 }
 
-export const helperInstalled = (): boolean => (isMac ? existsSync(plistPath()) : isWin ? loginItemSeen === true : false);
+export const helperInstalled = (): boolean => (isMac ? existsSync(plistPath()) : isWin ? loginItemSeen === true : existsSync(unitPath()));
 
 /** The Engine, answered by the helper. Its state changes arrive as the helper's `engine` events. */
 export class RemoteEngine implements EngineLike {
