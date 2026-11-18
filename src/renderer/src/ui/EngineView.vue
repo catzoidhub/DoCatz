@@ -34,6 +34,29 @@ const isSystem = computed(() => s.value?.backend === 'system');
 /** The engines DoCatz can move from on this platform (#103: said when none is there). */
 const otherNames = computed(() => (isSystem.value ? 'Docker Desktop, Rancher Desktop, Colima or Podman' : s.value?.backend === 'wsl' ? 'Docker Desktop or Rancher Desktop' : 'Docker Desktop, OrbStack, Colima or Rancher Desktop'));
 const busy = ref('');
+/** The page in tabs under the state card; remembered (a convenience). */
+type Tab = 'overview' | 'settings' | 'cli' | 'move';
+const TABS: { id: Tab; label: string }[] = [
+  { id: 'overview', label: 'Overview' },
+  { id: 'settings', label: 'Settings' },
+  { id: 'cli', label: 'Docker CLI' },
+  { id: 'move', label: 'Move from another Docker' },
+];
+const saved = (() => {
+  try {
+    return localStorage.getItem('docatz.engine.tab');
+  } catch {
+    return null;
+  }
+})();
+const tab = ref<Tab>(TABS.some((t) => t.id === saved) ? (saved as Tab) : 'overview');
+watch(tab, (t) => {
+  try {
+    localStorage.setItem('docatz.engine.tab', t);
+  } catch {
+    /* no storage */
+  }
+});
 const wslTask = computed(() => s.value?.task?.title === 'Installing WSL');
 async function run(name: string, fn: () => Promise<unknown>, done?: string) {
   busy.value = name;
@@ -134,8 +157,12 @@ const copy = (t: string) => {
           </div>
         </div>
 
+        <!-- the rest in tabs (user, 2026-11-18: the page ran too long): what it is, its settings, the CLIs, moving in -->
+        <div class="seg w-full">
+          <button v-for="t in TABS" :key="t.id" class="seg-item flex-1" :class="{ 'is-active': tab === t.id }" @click="tab = t.id">{{ t.label }}</button>
+        </div>
         <!-- engine choice (TODO #106) -->
-        <div v-if="canLite && c" class="card">
+        <div v-if="canLite && c" v-show="tab === 'settings'" class="card">
           <div class="card-body gap-3">
             <h2>Standard or Lite</h2>
             <div class="opt-row">
@@ -167,7 +194,7 @@ const copy = (t: string) => {
         </div>
 
         <!-- resources -->
-        <div class="card">
+        <div v-show="tab === 'settings'" class="card">
           <div class="card-body gap-3">
             <h2>Resources</h2>
             <template v-if="isMac">
@@ -217,7 +244,7 @@ const copy = (t: string) => {
         </div>
 
         <!-- docker context and CLIs -->
-        <div class="card">
+        <div v-show="tab === 'cli'" class="card">
           <div class="card-body gap-3">
             <h2>Docker command line</h2>
             <div class="opt-row">
@@ -257,7 +284,7 @@ const copy = (t: string) => {
         </div>
 
         <!-- disk usage -->
-        <div v-if="df" class="card">
+        <div v-if="df" v-show="tab === 'overview'" class="card">
           <div class="card-body gap-2">
             <h2>Disk usage</h2>
             <table class="table table-sm">
@@ -276,7 +303,7 @@ const copy = (t: string) => {
         </div>
 
         <!-- move from another Docker (#11) -->
-        <div class="card">
+        <div v-show="tab === 'move'" class="card">
           <div class="card-body gap-2">
             <h2>Move from another Docker</h2>
             <p class="text-xs opacity-60">Copy images and volumes onto DoCatz’s engine. The other one keeps them, so both can stay side by side.</p>
@@ -302,7 +329,7 @@ const copy = (t: string) => {
         </div>
 
         <!-- details -->
-        <div class="card">
+        <div v-show="tab === 'overview'" class="card">
           <div class="card-body gap-2">
             <div class="flex items-center gap-2"><h2>Details</h2><span class="flex-1" /><button class="btn btn-ghost btn-xs" @click="showLog">Engine log</button></div>
             <dl class="selectable grid grid-cols-[8rem_1fr] gap-x-4 gap-y-1.5 text-sm">

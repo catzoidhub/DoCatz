@@ -284,16 +284,24 @@ export class K8s {
       if (r.code !== 0) throw new Error(lastLine(r.stderr) || `kubectl get ${kind} failed`);
       return (JSON.parse(r.stdout) as { items: T[] }).items;
     };
-    type Meta = { metadata: { name: string; namespace: string; creationTimestamp: string } };
+    type Meta = { metadata: { name: string; namespace: string; creationTimestamp: string; labels?: Record<string, string>; ownerReferences?: { kind: string; name: string }[] } };
+    type CState = Record<string, { reason?: string } | undefined>;
     const [pods, deps, svcs] = await Promise.all([
-      get<Meta & { spec: { containers: { image: string }[] }; status: { phase: string; podIP?: string; containerStatuses?: { ready: boolean; restartCount: number; state?: Record<string, { reason?: string }> }[] } }>('pods'),
-      get<Meta & { spec: { replicas?: number }; status: { readyReplicas?: number } }>('deployments'),
-      get<Meta & { spec: { type: string; clusterIP?: string; ports?: { port: number; nodePort?: number; protocol?: string }[] } }>('services'),
+      get<Meta & { spec: { nodeName?: string; containers: { name: string; image: string; ports?: { containerPort: number }[] }[] }; status: { phase: string; podIP?: string; containerStatuses?: { name: string; ready: boolean; restartCount: number; state?: CState }[] } }>('pods'),
+      get<Meta & { spec: { replicas?: number; selector?: { matchLabels?: Record<string, string> }; template?: { spec?: { containers?: { image: string }[] } } }; status: { readyReplicas?: number } }>('deployments'),
+      get<Meta & { spec: { type: string; clusterIP?: string; selector?: Record<string, string>; ports?: { name?: string; port: number; targetPort?: number | string; nodePort?: number; protocol?: string }[] } }>('services'),
     ]);
+    const stateOf = (st: CState | undefined) => {
+      const [k, v] = Object.entries(st ?? {})[0] ?? [];
+      return v?.reason ?? (k ? k[0].toUpperCase() + k.slice(1) : 'Unknown');
+    };
+    // A deployment's pods belong to its ReplicaSet `<deployment>-<hash>`.
+    const depOf = (ns: string, rs: string) => deps.find((d) => d.metadata.namespace === ns && rs.startsWith(`${d.metadata.name}-`) && /^[a-z0-9]{6,10}$/.test(rs.slice(d.metadata.name.length + 1)))?.metadata.name ?? null;
     return {
       pods: pods.map((p) => {
         const cs = p.status.containerStatuses ?? [];
         const waiting = cs.map((c) => c.state?.waiting?.reason ?? c.state?.terminated?.reason).find(Boolean);
+        const owner = p.metadata.ownerReferences?.[0] ? { kind: p.metadata.ownerReferences[0].kind, name: p.metadata.ownerReferences[0].name } : null;
         return {
           namespace: p.metadata.namespace,
           name: p.metadata.name,
@@ -302,16 +310,33 @@ export class K8s {
           restarts: cs.reduce((n, c) => n + c.restartCount, 0),
           image: p.spec.containers[0]?.image ?? '',
           ip: p.status.podIP ?? null,
+          node: p.spec.nodeName ?? null,
           created: p.metadata.creationTimestamp,
+          owner,
+          deployment: owner?.kind === 'ReplicaSet' ? depOf(p.metadata.namespace, owner.name) : null,
+          labels: p.metadata.labels ?? {},
+          containers: p.spec.containers.map((c) => {
+            const st = cs.find((x) => x.name === c.name);
+            return { name: c.name, image: c.image, ready: st?.ready ?? false, restarts: st?.restartCount ?? 0, state: stateOf(st?.state), ports: (c.ports ?? []).map((x) => x.containerPort) };
+          }),
         };
       }),
-      deployments: deps.map((d) => ({ namespace: d.metadata.namespace, name: d.metadata.name, ready: d.status.readyReplicas ?? 0, replicas: d.spec.replicas ?? 0, created: d.metadata.creationTimestamp })),
+      deployments: deps.map((d) => ({
+        namespace: d.metadata.namespace,
+        name: d.metadata.name,
+        ready: d.status.readyReplicas ?? 0,
+        replicas: d.spec.replicas ?? 0,
+        images: (d.spec.template?.spec?.containers ?? []).map((c) => c.image),
+        selector: d.spec.selector?.matchLabels ?? {},
+        created: d.metadata.creationTimestamp,
+      })),
       services: svcs.map((s) => ({
         namespace: s.metadata.namespace,
         name: s.metadata.name,
         type: s.spec.type,
         clusterIP: s.spec.clusterIP ?? null,
-        ports: (s.spec.ports ?? []).map((p) => ({ port: p.port, nodePort: p.nodePort ?? null, protocol: p.protocol ?? 'TCP' })),
+        ports: (s.spec.ports ?? []).map((p) => ({ name: p.name ?? null, port: p.port, targetPort: String(p.targetPort ?? p.port), nodePort: p.nodePort ?? null, protocol: p.protocol ?? 'TCP' })),
+        selector: s.spec.selector ?? {},
         created: s.metadata.creationTimestamp,
       })),
     };

@@ -801,10 +801,47 @@ export interface K8sState {
   published: number[];
   publishError: string;
 }
+export interface K8sPod {
+  namespace: string;
+  name: string;
+  /** Running, Pending, Completed, or the waiting reason (CrashLoopBackOff, ErrImageNeverPull …). */
+  status: string;
+  ready: string;
+  restarts: number;
+  image: string;
+  ip: string | null;
+  node: string | null;
+  created: string;
+  /** What made it: ReplicaSet (a deployment), DaemonSet, Job …, with its name. */
+  owner: { kind: string; name: string } | null;
+  /** The deployment it belongs to, when its ReplicaSet is one's. */
+  deployment: string | null;
+  labels: Record<string, string>;
+  containers: { name: string; image: string; ready: boolean; restarts: number; state: string; ports: number[] }[];
+}
+export interface K8sService {
+  namespace: string;
+  name: string;
+  type: string;
+  clusterIP: string | null;
+  ports: { name: string | null; port: number; targetPort: string; nodePort: number | null; protocol: string }[];
+  /** The pods it sends to. Empty: no selector (an external or headless one). */
+  selector: Record<string, string>;
+  created: string;
+}
+export interface K8sDeployment {
+  namespace: string;
+  name: string;
+  ready: number;
+  replicas: number;
+  images: string[];
+  selector: Record<string, string>;
+  created: string;
+}
 export interface K8sWorkloads {
-  pods: { namespace: string; name: string; status: string; ready: string; restarts: number; image: string; ip: string | null; created: string }[];
-  deployments: { namespace: string; name: string; ready: number; replicas: number; created: string }[];
-  services: { namespace: string; name: string; type: string; clusterIP: string | null; ports: { port: number; nodePort: number | null; protocol: string }[]; created: string }[];
+  pods: K8sPod[];
+  deployments: K8sDeployment[];
+  services: K8sService[];
 }
 
 // ------------------------------------------------------------ move from another Docker (#11)

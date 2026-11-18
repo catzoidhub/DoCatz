@@ -71,20 +71,20 @@ export const wslRootfs = () => ALPINE_WSL[machineArch()];
 
 /**
  * DoCatz Lite (TODO #106, beta): docatz-vmm and its guest from catzoidhub/docatz-engine's releases, pinned like the rest
- * (docs/CONTRACT.md §2), catzoidhub/DoCatz-Engine v0.1.1 (2b32d4e: 0.1.0 plus the per-VM lock). DOCATZ_LITE_LOCAL still takes a local build instead
+ * (docs/CONTRACT.md §2), catzoidhub/DoCatz-Engine v0.1.2 (4d93eb9: the per-VM lock, and `/` rshared from boot — capability shared-mounts). DOCATZ_LITE_LOCAL still takes a local build instead
  * (engine/lite.ts).
  */
-export const LITE = { version: '0.1.1' } as const;
+export const LITE = { version: '0.1.2' } as const;
 const LITE_URL = `https://github.com/catzoidhub/DoCatz-Engine/releases/download/v${LITE.version}`;
 const litePin = (name: string, sha256: string): Pinned => ({ name, url: `${LITE_URL}/${name}`, sha256 });
 const LITE_PINS: Record<Arch, { vmm: Pinned; guest: Pinned } | null> = {
   arm64: {
-    vmm: litePin(`docatz-vmm-${LITE.version}-darwin-arm64.tar.gz`, 'a610c6c675e4611aa4ec8825b2901c96622b66260402dd38793933a25ba9a9f8'),
-    guest: litePin(`docatz-guest-${LITE.version}-arm64.tar.gz`, 'f794d94fa7014159daefc5cf1557fc0faf965ddcea007bd48c6f3ee236ec67ea'),
+    vmm: litePin(`docatz-vmm-${LITE.version}-darwin-arm64.tar.gz`, 'a21684f9e73ee82e5fb5426554a247fb6aba66f79089ac63bdd096d4af3712c0'),
+    guest: litePin(`docatz-guest-${LITE.version}-arm64.tar.gz`, '5c53459dae7bba023ab4ab49519359dc87480b97e71e47ba36ee60ba2f15c21b'),
   },
   x64: {
-    vmm: litePin(`docatz-vmm-${LITE.version}-darwin-x86_64.tar.gz`, 'a065bb4fe2f98ec075d651bc8fe3c6d5b8592b696af0d4c614c2bf8c8a06a3bb'),
-    guest: litePin(`docatz-guest-${LITE.version}-x86_64.tar.gz`, '97d18504703638a618a873952d17e6bda07874f8a545edb8f129ff4b5e8074b3'),
+    vmm: litePin(`docatz-vmm-${LITE.version}-darwin-x86_64.tar.gz`, '9ba811c401dfc046a85e62b2f29f48bd2148cdc2878b6638b871cede788a32fd'),
+    guest: litePin(`docatz-guest-${LITE.version}-x86_64.tar.gz`, '7e96d2af608e680bbe3e2c7a2c819cceac2081f039959ca4a106edf9a0db4028'),
   },
 };
 export const litePackages = () => LITE_PINS[machineArch()];
