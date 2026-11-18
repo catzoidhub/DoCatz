@@ -259,12 +259,16 @@ export class LimaBackend implements Backend {
   }
 
   async configure(c: EngineConfig): Promise<void> {
-    if (!(await this.instance())) {
+    const i = await this.instance();
+    if (!i) {
       writeFileSync(join(DOCATZ_HOME, 'docatz.yaml'), yaml(c));
       return;
     }
     const rosetta = machineArch() === 'arm64' && c.rosetta;
-    const expr = `.cpus = ${c.cpus} | .memory = "${c.memoryGiB}GiB" | .disk = "${c.diskGiB}GiB" | .vmOpts.vz.rosetta.enabled = ${rosetta} | .vmOpts.vz.rosetta.binfmt = ${rosetta}`;
+    // Lima only grows a disk: a smaller size (the setting is shared with Lite, whose disk may be smaller) keeps the VM's
+    // own, rather than failing the whole edit ("shrinking the disk is not supported") and with it a CPU / memory change.
+    const disk = Math.max(c.diskGiB, Math.round((i.disk ?? 0) / 1024 ** 3));
+    const expr = `.cpus = ${c.cpus} | .memory = "${c.memoryGiB}GiB" | .disk = "${disk}GiB" | .vmOpts.vz.rosetta.enabled = ${rosetta} | .vmOpts.vz.rosetta.binfmt = ${rosetta}`;
     const r = await run(limactl(), ['edit', '--tty=false', `--set=${expr}`, NAME], { env: env(), timeout: 60_000 });
     if (r.code !== 0) throw new Error(`The engine settings could not be changed: ${lastLine(r.stderr)}`);
   }
