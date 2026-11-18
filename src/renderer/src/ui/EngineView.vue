@@ -263,7 +263,7 @@ const copy = (t: string) => {
               </label>
               <label class="grid grid-cols-[7rem_1fr_4rem] items-center gap-3">
                 <span>Disk</span>
-                <input type="range" class="range range-primary range-xs" min="16" max="512" step="8" :value="c.diskGiB" @change="set({ diskGiB: Number(($event.target as HTMLInputElement).value) })" />
+                <input type="range" :key="s.diskMinGiB" class="range range-primary range-xs" :min="s.diskMinGiB" max="512" step="8" :value="c.diskGiB" @change="set({ diskGiB: Number(($event.target as HTMLInputElement).value) })" />
                 <span class="text-right tabular-nums">{{ c.diskGiB }} GB</span>
               </label>
               <p class="text-xs opacity-60">The disk is the most it may grow to; it only takes what is used<template v-if="s.vm?.diskBytes"> (now {{ bytes(s.vm.diskBytes) }})</template>. It can grow later but not shrink.</p>

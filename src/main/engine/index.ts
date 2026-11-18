@@ -29,21 +29,59 @@ function defaults(): EngineConfig {
   return { cpus: Math.max(2, Math.min(4, Math.floor(host.cpus / 2))), memoryGiB: Math.max(2, Math.min(4, Math.floor(host.memoryGiB / 2))), diskGiB: 64, rosetta: host.rosetta, autoStart: true, keepRunning: false, kind: 'standard', onDemand: false };
 }
 
-export function engineConfig(): EngineConfig {
+/** CPUs, memory and disk: on a Mac each engine keeps its own (Lite and Standard are two VMs with their own disks), so a
+ * switch brings back that engine's sizes, never the other's — Lima refuses a disk smaller than its own. On Windows Lite
+ * is the same WSL distro, so one set. */
+type Resources = Pick<EngineConfig, 'cpus' | 'memoryGiB' | 'diskGiB'>;
+type Saved = Partial<EngineConfig> & { kinds?: Partial<Record<EngineConfig['kind'], Partial<Resources>>> };
+const perKind = process.platform === 'darwin';
+const pickRes = (c: Resources): Resources => ({ cpus: c.cpus, memoryGiB: c.memoryGiB, diskGiB: c.diskGiB });
+
+/** The settings, with the sizes of the engine in use — or of `forKind` (Move between engines starts the other one). */
+export function engineConfig(forKind?: EngineConfig['kind']): EngineConfig {
   const d = defaults();
-  const s = store.extra<Partial<EngineConfig>>(KEY) ?? {};
+  const s = store.extra<Saved>(KEY) ?? {};
   const int = (v: unknown, min: number, max: number, fallback: number) => (Number.isFinite(v) ? Math.min(max, Math.max(min, Math.round(v as number))) : fallback);
+  // Lite runs on macOS and Windows (#106); elsewhere the choice stays Standard.
+  const kind = s.kind === 'lite' && (process.platform === 'darwin' || process.platform === 'win32') ? 'lite' : 'standard';
+  const sizesOf = forKind ?? kind;
+  // Before sizes were kept per engine (no `kinds` yet), the flat ones belong to the engine in use.
+  const r: Partial<Resources> = perKind && s.kinds ? (s.kinds[sizesOf] ?? {}) : sizesOf === kind ? s : {};
   return {
-    cpus: int(s.cpus, 1, host.cpus, d.cpus),
-    memoryGiB: int(s.memoryGiB, 1, Math.max(1, host.memoryGiB - 2), d.memoryGiB),
-    diskGiB: int(s.diskGiB, 16, 2048, d.diskGiB),
+    cpus: int(r.cpus, 1, host.cpus, d.cpus),
+    memoryGiB: int(r.memoryGiB, 1, Math.max(1, host.memoryGiB - 2), d.memoryGiB),
+    diskGiB: int(r.diskGiB, 16, 2048, d.diskGiB),
     rosetta: host.rosetta && s.rosetta !== false,
     autoStart: s.autoStart !== false,
     keepRunning: s.keepRunning === true,
-    // Lite runs on macOS for now (docatz-engine); elsewhere the choice stays Standard.
-    kind: s.kind === 'lite' && (process.platform === 'darwin' || process.platform === 'win32') ? 'lite' : 'standard',
+    kind,
     onDemand: isLinux && s.onDemand === true,
   };
+}
+
+/** Saves the settings; on a Mac the sizes go to the engine in use, and a switch leaves each engine's own sizes where they
+ * were (the new one gets what it had, or its defaults). */
+function saveConfig(next: EngineConfig, before = engineConfig()): void {
+  const s = store.extra<Saved>(KEY) ?? {};
+  if (!perKind) return store.setExtra(KEY, next);
+  const kinds = { ...(s.kinds ?? { [before.kind]: pickRes(before) }) };
+  if (next.kind === before.kind) kinds[next.kind] = pickRes(next);
+  store.setExtra(KEY, { ...s, ...next, kinds });
+  if (next.kind !== before.kind) store.setExtra(KEY, { ...s, ...next, kinds, ...pickRes(engineConfig()) });
+}
+
+/** A Mac engine whose sizes were never saved (the first switch to it) or whose disk is bigger than saved takes its VM's
+ * own: the window then shows what the engine really has, and a change never asks Lima for a smaller disk. */
+function adoptSizes(kind: EngineConfig['kind'], running: Resources | null): void {
+  if (!perKind || !running) return;
+  const s = store.extra<Saved>(KEY) ?? {};
+  const c = engineConfig();
+  // Settings from before per-engine sizes count as the engine in use's own (a change saved while it ran stays pending).
+  const have = s.kinds ? s.kinds[kind] : kind === c.kind ? pickRes(c) : undefined;
+  const sizes = have ? { ...pickRes(c), diskGiB: Math.max(c.diskGiB, running.diskGiB) } : pickRes(running);
+  if (have && sizes.diskGiB === c.diskGiB) return;
+  const kinds = { ...(s.kinds ?? {}), [kind]: sizes };
+  store.setExtra(KEY, { ...s, kinds, ...(kind === c.kind ? sizes : {}) });
 }
 
 export class Engine {
@@ -72,6 +110,7 @@ export class Engine {
   async state(): Promise<EngineState> {
     const b = await this.backend.status().catch((e): BackendStatus => ({ status: 'error', message: (e as Error).message, manager: '', dir: '', running: null }));
     this.last = b;
+    if (b.running) adoptSizes(engineConfig().kind, { cpus: b.running.cpus, memoryGiB: b.running.memoryGiB, diskGiB: b.running.diskGiB });
     let status = this.busy ?? b.status;
     let message = this.task?.error ?? b.message;
     // Asleep (Lite / Linux on-demand, #106): a ping would wake it — the state comes from the manager alone.
@@ -117,6 +156,7 @@ export class Engine {
       config: c,
       pending: b.status === 'running' || b.status === 'stopped' ? pending : [],
       host,
+      diskMinGiB: Math.max(16, b.running?.diskGiB ?? 0),
       dockerHost: dockerHost(),
       docker: status === 'running' ? this.dockerInfo : null,
       vm: b.manager ? { manager: b.manager, dir: b.dir, diskBytes } : null,
@@ -267,8 +307,11 @@ export class Engine {
       if (!this.backend.setOnDemand) throw new Error('Starting Docker only when it is used is for Linux');
       await this.backend.setOnDemand(patch.onDemand);
     }
-    const next = { ...engineConfig(), ...patch };
-    store.setExtra(KEY, next);
+    const before = engineConfig();
+    // A disk never shrinks (Lima and Lite only grow one): below the VM's own size keeps that size.
+    const floor = this.last?.running?.diskGiB ?? 0;
+    const next = { ...before, ...patch, ...(patch.diskGiB !== undefined && patch.kind === undefined ? { diskGiB: Math.max(patch.diskGiB, floor) } : {}) };
+    saveConfig(next, before);
     // A stopped VM takes the values now; a running one at its next start (the window lists them as pending).
     if (this.last?.status !== 'running' && (patch.cpus !== undefined || patch.memoryGiB !== undefined || patch.diskGiB !== undefined || patch.rosetta !== undefined)) await this.backend.configure(engineConfig());
     return this.state();

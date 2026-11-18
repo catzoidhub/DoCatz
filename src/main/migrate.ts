@@ -132,7 +132,7 @@ let otherStarted = false;
 let otherTimer: ReturnType<typeof setTimeout> | null = null;
 async function startOther(): Promise<string> {
   if (otherTimer) clearTimeout(otherTimer);
-  const host = otherKind() === 'lite' ? await startLiteForMove(engineConfig()) : await startStandardForMove();
+  const host = otherKind() === 'lite' ? await startLiteForMove(engineConfig('lite')) : await startStandardForMove();
   if (!host) throw new Error(`${otherName()} has nothing to move yet`);
   otherStarted = true;
   otherTimer = setTimeout(() => void stopOther(), 5 * 60_000);

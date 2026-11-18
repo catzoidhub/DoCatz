@@ -305,6 +305,8 @@ export interface EngineState {
   pending: string[];
   /** This computer's limits for the sliders. */
   host: { cpus: number; memoryGiB: number; arch: string; rosetta: boolean };
+  /** The smallest disk the engine in use can take: its VM's own size (a disk only grows), at least 16 GB. */
+  diskMinGiB: number;
   /** DOCKER_HOST for the engine: unix:///…/docker.sock or npipe:////./pipe/docatz_engine. */
   dockerHost: string;
   /** Docker inside the VM, when it answers. */
