@@ -772,7 +772,7 @@ export interface DcGateway {
 
 // ------------------------------------------------------------ move from another Docker (#11)
 
-export type DcMigrateSourceId = 'docker-desktop' | 'orbstack' | 'colima' | 'rancher' | 'podman' | 'docatz-other';
+export type DcMigrateSourceId = 'docker-desktop' | 'orbstack' | 'colima' | 'rancher' | 'podman' | 'docatz-other' | 'kiri';
 /** Another Docker engine on this computer: running (with its address) or installed and stopped. */
 export interface DcMigrateSource {
   id: DcMigrateSourceId;

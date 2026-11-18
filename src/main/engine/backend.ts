@@ -53,7 +53,8 @@ export interface Backend {
    * While asleep nothing here may touch that socket (a ping would wake it): `sleeping()` answers from the VM manager.
    */
   sleeping?(): Promise<boolean>;
-  sleep?(): Promise<void>;
+  /** `maxConnections`: the Docker connections DoCatz itself holds (its events stream); more open = someone is using it, refused. */
+  sleep?(maxConnections?: number): Promise<void>;
   /** Stops anything DoCatz itself keeps running for the engine (Windows: the relay) when DoCatz quits. */
   dispose(): void;
 }

@@ -368,7 +368,7 @@ export function readActions(api: DoCatzApi, s: Scopes, more: EngineReads): Actio
     read('list_migrate_sources', `Other Docker engines on this computer that images and volumes can be moved from (${isLinux ? 'Docker Desktop, Rancher Desktop, Colima, Podman' : isWin ? 'Docker Desktop, Rancher Desktop' : 'Docker Desktop, OrbStack, Colima, Rancher Desktop'}): running or stopped; and how a copy under way goes (check it after migrate_run and tell the user).`, OBJECT(), async () => {
       return { sources: (await api.migrateSources()).map((m) => ({ id: m.id, name: m.name, running: m.running, version: m.version })), copying: taskOut(more.tasks().migrate) };
     }),
-    read('migrate_inventory', 'What another Docker engine holds: tagged images and named volumes, with their sizes and whether DoCatz has them already. It must be running.', OBJECT({ source: { type: 'string', enum: ['docker-desktop', 'orbstack', 'colima', 'rancher', 'podman'], description: 'The engine (see list_migrate_sources).' } }, ['source']), async (a) => {
+    read('migrate_inventory', 'What another Docker engine holds: tagged images and named volumes, with their sizes and whether DoCatz has them already. It must be running.', OBJECT({ source: { type: 'string', enum: ['docker-desktop', 'orbstack', 'colima', 'rancher', 'podman', 'kiri', 'docatz-other'], description: 'The engine (see list_migrate_sources).' } }, ['source']), async (a) => {
       resourcesOff();
       const m = await api.migrateInventory(a.source as Parameters<DoCatzApi['migrateInventory']>[0]);
       return { images: m.images.map((i) => ({ ref: i.ref, size: i.size, inDocatz: i.inDocatz })), volumes: m.volumes.map((v) => ({ name: v.name, size: v.size, usedBy: v.usedBy, inDocatz: v.inDocatz })) };

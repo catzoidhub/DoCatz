@@ -17,7 +17,7 @@ import { learnProject } from './frameworks';
 export type EngineLike = Pick<Engine, 'up' | 'state' | 'start' | 'stop' | 'restart' | 'reset' | 'configure' | 'cancel' | 'adopt' | 'setupWsl' | 'log' | 'setContext' | 'installCli' | 'setPath' | 'dispose'> & {
   onChange: (s: EngineState) => void;
   onUp: () => void;
-  backend: { watchMounts?: (folders: string[]) => void; trim?: () => Promise<void>; sleeping?: () => Promise<boolean>; sleep?: () => Promise<void> };
+  backend: { watchMounts?: (folders: string[]) => void; trim?: () => Promise<void>; sleeping?: () => Promise<boolean>; sleep?: (maxConnections?: number) => Promise<void> };
 };
 
 export class EngineHost {
@@ -157,8 +157,16 @@ export class EngineHost {
     this.idleSince ??= Date.now();
     if (Date.now() - Math.max(this.idleSince, this.lastActivity) < EngineHost.IDLE_SLEEP_MS) return;
     this.idleSince = null;
+    // "Nobody using it": docatz-vmm refuses while more Docker connections are open than DoCatz's own events stream (a
+    // quiet `docker build`, a CLI session) — then the 15 minutes start again.
+    try {
+      await b.sleep(this.stopEvents ? 1 : 0);
+    } catch (e) {
+      if (!/in use/i.test((e as Error).message)) console.warn('idle sleep:', (e as Error).message);
+      return;
+    }
+    // Its events stream ended with the sleep; it comes back once the engine answers again (refresh).
     this.stopWatching();
-    await b.sleep().catch((e) => console.warn('idle sleep:', (e as Error).message));
     this.onEngine(await this.engine.state());
     void this.refresh();
   }

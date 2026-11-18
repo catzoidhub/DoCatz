@@ -68,6 +68,8 @@ function known(): { id: DcMigrateSourceId; name: string; hosts: string[]; instal
   return [
     { id: 'docker-desktop', name: 'Docker Desktop', hosts: [`unix://${join(home, '.docker', 'run', 'docker.sock')}`], installed: () => existsSync('/Applications/Docker.app') },
     { id: 'orbstack', name: 'OrbStack', hosts: [`unix://${join(home, '.orbstack', 'run', 'docker.sock')}`], installed: () => existsSync('/Applications/OrbStack.app') || existsSync(join(home, 'Applications', 'OrbStack.app')) },
+    // Kiri (runkiri.com, macOS): its own daemon behind a Docker API socket in ~/.kiri/run; `kiri ui --start` starts it.
+    { id: 'kiri', name: 'Kiri', hosts: [`unix://${join(home, '.kiri', 'run', 'docker.sock')}`], installed: () => ['/usr/local/bin/kiri', '/opt/homebrew/bin/kiri', '/Applications/Kiri.app'].some(existsSync) || existsSync(join(home, '.kiri', 'bin')), hint: 'Start it: kiri ui --start' },
     { id: 'colima', name: 'Colima', hosts: colima, installed: () => colima.length > 0 || ['/opt/homebrew/bin/colima', '/usr/local/bin/colima'].some(existsSync) },
     { id: 'rancher', name: 'Rancher Desktop', hosts: [`unix://${join(home, '.rd', 'docker.sock')}`], installed: () => existsSync('/Applications/Rancher Desktop.app') },
   ];

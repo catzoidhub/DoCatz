@@ -140,7 +140,7 @@ export class LiteBackend implements Backend {
     const running = c ? { cpus: c.cpus, memoryGiB: Math.round(c.memoryMiB / 1024), diskGiB: c.diskGiB || Math.round(statSync(dataDisk()).size / 1024 ** 3), rosetta: c.rosetta } : null;
     if (!s || s.state === 'stopped') return { status: 'stopped', message: '', manager, dir: vmDir(), running };
     const status = s.state === 'running' ? 'running' : s.state === 'error' ? 'error' : s.state;
-    const message = status === 'error' ? 'The Lite VM stopped with an error — see the engine log, or Reset' : status === 'sleeping' ? 'Asleep after a while with nothing running; it wakes in about 2 s when something uses Docker.' : '';
+    const message = status === 'error' ? 'The Lite VM stopped with an error — see the engine log, or Reset' : status === 'sleeping' ? 'Asleep after a while with nothing running; it wakes in about 1 s when something uses Docker.' : '';
     return { status, message, manager, dir: vmDir(), running };
   }
 
@@ -240,8 +240,8 @@ export class LiteBackend implements Backend {
   }
 
   /** Idle sleep (docatz-vmm `sleep`): the guest stops, its memory goes back to the Mac, the socket stays and wakes it. */
-  async sleep(): Promise<void> {
-    await control('sleep', { timeoutSec: 20 }, 40_000);
+  async sleep(maxConnections = 0): Promise<void> {
+    await control('sleep', { timeoutSec: 20, maxConnections }, 40_000);
   }
 
   async reset(): Promise<void> {

@@ -23,8 +23,8 @@ const ENGINE_ROWS: [string, string, string][] = [
   ['Linux inside', 'Ubuntu LTS, managed by Lima', 'Alpine, DoCatz’s own small VM'],
   ['First download', 'about 950 MB', 'about 220 MB'],
   ['Memory when idle', 'about 2.8 GB', 'about 430 MB'],
-  ['Start until Docker answers', 'about 27 s', 'about 3 s (9 s the first time)'],
-  ['After 15 minutes with nothing running', 'Keeps running', 'Sleeps and gives its memory back; wakes in about 2 s'],
+  ['Start until Docker answers', 'about 27 s', 'about 1 s'],
+  ['After 15 minutes with nothing running', 'Keeps running', 'Sleeps and gives its memory back; wakes in about 1 s'],
   ['Compatibility', 'Full', 'Most images and compose projects (beta)'],
 ];
 /** Standard ⇄ Lite (TODO #106, beta): macOS only for now. */

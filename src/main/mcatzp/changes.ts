@@ -515,7 +515,7 @@ export function changeActions(api: DoCatzApi, scopes: Scopes, reads: EngineReads
       'migrate_run',
       'Move from another Docker',
       'Copies images and volumes from another Docker engine onto DoCatz\'s; the other keeps them. It may take long: the answer comes as soon as it can and it goes on, showing in Engine. cancel_migrate stops it.',
-      OBJECT({ source: { type: 'string', enum: ['docker-desktop', 'orbstack', 'colima', 'rancher', 'podman'], description: 'The engine (see list_migrate_sources).' }, images: { type: 'array', maxItems: 200, items: S('An image from migrate_inventory.') }, volumes: { type: 'array', maxItems: 200, items: S('A volume from migrate_inventory.') } }, ['source']),
+      OBJECT({ source: { type: 'string', enum: ['docker-desktop', 'orbstack', 'colima', 'rancher', 'podman', 'kiri', 'docatz-other'], description: 'The engine (see list_migrate_sources).' }, images: { type: 'array', maxItems: 200, items: S('An image from migrate_inventory.') }, volumes: { type: 'array', maxItems: 200, items: S('A volume from migrate_inventory.') } }, ['source']),
       async (a) => {
         resources();
         const images = (a.images as string[] | undefined) ?? [];
