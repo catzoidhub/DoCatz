@@ -247,6 +247,16 @@ export interface TaskProgress {
 // ------------------------------------------------------------ engine
 
 export type EngineBackendId = 'lima' | 'wsl' | 'system' | 'lite';
+/** Windows: "Use less memory for WSL" — what %USERPROFILE%.wslconfig says now. */
+export interface DcWslMemory {
+  file: string;
+  /** Both settings hold DoCatz's values. */
+  on: boolean;
+  /** WSLg (Linux GUI apps) is on. */
+  gui: boolean;
+  /** autoMemoryReclaim: disabled, gradual or dropcache. */
+  reclaim: string;
+}
 export type EngineStatus = 'missing' | 'stopped' | 'starting' | 'running' | 'stopping' | 'error' | 'unsupported' | 'sleeping';
 export interface EngineConfig {
   cpus: number;
@@ -982,6 +992,10 @@ export interface DoCatzApi {
   engineSetupWsl(): Promise<void>;
   /** Asks, then restarts the computer (to finish installing WSL); false when the user chose Later. */
   restartComputer(): Promise<boolean>;
+  /** Windows: the two WSL-wide memory settings in .wslconfig (no WSLg, memory given back); null on other platforms. */
+  wslMemory(): Promise<DcWslMemory | null>;
+  /** Asks, writes or takes back the two settings, then restarts WSL (every distro) and the engine. */
+  wslMemorySet(on: boolean): Promise<DcWslMemory | null>;
   /** The VM manager's own log (setup / start problems). */
   engineLog(): Promise<string>;
   /** Makes the `docatz` docker context; `use` makes it the current one (false: back to `default`). */
@@ -1093,7 +1107,7 @@ export interface DoCatzApi {
 /** Every method of the bridge, registered as `docatz:<name>` IPC handlers. */
 export const API_METHODS: (keyof DoCatzApi)[] = [
   'appInfo', 'aboutInfo', 'updateState', 'updateCheck', 'updateNotes', 'updateDownload', 'updateCancel', 'updateSkip', 'updateInstall', 'updateConfigure', 'ratingSend', 'ratingRefresh', 'reportPreview', 'reportSend', 'captureWindow', 'reportError', 'reportSettings', 'reportConfigure', 'uninstallPlan', 'uninstallRun', 'settings', 'setSettings', 'setAiKey', 'aiModels', 'aiProbe', 'aiTest', 'aiCancel', 'aiAsk', 'aiPreviewAsk', 'aiExplainLog', 'aiPreviewLog', 'aiFile', 'aiPreviewFile', 'openUrl', 'browsers', 'reveal', 'openSibling', 'mcatzpActivity', 'mcatzpClearActivity', 'mcatzpRevoke', 'mcatzpSetup', 'mcatzpInstall', 'mcatzpUninstall', 'mcatzpInstallCancel', 'mcatzpApprovals', 'mcatzpTargets', 'mcatzpAddToClient', 'mcatzpRemoveFromClient', 'mcatzpUpdate', 'mcatzpPending', 'mcatzpAnswer', 'copyText', 'apiSource', 'siblingVersions', 'migrateSources', 'migrateInventory', 'migrateRun', 'migrateCancel', 'devcatzGateways', 'databases', 'siblingInstall', 'siblingInstallCancel', 'runInTerminal',
-  'engineState', 'engineStart', 'engineStop', 'engineRestart', 'engineReset', 'engineConfigure', 'engineCancel', 'engineSetupWsl', 'restartComputer', 'engineLog', 'contextSet', 'cliInstall', 'cliPath', 'diskUsage',
+  'engineState', 'engineStart', 'engineStop', 'engineRestart', 'engineReset', 'engineConfigure', 'engineCancel', 'engineSetupWsl', 'restartComputer', 'wslMemory', 'wslMemorySet', 'engineLog', 'contextSet', 'cliInstall', 'cliPath', 'diskUsage',
   'containers', 'container', 'containerEnv', 'containerAction', 'containerRemove', 'stats', 'logsFollow', 'logsStop', 'termOpen', 'termInput', 'termResize', 'termClose', 'files', 'fileSave', 'projects', 'composePick', 'composeRun', 'composeProject', 'runCancel', 'activeJobs', 'k8sState', 'k8sStart', 'k8sStop', 'k8sRemove', 'k8sWorkloads', 'k8sDeletePod', 'k8sPodLogs', 'k8sInstallKubectl', 'readText', 'writeText',
   'images', 'imageRemove', 'imagePull', 'volumes', 'volumeRemove', 'volumeWriters', 'volumeExport', 'volumeImportPick', 'volumeImport', 'volumeCancel', 'imageExport', 'imageImportPick', 'imageImport', 'networks', 'networkRemove', 'prunePreview', 'prune',
   'projectPrefs', 'setProjectPrefs',

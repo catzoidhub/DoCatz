@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue';
-import type { DcDiskUsage, DcMigrateSource, DcPruneKind, EngineConfig } from '@shared/types';
+import type { DcDiskUsage, DcMigrateSource, DcPruneKind, DcWslMemory, EngineConfig } from '@shared/types';
 import { words } from '@shared/platform';
 import { api, attempt, bytes, changes, engine, engineUp, notify } from '../store';
 import CatMood from './CatMood.vue';
@@ -94,6 +94,17 @@ async function lookAgain() {
 }
 watch(engineUp, (up) => up && void lookAgain(), { immediate: true });
 const STATUS: Record<string, string> = { running: 'Running', stopped: 'Stopped', starting: 'Starting…', stopping: 'Stopping…', missing: 'Not set up', error: 'Needs attention', unsupported: 'Not available', sleeping: 'Sleeping' };
+
+// Windows: "Use less memory for WSL" (.wslconfig, WSL-wide; asked first in a dialog, then WSL restarts).
+const wslMem = ref<DcWslMemory | null>(null);
+const wslMemBusy = ref(false);
+watch(isWsl, (w) => w && void api.wslMemory().then((m) => (wslMem.value = m)).catch(() => undefined), { immediate: true });
+async function setWslMem(on: boolean) {
+  wslMemBusy.value = true;
+  const r = await attempt(() => api.wslMemorySet(on));
+  wslMem.value = r ?? (await api.wslMemory().catch(() => wslMem.value));
+  wslMemBusy.value = false;
+}
 
 async function set(patch: Partial<EngineConfig>) {
   const r = await attempt(() => api.engineConfigure(patch));
@@ -271,6 +282,13 @@ const copy = (t: string) => {
               <input type="checkbox" class="toggle toggle-sm toggle-primary" :checked="c.onDemand" :disabled="!!busy" @change="set({ onDemand: ($event.target as HTMLInputElement).checked })" />
             </label>
             <p v-else class="text-sm opacity-70">WSL 2 shares one set of limits between every distro: set them in <span class="font-mono">%USERPROFILE%\.wslconfig</span> (memory, processors), then restart the engine.</p>
+            <label v-if="isWsl && wslMem" class="opt-row cursor-pointer">
+              <span class="flex flex-col">
+                <span class="label-caps">Use less memory for WSL</span>
+                <span class="text-xs opacity-50">Turns off Linux apps with windows (WSLg) and gives memory Linux no longer uses back to Windows — about 1.4 GB down to about 650 MB on DoCatz’s test PC. For every WSL distro on this PC; WSL restarts once.<template v-if="!wslMem.on && (!wslMem.gui || wslMem.reclaim !== 'disabled')"> Now: WSLg {{ wslMem.gui ? 'on' : 'off' }}, memory reclaim {{ wslMem.reclaim }}.</template></span>
+              </span>
+              <input type="checkbox" class="toggle toggle-sm toggle-primary" :checked="wslMem.on" :disabled="!!busy || wslMemBusy" @change="setWslMem(($event.target as HTMLInputElement).checked)" />
+            </label>
             <label class="opt-row cursor-pointer">
               <span class="flex flex-col"><span class="label-caps">Start with DoCatz</span><span class="text-xs opacity-50">Starts the engine when DoCatz opens.</span></span>
               <input type="checkbox" class="toggle toggle-sm toggle-primary" :checked="c.autoStart" @change="set({ autoStart: ($event.target as HTMLInputElement).checked })" />

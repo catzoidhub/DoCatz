@@ -27,6 +27,7 @@ import { DockerError } from './docker/client';
 import * as ops from './docker/ops';
 import { EngineHost } from './enginehost';
 import { engineConfig } from './engine';
+import { setWslMemory, wslMemory } from './engine/wslconfig';
 import { HelperClient } from './helperproto';
 import { ensureHelper, LOGIN_FLAG, removeHelper, RemoteEngine, startHelperFromLogin } from './helperctl';
 import { bridgeWrittenByHelper, forwardBridgeMcatzp } from './bridge';
@@ -654,6 +655,31 @@ function api(): DoCatzApi {
       if (r.response !== 0) return false;
       await run('shutdown.exe', ['/r', '/t', '5', '/c', 'DoCatz: restarting to finish installing WSL'], { timeout: 15_000 });
       return true;
+    },
+    wslMemory: async () => (process.platform === 'win32' ? wslMemory() : null),
+    // "Use less memory for WSL" (#106): WSL-wide, so asked first; WSL restarts for it to hold (every distro on the PC).
+    wslMemorySet: async (on) => {
+      if (process.platform !== 'win32') return null;
+      const r = await messageBox(win(), {
+        type: 'question',
+        buttons: [on ? 'Change and Restart WSL' : 'Undo and Restart WSL', 'Cancel'],
+        defaultId: 0,
+        cancelId: 1,
+        message: on ? 'Use less memory for WSL?' : 'Go back to WSL’s own memory settings?',
+        detail: on
+          ? `DoCatz writes two settings into ${wslMemory().file}, for every WSL distro on this PC:\n\n• guiApplications=false — Linux apps with windows (WSLg) no longer open from WSL.\n• autoMemoryReclaim=dropcache — memory Linux no longer uses goes back to Windows.\n\nOn DoCatz’s test PC the engine’s memory went from about 1.4 GB to about 650 MB. WSL restarts now: running containers stop and start again, and any other WSL distro you have open closes.`
+          : `DoCatz removes its two settings from ${wslMemory().file}; the rest of the file stays. WSL restarts now: running containers stop and start again, and any other WSL distro you have open closes.`,
+      });
+      if (r.response !== 0) return wslMemory();
+      const next = setWslMemory(on === true);
+      const was = await engine.state();
+      const up = was.status === 'running' || was.status === 'sleeping';
+      if (up) await engine.stop().catch((e) => console.warn('engine stop:', (e as Error).message));
+      await run('wsl.exe', ['--shutdown'], { timeout: 60_000 });
+      // WSL reads .wslconfig when its VM starts, a few seconds after it has gone.
+      await new Promise((res) => setTimeout(res, 8000));
+      if (up) void engine.start().catch((e) => console.warn('engine start:', (e as Error).message));
+      return next;
     },
     engineLog: () => engine.log(),
     contextSet: (use) => engine.setContext(use),

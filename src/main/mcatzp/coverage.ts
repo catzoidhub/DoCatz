@@ -88,6 +88,8 @@ export const MCATZP_COVERAGE: Record<keyof DoCatzApi, string> = {
   engineCancel: 'tool: cancel_engine_start',
   engineSetupWsl: 'tool: install_wsl',
   restartComputer: 'never: restarts the whole computer',
+  wslMemory: 'not a tool: Engine → Settings shows it',
+  wslMemorySet: 'never: changes WSL for every distro on the PC and restarts them; the user decides',
   engineLog: 'tool: get_engine_log',
   contextSet: 'tool: set_docker_context',
   cliInstall: 'tool: install_cli',
