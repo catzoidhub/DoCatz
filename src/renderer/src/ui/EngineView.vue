@@ -21,7 +21,7 @@ const isMac = computed(() => s.value?.backend === 'lima' || s.value?.backend ===
 /** Standard and Lite side by side (TODO #106): what each is, and DoCatz's own measured numbers. */
 const ENGINE_ROWS: [string, string, string][] = [
   ['Linux inside', 'Ubuntu LTS, managed by Lima', 'Alpine, DoCatz’s own small VM'],
-  ['First download', 'about 950 MB', 'about 220 MB'],
+  ['First download', 'about 950 MB', 'about 90 MB'],
   ['Memory when idle', 'about 2.8 GB', 'about 430 MB'],
   ['Start until Docker answers', 'about 27 s', 'about 1 s'],
   ['After 15 minutes with nothing running', 'Keeps running', 'Sleeps and gives its memory back; wakes in about 1 s'],

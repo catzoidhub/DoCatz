@@ -108,7 +108,7 @@ export class LiteBackend implements Backend {
       cpSync(guest, guestDir(), { recursive: true });
     } else {
       const pk = litePackages();
-      if (!pk) throw new Error('The Lite engine is not released yet — switch back to Standard in Engine');
+      if (!pk) throw new Error('The Lite engine has no build for this Mac — switch back to Standard in Engine');
       for (const [i, p] of [pk.vmm, pk.guest].entries()) {
         const file = await fetchPinned(p, (f, got, total) => r.detail(`Downloading the Lite engine (${i + 1} of 2): ${(got / 1e6).toFixed(0)} of ${(total / 1e6).toFixed(0)} MB`, f), r.signal);
         const x = await run('/usr/bin/tar', ['-xzf', file, '-C', i === 0 ? dir('bin') : guestDir()], { timeout: 300_000 });
@@ -134,7 +134,7 @@ export class LiteBackend implements Backend {
     const manager = `DoCatz Lite ${LITE.version}`;
     if (process.platform !== 'darwin') return { status: 'unsupported', message: 'Lite runs on macOS for now', manager, dir: '', running: null };
     if (Number(process.getSystemVersion().split('.')[0]) < 13) return { status: 'unsupported', message: 'DoCatz needs macOS 13 or newer (Apple’s Virtualization framework)', manager, dir: '', running: null };
-    if (!existsSync(dataDisk())) return { status: 'missing', message: 'No Lite engine yet — Start sets it up (about 300 MB to download the first time).', manager, dir: vmDir(), running: null };
+    if (!existsSync(dataDisk())) return { status: 'missing', message: 'No Lite engine yet — Start sets it up (about 90 MB to download the first time).', manager, dir: vmDir(), running: null };
     const s = await control<VmmStatus>('status', undefined, 3000).catch(() => null);
     const c = this.saved();
     const running = c ? { cpus: c.cpus, memoryGiB: Math.round(c.memoryMiB / 1024), diskGiB: c.diskGiB || Math.round(statSync(dataDisk()).size / 1024 ** 3), rosetta: c.rosetta } : null;
