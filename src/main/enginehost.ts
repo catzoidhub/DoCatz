@@ -78,6 +78,12 @@ export class EngineHost {
         this.containers = [];
       }
       const containers = this.containers;
+      // Frameworks of services built from source (their marks): learnt per project in the background, by whichever
+      // process lists — with the helper on, DoCatz's own list reads its own cache (it used to stay empty there).
+      if (containers.some((c) => c.project && !c.framework))
+        void this.projects()
+          .then((list) => list.forEach((p) => void learnProject(p.name, p.files, () => void this.refresh())))
+          .catch(() => undefined);
       if (!this.serving) return this.onList(containers);
       // Woken by someone using Docker (the VM was asleep): its events are followed again.
       if (!this.stopEvents && (await this.engine.up())) void this.watchEvents();
@@ -86,11 +92,6 @@ export class EngineHost {
       const streams = await updateDatabases(containers).catch((e) => (console.warn('databases:', (e as Error).message), []));
       const k8sHosts = await ops.k8sHosts().catch(() => []);
       await this.domains.setRoutes(containers, streams, k8sHosts).catch((e) => console.warn('routes:', (e as Error).message));
-      // Frameworks of services built from source (their marks): learnt per project in the background.
-      if (containers.some((c) => c.project && !c.framework))
-        void this.projects()
-          .then((list) => list.forEach((p) => void learnProject(p.name, p.files, () => void this.refresh())))
-          .catch(() => undefined);
       // Asleep counts as running for the other apps: their first use of the socket wakes it.
       const asleep = !containers.length && (await this.engine.backend.sleeping?.().catch(() => false));
       writeBridge(containers, containers.length || asleep || (await this.engine.up()) ? 'running' : 'stopped', { httpsPort: this.domains.httpsPort, httpPort: this.domains.httpPort });
