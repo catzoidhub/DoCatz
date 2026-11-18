@@ -28,7 +28,7 @@ import * as ops from './docker/ops';
 import { EngineHost } from './enginehost';
 import { engineConfig } from './engine';
 import { HelperClient } from './helperproto';
-import { ensureHelper, removeHelper, RemoteEngine } from './helperctl';
+import { ensureHelper, LOGIN_FLAG, removeHelper, RemoteEngine, startHelperFromLogin } from './helperctl';
 import { forwardBridgeMcatzp } from './bridge';
 import { devcatzGateways } from './gateways';
 import { Reporter } from './reporter';
@@ -166,7 +166,12 @@ function handleLink(raw: string): void {
 
 // exit, not quit: quit() lets this second process reach whenReady and flash a window of its own before it ends (on Linux
 // a docatz:// link starts one; found by DBCatz, 2026-11-10). The running DoCatz gets the link through second-instance.
-if (!app.requestSingleInstanceLock()) app.exit(0);
+// Windows' login item (#107): DoCatz.exe --docatz-engine-helper starts the engine helper and leaves at once — no lock,
+// no window. With the helper switched off since, it does nothing (the entry is removed when it is switched off).
+if (process.argv.includes(LOGIN_FLAG)) {
+  if (helperMode) startHelperFromLogin();
+  app.exit(0);
+} else if (!app.requestSingleInstanceLock()) app.exit(0);
 app.on('second-instance', (_e, argv) => {
   const link = argv.find((a) => a.startsWith('docatz://'));
   if (link) handleLink(link);
@@ -180,7 +185,10 @@ app.on('open-url', (e, url) => {
 app.on('activate', () => openWindow());
 // The engine and the menu bar stay when the window closes; Quit ends DoCatz (macOS keeps the VM running).
 app.on('window-all-closed', () => undefined);
+/** DoCatz is quitting or installing an update: the helper is not started again when its channel closes. */
+let leaving = false;
 app.on('before-quit', () => {
+  leaving = true;
   mcatzp?.quit();
   for (const stop of follows.values()) stop();
   for (const t of terms.values()) t.socket.destroy();
@@ -259,7 +267,9 @@ async function attachHelper(): Promise<void> {
       void syncNaming().then(() => refresh());
     } else if (e.event === 'list') void syncNaming().then(() => refresh());
   };
-  helper.onClose = () => setTimeout(() => void attachHelper().catch((e) => console.warn('engine helper:', (e as Error).message)), 2000);
+  // Not while DoCatz leaves or an update installs: reattaching there started a helper from the old DoCatz.exe next to the
+  // installer (Windows PC, 2026-11-18), which kept the old copy running and bridge.json naming it.
+  helper.onClose = () => setTimeout(() => !leaving && void attachHelper().catch((e) => console.warn('engine helper:', (e as Error).message)), 2000);
   await ensureHelper(helper);
   await syncNaming();
   // The MCatzP entry in bridge.json goes through the helper: one process writes the file.
@@ -839,6 +849,7 @@ app.whenReady().then(async () => {
   };
   // Windows: the installer cannot replace DoCatz.exe while the engine helper runs it; the new DoCatz starts it again.
   updater.beforeInstall = async () => {
+    leaving = true;
     if (process.platform === 'win32' && helper?.connected) {
       await helper.call('helper.quit', false).catch(() => undefined);
       await new Promise((r) => setTimeout(r, 1500));

@@ -10,8 +10,8 @@ import { HELPER_PROTOCOL, HelperClient } from './helperproto';
 import { isMac, isWin } from './platform';
 
 /**
- * DoCatz's side of the engine helper (#107): starting it (a per-user launchd agent on macOS; a detached process on
- * Windows and Linux until their own login items land), checking its version, stopping it, and RemoteEngine — the
+ * DoCatz's side of the engine helper (#107): starting it (a per-user launchd agent on macOS; on Windows a detached process
+ * plus a Run entry for login; on Linux a detached process until its login item lands), checking its version, stopping it, and RemoteEngine — the
  * Engine's methods answered by the helper over the control channel, so the rest of DoCatz uses one shape either way.
  */
 
@@ -76,6 +76,37 @@ ${env}
 const launchctl = (...args: string[]) => new Promise<{ code: number; out: string }>((resolve) => execFile('launchctl', args, { timeout: 20_000 }, (e, stdout, stderr) => resolve({ code: e ? ((e as { code?: number }).code ?? 1) : 0, out: `${stdout}${stderr}` })));
 const domain = () => `gui/${userInfo().uid}`;
 
+/**
+ * Windows' login item (#107): a value under HKCU\…\Run that starts DoCatz.exe with `--docatz-engine-helper` — per user, no
+ * administrator. A Run entry cannot carry the helper's environment (ELECTRON_RUN_AS_NODE …), so that DoCatz starts the
+ * helper and leaves at once, before any window (startHelperFromLogin). Written each time the helper starts, so a moved
+ * or updated DoCatz is the one it runs.
+ */
+const RUN_KEY = 'HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run';
+const RUN_VALUE = 'DoCatz Engine';
+export const LOGIN_FLAG = '--docatz-engine-helper';
+const reg = (...args: string[]) => new Promise<number>((resolve) => execFile('reg.exe', args, { timeout: 15_000, windowsHide: true }, (e) => resolve(e ? 1 : 0)));
+function runCommand(): string {
+  // A development run is electron.exe with the app folder first.
+  const parts = app.isPackaged ? [process.execPath, LOGIN_FLAG] : [process.execPath, app.getAppPath(), LOGIN_FLAG];
+  return parts.map((p) => (p.startsWith('--') ? p : `"${p}"`)).join(' ');
+}
+const writeLoginItem = () => reg('add', RUN_KEY, '/v', RUN_VALUE, '/t', 'REG_SZ', '/d', runCommand(), '/f');
+const removeLoginItem = () => reg('delete', RUN_KEY, '/v', RUN_VALUE, '/f');
+let loginItemSeen: boolean | null = null;
+
+/** Starts the helper as its own process (Windows, Linux), with the environment it runs in. */
+function spawnHelper(): void {
+  mkdirSync(join(app.getPath('userData'), 'logs'), { recursive: true });
+  const child = spawn(process.execPath, [helperScript()], { env: { ...process.env, ...helperEnv() }, detached: true, stdio: 'ignore', windowsHide: true });
+  child.unref();
+}
+
+/** DoCatz started by the login item: the helper starts (it leaves by itself when one already answers); no window. */
+export function startHelperFromLogin(): void {
+  spawnHelper();
+}
+
 /** Starts the helper: the launchd agent (written each time, so a moved or updated DoCatz is the one it runs) or a detached process. */
 async function launch(): Promise<void> {
   mkdirSync(join(app.getPath('userData'), 'logs'), { recursive: true });
@@ -87,8 +118,8 @@ async function launch(): Promise<void> {
     if (r.code !== 0) await launchctl('kickstart', '-k', `${domain()}/${LABEL}`);
     return;
   }
-  const child = spawn(process.execPath, [helperScript()], { env: { ...process.env, ...helperEnv() }, detached: true, stdio: 'ignore', windowsHide: true });
-  child.unref();
+  if (isWin) loginItemSeen = (await writeLoginItem()) === 0;
+  spawnHelper();
 }
 
 /** Connects to a running helper of this version, else (re)starts it and waits up to 20 s. */
@@ -120,9 +151,13 @@ export async function removeHelper(stopEngine: boolean): Promise<void> {
     await launchctl('bootout', `${domain()}/${LABEL}`);
     rmSync(plistPath(), { force: true });
   }
+  if (isWin) {
+    await removeLoginItem();
+    loginItemSeen = false;
+  }
 }
 
-export const helperInstalled = (): boolean => (isMac ? existsSync(plistPath()) : false);
+export const helperInstalled = (): boolean => (isMac ? existsSync(plistPath()) : isWin ? loginItemSeen === true : false);
 
 /** The Engine, answered by the helper. Its state changes arrive as the helper's `engine` events. */
 export class RemoteEngine implements EngineLike {
