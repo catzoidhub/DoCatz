@@ -124,5 +124,6 @@ defineExpose({ find, searching, focus: () => view?.focus() });
 </script>
 
 <template>
-  <div ref="host" class="code-editor selectable h-full min-h-0 overflow-hidden rounded-xl" />
+  <!-- not .code-editor: that is components/CodeEditor.vue's flex box (main.css), which shrank CodeMirror to its text's width -->
+  <div ref="host" class="cm-host selectable h-full min-h-0 w-full overflow-hidden rounded-xl" />
 </template>
