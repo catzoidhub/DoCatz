@@ -5,6 +5,7 @@ import type { EngineConfig } from '@shared/types';
 import { Cancelled } from '../download';
 import { runAsRootLinux, shq } from '../linuxadmin';
 import { LINUX_SOCKET } from '../paths';
+import { store } from '../store';
 import { lastLine, run } from '../proc';
 import type { Backend, BackendStatus, StepReporter } from './backend';
 
@@ -16,6 +17,10 @@ import type { Backend, BackendStatus, StepReporter } from './backend';
  * docker group, and since that applies from the next login the socket gets an ACL for them at once.
  * CPU / memory / disk are the computer's own (no settings), and Reset is not DoCatz's to do: the data is the system's.
  */
+
+/** On-demand Docker's permission (TODO #106): this user may stop docker.service without a password (the idle stop). */
+const POLKIT_RULE = '/etc/polkit-1/rules.d/50-docatz-docker-idle.rules';
+const onDemand = (): boolean => store.extra<{ onDemand?: boolean }>('engine')?.onDemand === true;
 
 const DOCKERD = ['/usr/bin/dockerd', '/usr/sbin/dockerd', '/usr/local/bin/dockerd', '/snap/bin/dockerd'];
 
@@ -79,6 +84,7 @@ export class LinuxBackend implements Backend {
     await this.probeSocket();
     const base = { manager: await this.version(), dir: this.installed() ? '/var/lib/docker' : '', running: null };
     if (!this.installed()) return { ...base, status: 'missing', message: 'DoCatz runs your containers on Docker Engine, which is not on this computer yet. DoCatz can install it from your package manager (docker.io and Docker Compose): one password prompt, then a few minutes.' };
+    if (await this.sleeping()) return { ...base, status: 'sleeping', message: 'Docker Engine is off until something uses it; it starts in about a second.' };
     const active = await systemctl('is-active', 'docker');
     if (active === 'activating') return { ...base, status: 'starting', message: '' };
     if (active === 'deactivating') return { ...base, status: 'stopping', message: '' };
@@ -88,6 +94,19 @@ export class LinuxBackend implements Backend {
   }
 
   async start(_config: EngineConfig, r: StepReporter): Promise<void> {
+    // On-demand and asleep: one connection to the socket starts it — no password.
+    if (await this.sleeping()) {
+      r.step(0, 'Starting Docker Engine');
+      await new Promise<void>((res) => {
+        const s = createConnection({ path: LINUX_SOCKET });
+        const done = () => (s.destroy(), res());
+        s.setTimeout(5000, done);
+        s.once('connect', done);
+        s.once('error', done);
+      });
+      for (let i = 0; i < 60 && (await systemctl('is-active', 'docker.service')) !== 'active'; i++) await new Promise((res) => setTimeout(res, 500));
+      return r.step(1);
+    }
     await this.probeSocket();
     r.step(0, this.installed() ? 'Waiting for your password' : 'Waiting for your password, then installing (a few minutes)');
     const user = shq(userInfo().username);
@@ -108,7 +127,7 @@ fi
     const res = await runAsRootLinux(
       `${install}groupadd -f docker
 usermod -aG docker ${user}
-systemctl enable --now docker
+${onDemand() ? 'systemctl start docker.socket docker.service' : 'systemctl enable --now docker'}
 for i in $(seq 1 30); do [ -S ${sock} ] && break; sleep 1; done
 command -v setfacl >/dev/null 2>&1 && setfacl -m u:${user}:rw ${sock} || true`,
       r.signal,
@@ -116,6 +135,49 @@ command -v setfacl >/dev/null 2>&1 && setfacl -m u:${user}:rw ${sock} || true`,
     if (r.signal.aborted) throw new Cancelled();
     if (!res.ok) throw new Error(res.cancelled ? 'Cancelled at the password prompt' : `Docker Engine: ${lastLine(res.message)}`);
     r.step(1);
+  }
+
+  /**
+   * On-demand Docker (TODO #106, Linux's lighter option): asleep = docker.service down while docker.socket listens, so
+   * the next connection starts it. Asked from systemd, never by touching the socket (that would start it).
+   */
+  async sleeping(): Promise<boolean> {
+    if (!onDemand()) return false;
+    const [service, socket] = await Promise.all([systemctl('is-active', 'docker.service'), systemctl('is-active', 'docker.socket')]);
+    return socket === 'active' && !['active', 'activating', 'reloading'].includes(service);
+  }
+
+  canSleep(): boolean {
+    return onDemand();
+  }
+
+  /** The idle stop: docker.service goes, docker.socket stays and starts it again on the next use (polkit rule, no password). */
+  async sleep(): Promise<void> {
+    const r = await run('systemctl', ['stop', '--no-ask-password', 'docker.service'], { timeout: 60_000 });
+    if (r.code !== 0) throw new Error(`Docker Engine did not stop for idle: ${lastLine(r.stderr)}`);
+  }
+
+  /** Turns on-demand Docker on (socket activation, not at boot, the idle stop's polkit rule) or back off — one password. */
+  async setOnDemand(on: boolean): Promise<void> {
+    const user = shq(userInfo().username);
+    const rule = `polkit.addRule(function (action, subject) {
+  if (action.id == "org.freedesktop.systemd1.manage-units" && action.lookup("unit") == "docker.service" &&
+      action.lookup("verb") == "stop" && subject.user == ${JSON.stringify(userInfo().username)}) return polkit.Result.YES;
+});`;
+    const script = on
+      ? `systemctl enable docker.socket
+systemctl disable docker.service
+systemctl start docker.socket
+mkdir -p /etc/polkit-1/rules.d
+cat > ${shq(POLKIT_RULE)} <<'DOCATZ_RULE'
+// DoCatz (on-demand Docker): ${user} may stop docker.service when nothing runs; docker.socket starts it again.
+${rule}
+DOCATZ_RULE
+chmod 644 ${shq(POLKIT_RULE)}`
+      : `rm -f ${shq(POLKIT_RULE)}
+systemctl enable --now docker.service`;
+    const res = await runAsRootLinux(script);
+    if (!res.ok) throw new Error(res.cancelled ? 'Cancelled at the password prompt' : `Docker Engine could not be changed: ${lastLine(res.message)}`);
   }
 
   async stop(): Promise<void> {

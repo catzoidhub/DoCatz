@@ -53,6 +53,10 @@ export interface Backend {
    * While asleep nothing here may touch that socket (a ping would wake it): `sleeping()` answers from the VM manager.
    */
   sleeping?(): Promise<boolean>;
+  /** Whether idle sleep applies now (Linux: only with on-demand Docker on). Missing = always. */
+  canSleep?(): boolean;
+  /** Linux: turns on-demand Docker on or off in the system (socket activation, the idle stop's permission). */
+  setOnDemand?(on: boolean): Promise<void>;
   /** `maxConnections`: the Docker connections DoCatz itself holds (its events stream); more open = someone is using it, refused. */
   sleep?(maxConnections?: number): Promise<void>;
   /** Stops anything DoCatz itself keeps running for the engine (Windows: the relay) when DoCatz quits. */

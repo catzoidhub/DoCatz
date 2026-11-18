@@ -26,7 +26,7 @@ const GiB = 1024 ** 3;
 const host = { cpus: hostCpus().length, memoryGiB: Math.round(totalmem() / GiB), arch: machineArch(), rosetta: process.platform === 'darwin' && machineArch() === 'arm64' };
 
 function defaults(): EngineConfig {
-  return { cpus: Math.max(2, Math.min(4, Math.floor(host.cpus / 2))), memoryGiB: Math.max(2, Math.min(4, Math.floor(host.memoryGiB / 2))), diskGiB: 64, rosetta: host.rosetta, autoStart: true, keepRunning: false, kind: 'standard' };
+  return { cpus: Math.max(2, Math.min(4, Math.floor(host.cpus / 2))), memoryGiB: Math.max(2, Math.min(4, Math.floor(host.memoryGiB / 2))), diskGiB: 64, rosetta: host.rosetta, autoStart: true, keepRunning: false, kind: 'standard', onDemand: false };
 }
 
 export function engineConfig(): EngineConfig {
@@ -42,6 +42,7 @@ export function engineConfig(): EngineConfig {
     keepRunning: s.keepRunning === true,
     // Lite runs on macOS for now (docatz-engine); elsewhere the choice stays Standard.
     kind: s.kind === 'lite' && process.platform === 'darwin' ? 'lite' : 'standard',
+    onDemand: isLinux && s.onDemand === true,
   };
 }
 
@@ -258,6 +259,11 @@ export class Engine {
   }
 
   async configure(patch: Partial<EngineConfig>): Promise<EngineState> {
+    // Linux: on-demand Docker changes the system's setup first (one password prompt); cancelled = nothing saved.
+    if (typeof patch.onDemand === 'boolean' && patch.onDemand !== engineConfig().onDemand) {
+      if (!this.backend.setOnDemand) throw new Error('Starting Docker only when it is used is for Linux');
+      await this.backend.setOnDemand(patch.onDemand);
+    }
     const next = { ...engineConfig(), ...patch };
     store.setExtra(KEY, next);
     // A stopped VM takes the values now; a running one at its next start (the window lists them as pending).

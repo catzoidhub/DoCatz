@@ -51,7 +51,8 @@ const STATUS: Record<string, string> = { running: 'Running', stopped: 'Stopped',
 
 async function set(patch: Partial<EngineConfig>) {
   const r = await attempt(() => api.engineConfigure(patch));
-  if (r) engine.value = r;
+  // Not saved (a cancelled password prompt for on-demand Docker): the switches go back to what is saved.
+  engine.value = r ?? (await api.engineState().catch(() => engine.value));
 }
 
 const df = ref<DcDiskUsage | null>(null);
@@ -192,6 +193,14 @@ const copy = (t: string) => {
               </label>
             </template>
             <p v-else-if="isSystem" class="text-sm opacity-70">Docker Engine runs on {{ words.thisComputer }} itself, with no VM in between: containers use its CPUs, memory and disk directly, so there are no limits to set here.</p>
+            <!-- Linux's lighter option (TODO #106): the system's Docker only while it is used. -->
+            <label v-if="isSystem" class="opt-row cursor-pointer">
+              <span class="flex flex-col">
+                <span class="label-caps">Start Docker only when it is used</span>
+                <span class="text-xs opacity-50">Docker Engine no longer starts with {{ words.thisComputer }}: the first docker command, DevCatz or DoCatz starts it in about a second, and DoCatz stops it after 15 minutes with no containers running — about 100 MB back while you do not use it. Changes the system’s Docker setup: your password, once.</span>
+              </span>
+              <input type="checkbox" class="toggle toggle-sm toggle-primary" :checked="c.onDemand" :disabled="!!busy" @change="set({ onDemand: ($event.target as HTMLInputElement).checked })" />
+            </label>
             <p v-else class="text-sm opacity-70">WSL 2 shares one set of limits between every distro: set them in <span class="font-mono">%USERPROFILE%\.wslconfig</span> (memory, processors), then restart the engine.</p>
             <label class="opt-row cursor-pointer">
               <span class="flex flex-col"><span class="label-caps">Start with DoCatz</span><span class="text-xs opacity-50">Starts the engine when DoCatz opens.</span></span>

@@ -266,6 +266,12 @@ export interface EngineConfig {
    * Linux) or Lite (beta, macOS for now: DoCatz's own small VM). Each keeps its own disk; switching restarts DoCatz.
    */
   kind: 'standard' | 'lite';
+  /**
+   * Linux (TODO #106, the lighter option there): the system's Docker Engine starts only when something uses it (socket
+   * activation: docker.socket on, docker.service not at boot) and DoCatz stops it after a while with no containers.
+   * Changes the system's Docker setup, so turning it on or off asks for the administrator password once.
+   */
+  onDemand: boolean;
 }
 export interface EnginePrereqs {
   /** SVM / VT-x on in the BIOS / UEFI; null when Windows does not say. */

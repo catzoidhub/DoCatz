@@ -17,7 +17,7 @@ import { learnProject } from './frameworks';
 export type EngineLike = Pick<Engine, 'up' | 'state' | 'start' | 'stop' | 'restart' | 'reset' | 'configure' | 'cancel' | 'adopt' | 'setupWsl' | 'log' | 'setContext' | 'installCli' | 'setPath' | 'dispose'> & {
   onChange: (s: EngineState) => void;
   onUp: () => void;
-  backend: { watchMounts?: (folders: string[]) => void; trim?: () => Promise<void>; sleeping?: () => Promise<boolean>; sleep?: (maxConnections?: number) => Promise<void> };
+  backend: { watchMounts?: (folders: string[]) => void; trim?: () => Promise<void>; sleeping?: () => Promise<boolean>; sleep?: (maxConnections?: number) => Promise<void>; canSleep?: () => boolean };
 };
 
 export class EngineHost {
@@ -146,7 +146,7 @@ export class EngineHost {
    */
   private async maybeSleep(containers: DcContainer[]): Promise<void> {
     const b = this.engine.backend;
-    if (!this.serving || !b.sleep) return;
+    if (!this.serving || !b.sleep || (b.canSleep && !b.canSleep())) return;
     const busy = containers.some((c) => c.state === 'running' && c.name !== 'docatz-router');
     if (busy) {
       this.idleSince = null;
