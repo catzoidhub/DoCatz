@@ -80,11 +80,78 @@ async function virtualizationOn(): Promise<boolean | null> {
 /** --exec: no login shell between wsl.exe and sh (it would expand `$gw`, `$3` … in the script before sh sees it). */
 const inDistro = (script: string, o: Parameters<typeof run>[2] = {}) => wsl(['-d', DISTRO, '-u', 'root', '--exec', 'sh', '-c', script], o);
 
+/** Windows Lite (TODO #106): the same distro, put to sleep when idle. */
+const lite = (): boolean => store.extra<{ kind?: string }>('engine')?.kind === 'lite';
+
 export class WslBackend implements Backend {
   readonly id = 'wsl' as const;
   readonly steps = ['Download the Linux image', 'Create the WSL distro', 'Start Docker', 'Connect to Docker'];
   private daemon: ChildProcess | null = null;
   private relay: Server | null = null;
+  /**
+   * Windows Lite (TODO #106): asleep = dockerd stopped and the distro terminated, so WSL 2's VM gives its memory back
+   * to Windows once nothing else uses it; \\.\pipe\docatz_engine stays, and the first connection to it wakes the
+   * engine (a few seconds) before it is passed on, as docatz-vmm does on macOS.
+   */
+  private asleep = false;
+  private waking: Promise<void> | null = null;
+  /** Docker connections through the pipe right now (the idle sleep waits while anyone but DoCatz uses it). */
+  private connections = 0;
+
+  canSleep(): boolean {
+    return lite();
+  }
+
+  async sleeping(): Promise<boolean> {
+    return this.asleep;
+  }
+
+  /** The idle sleep: refused while more pipe connections are open than `maxConnections`. */
+  async sleep(maxConnections = 0): Promise<void> {
+    if (this.connections > maxConnections) throw new Error('The engine is in use');
+    this.asleep = true;
+    await inDistro('pkill dockerd; true', { timeout: 30_000 }).catch(() => undefined);
+    this.daemon?.kill();
+    this.daemon = null;
+    await wsl(['--terminate', DISTRO]).catch(() => undefined);
+  }
+
+  /** dockerd started (or found) and answering; used by start and by a wake. */
+  private async startDaemon(signal?: AbortSignal): Promise<void> {
+    // Our wsl.exe can outlive the dockerd it started (WSL ended the distro while Windows slept, or dockerd died): Start
+    // then only waited, docker.log untouched, until the user chose Restart (DevCatz, Windows, 2026-11-10). Without a
+    // dockerd inside, ours goes and a new one starts.
+    if (this.daemon && this.daemon.exitCode === null && (await inDistro('pgrep -x dockerd >/dev/null', { timeout: 15_000 })).code !== 0) {
+      this.daemon.kill();
+      this.daemon = null;
+    }
+    if (!this.daemon || this.daemon.exitCode !== null) {
+      // A dockerd left from a DoCatz that did not quit cleanly (crashed, ended from Task Manager) holds the socket:
+      // ours would exit at once and the engine show as stopped while Docker answers. It goes first; ours is the one
+      // that keeps the distro alive and ends with DoCatz.
+      await inDistro('pkill -x dockerd 2>/dev/null || exit 0; i=0; while pgrep -x dockerd >/dev/null && [ $i -lt 40 ]; do sleep 0.5; i=$((i+1)); done; pkill -9 -x dockerd 2>/dev/null; rm -f /var/run/docker.pid; true', { timeout: 30_000 });
+      this.daemon = spawn(WSL, ['-d', DISTRO, '-u', 'root', '--exec', 'sh', '-c', DOCKERD], { windowsHide: true, stdio: 'ignore' });
+      this.daemon.on('exit', () => (this.daemon = null));
+    }
+    for (let i = 0; i < 60; i++) {
+      if (signal?.aborted) throw new Error('Cancelled');
+      if ((await inDistro('test -S /var/run/docker.sock && docker info >/dev/null 2>&1', { timeout: 15_000 })).code === 0) return;
+      if (i === 59 || !this.daemon) throw new Error(`Docker did not start inside WSL: ${lastLine(text((await inDistro('tail -n 20 /var/log/docker.log', { timeout: 15_000 })).stdout)) || 'see the engine log'}`);
+      await new Promise((res) => setTimeout(res, 1000));
+    }
+  }
+
+  /** Wakes a sleeping engine once, however many connections arrive meanwhile. */
+  private wake(): Promise<void> {
+    this.waking ??= this.startDaemon()
+      .then(() => {
+        this.asleep = false;
+      })
+      .finally(() => {
+        this.waking = null;
+      });
+    return this.waking;
+  }
 
   private async distroExists(): Promise<boolean> {
     const r = await wsl(['--list', '--quiet']);
@@ -107,6 +174,7 @@ export class WslBackend implements Backend {
     }
     const prereqs = { virtualization, wsl: true, wslInstalled: true };
     if (!(await this.distroExists())) return { status: 'missing', message: 'No engine yet — Start sets it up.', manager, dir: distroDir(), running: null, prereqs };
+    if (this.asleep && this.relay) return { status: 'sleeping', message: 'Asleep after a while with nothing running, its memory back with Windows; it wakes in a few seconds when something uses Docker.', manager, dir: distroDir(), running: null, prereqs };
     const up = this.daemon !== null && this.daemon.exitCode === null && this.relay !== null;
     return { status: up ? 'running' : 'stopped', message: '', manager, dir: distroDir(), running: null, prereqs };
   }
@@ -176,27 +244,8 @@ export class WslBackend implements Backend {
       if (a.code !== 0) throw new Error(`Docker could not be installed in the distro: ${wslError(a.stderr || a.stdout)}`);
     }
     r.step(2);
-    // Our wsl.exe can outlive the dockerd it started (WSL ended the distro while Windows slept, or dockerd died): Start
-    // then only waited, docker.log untouched, until the user chose Restart (DevCatz, Windows, 2026-11-10). Without a
-    // dockerd inside, ours goes and a new one starts.
-    if (this.daemon && this.daemon.exitCode === null && (await inDistro('pgrep -x dockerd >/dev/null', { timeout: 15_000 })).code !== 0) {
-      this.daemon.kill();
-      this.daemon = null;
-    }
-    if (!this.daemon || this.daemon.exitCode !== null) {
-      // A dockerd left from a DoCatz that did not quit cleanly (crashed, ended from Task Manager) holds the socket:
-      // ours would exit at once and the engine show as stopped while Docker answers. It goes first; ours is the one
-      // that keeps the distro alive and ends with DoCatz.
-      await inDistro('pkill -x dockerd 2>/dev/null || exit 0; i=0; while pgrep -x dockerd >/dev/null && [ $i -lt 40 ]; do sleep 0.5; i=$((i+1)); done; pkill -9 -x dockerd 2>/dev/null; rm -f /var/run/docker.pid; true', { timeout: 30_000 });
-      this.daemon = spawn(WSL, ['-d', DISTRO, '-u', 'root', '--exec', 'sh', '-c', DOCKERD], { windowsHide: true, stdio: 'ignore' });
-      this.daemon.on('exit', () => (this.daemon = null));
-    }
-    for (let i = 0; i < 60; i++) {
-      if (r.signal.aborted) throw new Error('Cancelled');
-      if ((await inDistro('test -S /var/run/docker.sock && docker info >/dev/null 2>&1', { timeout: 15_000 })).code === 0) break;
-      if (i === 59 || !this.daemon) throw new Error(`Docker did not start inside WSL: ${lastLine(text((await inDistro('tail -n 20 /var/log/docker.log', { timeout: 15_000 })).stdout)) || 'see the engine log'}`);
-      await new Promise((res) => setTimeout(res, 1000));
-    }
+    await this.startDaemon(r.signal);
+    this.asleep = false;
     r.step(3);
     await this.openRelay();
   }
@@ -206,16 +255,33 @@ export class WslBackend implements Backend {
     if (this.relay) return Promise.resolve();
     return new Promise((resolve, reject) => {
       const server = createServer((conn) => {
-        const p = spawn(WSL, ['-d', DISTRO, '-u', 'root', '--exec', 'socat', '-', 'UNIX-CONNECT:/var/run/docker.sock'], { windowsHide: true, stdio: ['pipe', 'pipe', 'ignore'] });
-        relayRequests(conn, p.stdin!);
-        p.stdout!.pipe(conn);
-        const end = () => {
-          conn.destroy();
-          p.kill();
+        this.connections++;
+        let counted = true;
+        const leave = () => {
+          if (counted) this.connections--;
+          counted = false;
         };
-        conn.on('close', end);
-        conn.on('error', end);
-        p.on('exit', end);
+        conn.on('close', leave);
+        const pass = () => {
+          if (conn.destroyed) return;
+          const p = spawn(WSL, ['-d', DISTRO, '-u', 'root', '--exec', 'socat', '-', 'UNIX-CONNECT:/var/run/docker.sock'], { windowsHide: true, stdio: ['pipe', 'pipe', 'ignore'] });
+          // DoCatz's own client keeps its connections open between requests: they are not "someone using Docker".
+          relayRequests(conn, p.stdin!, leave);
+          p.stdout!.pipe(conn);
+          const end = () => {
+            conn.destroy();
+            p.kill();
+          };
+          conn.on('close', end);
+          conn.on('error', end);
+          p.on('exit', end);
+          conn.resume();
+        };
+        if (!this.asleep) return pass();
+        // Asleep (Windows Lite): the request waits in the pipe while the engine wakes, then goes on as usual.
+        conn.pause();
+        conn.on('error', () => conn.destroy());
+        void this.wake().then(pass, () => conn.destroy());
       });
       server.once('error', reject);
       server.listen(ENGINE_PIPE, () => {
@@ -228,6 +294,11 @@ export class WslBackend implements Backend {
   async stop(): Promise<void> {
     this.relay?.close();
     this.relay = null;
+    // A sleeping engine is already down: nothing to wake just to stop it.
+    if (this.asleep) {
+      this.asleep = false;
+      return;
+    }
     await inDistro('pkill dockerd; true', { timeout: 30_000 });
     this.daemon?.kill();
     this.daemon = null;

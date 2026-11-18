@@ -56,8 +56,11 @@ export function rewriteCreate(body: string): string | null {
   return changed ? JSON.stringify(spec) : null;
 }
 
-/** Copies the client's requests from `from` to `to`, translating the bind mounts of container creates. */
-export function relayRequests(from: Readable, to: Writable): void {
+/**
+ * Copies the client's requests from `from` to `to`, translating the bind mounts of container creates. `onOwn`: called
+ * when a request carries DoCatz's own User-Agent (its kept-alive connections do not count as someone using the engine).
+ */
+export function relayRequests(from: Readable, to: Writable, onOwn?: () => void): void {
   let buf: Buffer = Buffer.alloc(0);
   let raw = false;
   /** Bytes of the current request's body to pass on as they are. */
@@ -102,6 +105,7 @@ export function relayRequests(from: Readable, to: Writable): void {
       const lines = head.split('\r\n');
       const [method, path = ''] = lines[0].split(' ');
       const header = (name: string) => lines.find((l) => l.toLowerCase().startsWith(`${name}:`))?.slice(name.length + 1).trim();
+      if (onOwn && header('user-agent') === 'DoCatz') onOwn();
       const length = Number(header('content-length') ?? 0);
       if (header('transfer-encoding') || header('upgrade') || !Number.isInteger(length) || length < 0) {
         to.write(head);

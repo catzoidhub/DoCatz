@@ -37,7 +37,7 @@ export class DockerClient {
           socketPath: socketPath(),
           method,
           path: `${this.prefix}${path}${this.qs(o.query)}`,
-          headers: { Host: 'docker', ...(body ? { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(body) } : {}), ...(o.headers ?? {}) },
+          headers: { Host: 'docker', 'User-Agent': 'DoCatz', ...(body ? { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(body) } : {}), ...(o.headers ?? {}) },
           timeout: o.timeout ?? 30_000,
         },
         resolve,
@@ -113,7 +113,7 @@ export class DockerClient {
         socketPath: socketPath(),
         method: 'POST',
         path: `${this.prefix}${path}`,
-        headers: { Host: 'docker', 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(data), Connection: 'Upgrade', Upgrade: 'tcp' },
+        headers: { Host: 'docker', 'User-Agent': 'DoCatz', 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(data), Connection: 'Upgrade', Upgrade: 'tcp' },
       });
       req.on('upgrade', (_res, socket, head) => {
         if (head.length) socket.unshift(head);

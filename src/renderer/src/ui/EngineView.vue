@@ -20,19 +20,38 @@ const c = computed(() => s.value?.config);
 const isMac = computed(() => s.value?.backend === 'lima' || s.value?.backend === 'lite');
 /** Standard and Lite side by side (TODO #106): what each is, and DoCatz's own measured numbers. */
 /** The two engines' cards: what each is in a line. */
-const ENGINES: { kind: 'standard' | 'lite'; name: string; about: string }[] = [
-  { kind: 'standard', name: 'Standard', about: 'A full Ubuntu VM managed by Lima — the most compatible.' },
-  { kind: 'lite', name: 'Lite', about: 'DoCatz’s own small Linux VM — lighter and faster to wake. Some Docker features may not work yet.' },
-];
-const ENGINE_ROWS: [string, string, string][] = [
-  ['First download', 'about 950 MB', 'about 90 MB'],
-  ['Memory when idle', 'about 2.8 GB', 'about 430 MB'],
-  ['Start until Docker answers', 'about 27 s', 'about 1 s'],
-  ['Nothing running for 15 min', 'Keeps running', 'Sleeps, wakes in about 1 s'],
-  ['Compatibility', 'Full', 'Most images and compose projects'],
-];
-/** Standard ⇄ Lite (TODO #106, beta): macOS only for now. */
-const canLite = computed(() => isMac.value);
+const isWsl = computed(() => s.value?.backend === 'wsl');
+const ENGINES = computed<{ kind: 'standard' | 'lite'; name: string; about: string }[]>(() =>
+  isWsl.value
+    ? [
+        { kind: 'standard', name: 'Standard', about: 'The WSL 2 engine runs while DoCatz runs.' },
+        { kind: 'lite', name: 'Lite', about: 'The same engine and disk, put to sleep when nothing runs so WSL gives its memory back to Windows.' },
+      ]
+    : [
+        { kind: 'standard', name: 'Standard', about: 'A full Ubuntu VM managed by Lima — the most compatible.' },
+        { kind: 'lite', name: 'Lite', about: 'DoCatz’s own small Linux VM — lighter and faster to wake. Some Docker features may not work yet.' },
+      ],
+);
+// Windows numbers: DoCatz's own on a Ryzen 5 3600 PC, WSL 2 with the default settings (Windows PC, 2026-11-18).
+const ENGINE_ROWS = computed<[string, string, string][]>(() =>
+  isWsl.value
+    ? [
+        ['Memory of WSL’s VM', 'about 1 GB while it runs', 'none while asleep'],
+        ['Nothing running for 15 min', 'Keeps running', 'Sleeps'],
+        ['First docker command after that', 'answers at once', 'wakes in about 5 s'],
+        ['Containers, images, volumes', 'Same disk', 'Same disk'],
+        ['Compatibility', 'Full', 'Full'],
+      ]
+    : [
+        ['First download', 'about 950 MB', 'about 90 MB'],
+        ['Memory when idle', 'about 2.8 GB', 'about 430 MB'],
+        ['Start until Docker answers', 'about 27 s', 'about 1 s'],
+        ['Nothing running for 15 min', 'Keeps running', 'Sleeps, wakes in about 1 s'],
+        ['Compatibility', 'Full', 'Most images and compose projects'],
+      ],
+);
+/** Standard ⇄ Lite (TODO #106, beta): macOS, and on Windows the sleeping WSL engine. */
+const canLite = computed(() => isMac.value || isWsl.value);
 /** Linux (#101): the system's Docker Engine, no VM — no limits to set and no Reset. */
 const isSystem = computed(() => s.value?.backend === 'system');
 /** The engines DoCatz can move from on this platform (#103: said when none is there). */
@@ -211,7 +230,8 @@ const copy = (t: string) => {
                 </div>
               </div>
             </div>
-            <p class="text-xs opacity-60">Measured on an Apple M4 with 4 CPUs and 4 GB for the VM; yours will differ. Each engine keeps its own containers, images and volumes; switching stops one and starts the other, and DoCatz restarts once. Move from another Docker brings images and volumes across.</p>
+            <p v-if="isWsl" class="text-xs opacity-60">Measured on a Ryzen 5 3600 PC with WSL’s default settings; yours will differ. Both use the same engine and disk, so nothing moves; DoCatz restarts once to switch. WSL’s VM gives its memory back only when no other WSL distro is running.</p>
+            <p v-else class="text-xs opacity-60">Measured on an Apple M4 with 4 CPUs and 4 GB for the VM; yours will differ. Each engine keeps its own containers, images and volumes; switching stops one and starts the other, and DoCatz restarts once. Move from another Docker brings images and volumes across.</p>
           </div>
         </div>
 

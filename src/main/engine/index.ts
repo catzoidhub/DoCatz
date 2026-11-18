@@ -41,7 +41,7 @@ export function engineConfig(): EngineConfig {
     autoStart: s.autoStart !== false,
     keepRunning: s.keepRunning === true,
     // Lite runs on macOS for now (docatz-engine); elsewhere the choice stays Standard.
-    kind: s.kind === 'lite' && process.platform === 'darwin' ? 'lite' : 'standard',
+    kind: s.kind === 'lite' && (process.platform === 'darwin' || process.platform === 'win32') ? 'lite' : 'standard',
     onDemand: isLinux && s.onDemand === true,
   };
 }

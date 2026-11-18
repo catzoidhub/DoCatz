@@ -256,9 +256,14 @@ async function switchEngine(kind: 'standard' | 'lite'): Promise<void> {
     cancelId: 1,
     message: kind === 'lite' ? 'Switch to the Lite engine (beta)?' : 'Switch back to the Standard engine?',
     detail:
-      kind === 'lite'
-        ? 'Lighter and faster to wake, still in beta: some Docker features may not work yet; you can switch back to Standard any time.\n\nThe Standard engine stops and keeps its containers, images and volumes for when you switch back. Lite starts with an empty disk — Move from another Docker can bring images and volumes over. DoCatz restarts once.'
-        : 'The Lite engine stops and keeps its disk for later. The Standard engine starts with its own containers, images and volumes again. DoCatz restarts once.',
+      // Windows Lite (#106) is the same WSL distro and disk, only put to sleep when idle.
+      process.platform === 'win32'
+        ? kind === 'lite'
+          ? 'Lite keeps the same engine, containers, images and volumes, and puts it to sleep after 15 minutes with nothing running: WSL then gives its memory back to Windows, and the first docker command wakes it in a few seconds. Still in beta. DoCatz restarts once.'
+          : 'Standard keeps the engine running while DoCatz runs, with the same containers, images and volumes. DoCatz restarts once.'
+        : kind === 'lite'
+          ? 'Lighter and faster to wake, still in beta: some Docker features may not work yet; you can switch back to Standard any time.\n\nThe Standard engine stops and keeps its containers, images and volumes for when you switch back. Lite starts with an empty disk — Move from another Docker can bring images and volumes over. DoCatz restarts once.'
+          : 'The Lite engine stops and keeps its disk for later. The Standard engine starts with its own containers, images and volumes again. DoCatz restarts once.',
   });
   if (r.response !== 0) return;
   await engine.stop().catch((e) => console.warn('engine stop:', (e as Error).message));
