@@ -795,6 +795,11 @@ export interface K8sState {
   context: boolean;
   detail: string;
   error: string;
+  /** DoCatz's own kubectl (~/.docatz/bin) is there, in the pinned version. */
+  kubectl: boolean;
+  /** LoadBalancer ports now open on 127.0.0.1, and those that could not be (taken on this computer). */
+  published: number[];
+  publishError: string;
 }
 export interface K8sWorkloads {
   pods: { namespace: string; name: string; status: string; ready: string; restarts: number; image: string; ip: string | null; created: string }[];
@@ -879,6 +884,8 @@ export interface DoCatzApi {
   k8sWorkloads(): Promise<K8sWorkloads>;
   k8sDeletePod(namespace: string, name: string): Promise<void>;
   k8sPodLogs(namespace: string, name: string): Promise<string>;
+  /** Downloads kubectl (pinned, sha256) into DoCatz's bin folder, next to docker. */
+  k8sInstallKubectl(): Promise<K8sState>;
   migrateSources(): Promise<DcMigrateSource[]>;
   migrateInventory(source: DcMigrateSourceId): Promise<DcMigrateInventory>;
   /** Copies the picked images and volumes onto DoCatz's engine (the other keeps them); steps via onMigrate; the items that failed. */
@@ -1046,7 +1053,7 @@ export interface DoCatzApi {
 export const API_METHODS: (keyof DoCatzApi)[] = [
   'appInfo', 'aboutInfo', 'updateState', 'updateCheck', 'updateNotes', 'updateDownload', 'updateCancel', 'updateSkip', 'updateInstall', 'updateConfigure', 'ratingSend', 'ratingRefresh', 'reportPreview', 'reportSend', 'captureWindow', 'reportError', 'reportSettings', 'reportConfigure', 'uninstallPlan', 'uninstallRun', 'settings', 'setSettings', 'setAiKey', 'aiModels', 'aiProbe', 'aiTest', 'aiCancel', 'aiAsk', 'aiPreviewAsk', 'aiExplainLog', 'aiPreviewLog', 'aiFile', 'aiPreviewFile', 'openUrl', 'browsers', 'reveal', 'openSibling', 'mcatzpActivity', 'mcatzpClearActivity', 'mcatzpRevoke', 'mcatzpSetup', 'mcatzpInstall', 'mcatzpUninstall', 'mcatzpInstallCancel', 'mcatzpApprovals', 'mcatzpTargets', 'mcatzpAddToClient', 'mcatzpRemoveFromClient', 'mcatzpUpdate', 'mcatzpPending', 'mcatzpAnswer', 'copyText', 'apiSource', 'siblingVersions', 'migrateSources', 'migrateInventory', 'migrateRun', 'migrateCancel', 'devcatzGateways', 'databases', 'siblingInstall', 'siblingInstallCancel', 'runInTerminal',
   'engineState', 'engineStart', 'engineStop', 'engineRestart', 'engineReset', 'engineConfigure', 'engineCancel', 'engineSetupWsl', 'restartComputer', 'engineLog', 'contextSet', 'cliInstall', 'cliPath', 'diskUsage',
-  'containers', 'container', 'containerEnv', 'containerAction', 'containerRemove', 'stats', 'logsFollow', 'logsStop', 'termOpen', 'termInput', 'termResize', 'termClose', 'files', 'fileSave', 'projects', 'composePick', 'composeRun', 'composeProject', 'runCancel', 'activeJobs', 'k8sState', 'k8sStart', 'k8sStop', 'k8sRemove', 'k8sWorkloads', 'k8sDeletePod', 'k8sPodLogs', 'readText', 'writeText',
+  'containers', 'container', 'containerEnv', 'containerAction', 'containerRemove', 'stats', 'logsFollow', 'logsStop', 'termOpen', 'termInput', 'termResize', 'termClose', 'files', 'fileSave', 'projects', 'composePick', 'composeRun', 'composeProject', 'runCancel', 'activeJobs', 'k8sState', 'k8sStart', 'k8sStop', 'k8sRemove', 'k8sWorkloads', 'k8sDeletePod', 'k8sPodLogs', 'k8sInstallKubectl', 'readText', 'writeText',
   'images', 'imageRemove', 'imagePull', 'volumes', 'volumeRemove', 'volumeWriters', 'volumeExport', 'volumeImportPick', 'volumeImport', 'volumeCancel', 'imageExport', 'imageImportPick', 'imageImport', 'networks', 'networkRemove', 'prunePreview', 'prune',
   'projectPrefs', 'setProjectPrefs',
   'envState', 'envRead', 'envWrite', 'envCreate', 'envLock', 'envRemove', 'envDrift', 'setDomainName',

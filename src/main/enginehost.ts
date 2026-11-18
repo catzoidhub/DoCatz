@@ -5,6 +5,7 @@ import * as ops from './docker/ops';
 import { Domains } from './domains';
 import { Engine } from './engine';
 import { learnProject } from './frameworks';
+import { k8sRunning } from './k8s';
 
 /**
  * What keeps the engine and its network side running (#107): the engine (VM / dockerd), the domains proxy and the
@@ -147,13 +148,15 @@ export class EngineHost {
   private async maybeSleep(containers: DcContainer[]): Promise<void> {
     const b = this.engine.backend;
     if (!this.serving || !b.sleep || (b.canSleep && !b.canSleep())) return;
+    // The list hides DoCatz's own router, so an empty list can still be a running engine: asked, not guessed.
+    // First of all: nothing below may touch the socket of a sleeping engine (up() does not wake it).
+    if (!(await this.engine.up())) return; // stopped, starting or already asleep
     const busy = containers.some((c) => c.state === 'running' && c.name !== 'docatz-router');
-    if (busy) {
+    // A running cluster (TODO #28) is in use too: its pods are hidden from this list.
+    if (busy || (await k8sRunning())) {
       this.idleSince = null;
       return;
     }
-    // The list hides DoCatz's own router, so an empty list can still be a running engine: asked, not guessed.
-    if (!(await this.engine.up())) return; // stopped, starting or already asleep (up() does not wake it)
     this.idleSince ??= Date.now();
     if (Date.now() - Math.max(this.idleSince, this.lastActivity) < EngineHost.IDLE_SLEEP_MS) return;
     this.idleSince = null;

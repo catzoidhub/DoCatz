@@ -1,9 +1,13 @@
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { chmodSync, copyFileSync, existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
+import { createServer } from 'node:net';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import type { K8sState, K8sWorkloads } from '@shared/types';
 import { cliInstalled, dockerBin } from './cli';
-import { docatzDir, dockerHost } from './paths';
+import { KUBECTL_VERSION, kubectlPackage } from './components';
+import { fetchPinned } from './download';
+import { isWin } from './platform';
+import { docatzDir, dockerHost, exe } from './paths';
 import { lastLine, run } from './proc';
 
 /**
@@ -28,6 +32,26 @@ const DATA = '/var/lib/docatz/k3s';
 const API_PORT = Number(process.env.DOCATZ_K8S_PORT) || 6443;
 export const K8S_LABEL = 'com.mrcatz.docatz.k8s';
 const kubeconfigFile = () => join(docatzDir('kube'), 'config');
+/** LoadBalancer Services on the computer: one small forwarder container (the router's image) publishing their ports. */
+const LB_NAME = 'docatz-k8s-lb';
+const LB_IMAGE = 'nginx:alpine';
+const kubectlBin = () => exe('kubectl');
+const kubectlMark = () => join(docatzDir('kube'), 'kubectl-version');
+
+/** Can this computer still listen on 127.0.0.1:<port>? (Docker inside a VM cannot tell: it publishes there, and the forward to the computer fails quietly.) */
+const portFree = (port: number): Promise<boolean> =>
+  new Promise((resolve) => {
+    const srv = createServer();
+    srv.once('error', () => resolve(false));
+    srv.listen(port, '127.0.0.1', () => srv.close(() => resolve(true)));
+  });
+
+/** Is a cluster running on this engine? (the idle sleep asks: its pods are hidden from the containers list) */
+export async function k8sRunning(): Promise<boolean> {
+  if (!cliInstalled()) return false;
+  const r = await run(dockerBin(), ['ps', '-q', '--filter', `name=^${K8S_NAME}$`], { env: { ...process.env, DOCKER_HOST: dockerHost() }, timeout: 15_000, cwd: '/' }).catch(() => null);
+  return !!r && r.code === 0 && r.stdout.trim().length > 0;
+}
 
 const env = () => ({ ...process.env, DOCKER_HOST: dockerHost() });
 const docker = (args: string[], timeout = 60_000) => run(dockerBin(), args, { env: env(), timeout, cwd: '/' });
@@ -39,10 +63,19 @@ async function inspect(): Promise<{ running: boolean; image: string } | null> {
   return { running: running === 'true', image };
 }
 
-const kubectl = (args: string[], timeout = 30_000) => docker(['exec', K8S_NAME, 'kubectl', ...args], timeout);
+/**
+ * The cluster's own kubectl. It must end by itself: a `docker exec` given up on here (timeout) leaves the process
+ * running in the container, and a slow API then piles them up — 337 of them took all of the VM's memory once
+ * (2026-11-18). So: kubectl's own request timeout, and `timeout` around it inside the container, both under ours.
+ */
+const kubectl = (args: string[], timeout = 30_000) => {
+  const sec = Math.max(5, Math.floor(timeout / 1000) - 5);
+  return docker(['exec', K8S_NAME, 'timeout', '-s', 'KILL', String(sec), 'kubectl', `--request-timeout=${Math.max(3, sec - 2)}s`, ...args], timeout);
+};
 
 /** Pods are containers of dockerd: when the cluster stops they go too, with the mounts kubelet left on the host. */
 async function sweep(): Promise<void> {
+  await docker(['rm', '-f', LB_NAME], 60_000);
   const ids = (await docker(['ps', '-aq', '--filter', 'label=io.kubernetes.pod.namespace'], 30_000)).stdout.split('\n').filter(Boolean);
   for (let i = 0; i < ids.length; i += 50) await docker(['rm', '-f', ...ids.slice(i, i + 50)], 120_000);
   // The host's mount namespace, from a helper: kubelet's volume mounts under DATA would keep the folder busy.
@@ -66,19 +99,40 @@ async function removeContainer(): Promise<void> {
   throw new Error('The cluster\'s container could not be removed — try again in a moment');
 }
 
+/** The host's mounts made shared, with the two folders the cluster shares back (see start()). */
+async function shareMounts(): Promise<void> {
+  const r = await docker(
+    ['run', '--rm', '--privileged', '--pid=host', '--label', 'com.mrcatz.docatz.helper=1', '--entrypoint', 'nsenter', IMAGE, '-t', '1', '-m', '--', 'sh', '-c', `mkdir -p ${DATA} /var/log/pods && mount --make-rshared /`],
+    60_000,
+  );
+  if (r.code !== 0) throw new Error(`The engine could not be prepared for the cluster: ${lastLine(r.stderr)}`);
+}
+
 export class K8s {
   private busy: K8sState['status'] | null = null;
   private detail = '';
   private error = '';
+  private published: number[] = [];
+  private publishError = '';
+  private syncing = false;
+  /** One read of the workloads at a time: a second asker gets the same answer. */
+  private reading: Promise<K8sWorkloads> | null = null;
+  /** Services already given `localhost` as their external address (once each). */
+  private named = new Set<string>();
   onChange: () => void = () => undefined;
 
-  async state(): Promise<K8sState> {
-    const base = { version: K8S_VERSION.replace('-k3s', '+k3s'), apiPort: API_PORT, kubeconfig: kubeconfigFile(), detail: this.detail, error: this.error, node: null as string | null, context: this.contextInUse() };
+  /** What it was when last looked at while not running: shown while the engine sleeps, without waking it. */
+  private idle: 'off' | 'stopped' = 'off';
+
+  /** `asleep`: the engine sleeps (Lite, on-demand Docker) — a running cluster would have kept it awake, so nothing is asked. */
+  async state(asleep = false): Promise<K8sState> {
+    const base = { version: K8S_VERSION.replace('-k3s', '+k3s'), apiPort: API_PORT, kubeconfig: kubeconfigFile(), detail: this.detail, error: this.error, node: null as string | null, context: this.contextInUse(), kubectl: this.kubectlInstalled(), published: this.published, publishError: this.publishError };
     if (!cliInstalled()) return { ...base, status: 'off' };
     if (this.busy) return { ...base, status: this.busy };
+    if (asleep) return { ...base, status: this.idle };
     const c = await inspect().catch(() => null);
-    if (!c) return { ...base, status: 'off' };
-    if (!c.running) return { ...base, status: 'stopped' };
+    if (!c) return { ...base, status: (this.idle = 'off') };
+    if (!c.running) return { ...base, status: (this.idle = 'stopped') };
     const n = await kubectl(['get', 'nodes', '--no-headers'], 10_000).catch(() => null);
     const ready = !!n && n.code === 0 && / Ready /.test(n.stdout);
     return { ...base, status: ready ? 'running' : 'starting', node: ready ? n.stdout.trim().split(/\s+/)[0] : null };
@@ -104,6 +158,7 @@ export class K8s {
       }
       if (c && c.image === IMAGE) {
         if (!c.running) {
+          await shareMounts();
           const s = await docker(['start', K8S_NAME], 120_000);
           if (s.code !== 0) throw new Error(lastLine(s.stderr));
         }
@@ -115,6 +170,10 @@ export class K8s {
         }
         this.set('starting', 'Starting the cluster');
         await docker(['network', 'create', NET], 30_000);
+        // kubelet's pod mounts must travel back to the host (rshared), which needs a shared mount there. A systemd
+        // host has that; Lite's guest does not ("path … is mounted on / but it is not a shared mount"): made so here,
+        // in the host's mount namespace, with the two folders the cluster shares.
+        await shareMounts();
         // dockerd under systemd (Standard, WSL with systemd, Linux) drives cgroups through systemd, and kubelet must
         // do the same; Lite's guest has no systemd (cgroupfs), where k3s's own default is right.
         const systemd = (await docker(['info', '--format', '{{.CgroupDriver}}'], 20_000)).stdout.trim() === 'systemd';
@@ -132,7 +191,7 @@ export class K8s {
           ],
           180_000,
         );
-        if (r.code !== 0) throw new Error(`The cluster did not start: ${lastLine(r.stderr)}`);
+        if (r.code !== 0) throw new Error(`The cluster did not start: ${r.stderr.split('\n').map((l) => l.trim()).filter((l) => l && !/^Run 'docker run --help'/.test(l)).pop() ?? `docker exited ${r.code}`}`);
       }
       this.set('starting', 'Waiting for the node');
       for (let i = 0; ; i++) {
@@ -149,6 +208,22 @@ export class K8s {
     } finally {
       this.set(null);
     }
+  }
+
+  /**
+   * The engine came up (a restart, the computer's, Lite waking): Docker starts the cluster again by itself (restart
+   * policy), except where the host's mounts are not shared at boot (Lite's guest) — there its start fails with "not a
+   * shared mount", and it is started here after sharing them. A cluster the user stopped stays stopped.
+   */
+  async resume(): Promise<void> {
+    if (this.busy || !cliInstalled()) return;
+    const r = await docker(['inspect', K8S_NAME, '--format', '{{.State.Running}}|{{.State.Error}}'], 15_000).catch(() => null);
+    if (!r || r.code !== 0) return;
+    const [running, error] = r.stdout.trim().split('|');
+    if (running === 'true' || !/shared mount/i.test(error ?? '')) return;
+    await shareMounts();
+    await docker(['start', K8S_NAME], 120_000);
+    this.onChange();
   }
 
   /** Stops the cluster: its container and every pod's containers; the cluster's data stays for the next start. */
@@ -198,7 +273,12 @@ export class K8s {
   }
 
   /** Pods, deployments and services of every namespace, read with the cluster's own kubectl. */
-  async workloads(): Promise<K8sWorkloads> {
+  workloads(): Promise<K8sWorkloads> {
+    this.reading ??= this.readWorkloads().finally(() => (this.reading = null));
+    return this.reading;
+  }
+
+  private async readWorkloads(): Promise<K8sWorkloads> {
     const get = async <T>(kind: string): Promise<T[]> => {
       const r = await kubectl(['get', kind, '-A', '-o', 'json'], 30_000);
       if (r.code !== 0) throw new Error(lastLine(r.stderr) || `kubectl get ${kind} failed`);
@@ -250,4 +330,95 @@ export class K8s {
   }
 
   kubeconfigExists = (): boolean => existsSync(kubeconfigFile());
+
+  private kubectlInstalled(): boolean {
+    try {
+      return existsSync(kubectlBin()) && readFileSync(kubectlMark(), 'utf8').trim() === KUBECTL_VERSION;
+    } catch {
+      return false;
+    }
+  }
+
+  /** kubectl next to DoCatz's docker (~/.docatz/bin, on the PATH when the user turned that on in Engine). */
+  async installKubectl(): Promise<void> {
+    if (this.busy) return;
+    this.set(this.busy, 'Downloading kubectl');
+    const file = await fetchPinned(kubectlPackage(), (_f, got, total) => {
+      this.detail = `Downloading kubectl: ${(got / 1e6).toFixed(0)} of ${(total / 1e6).toFixed(0)} MB`;
+      this.onChange();
+    }, new AbortController().signal);
+    copyFileSync(file, `${kubectlBin()}.new`);
+    renameSync(`${kubectlBin()}.new`, kubectlBin());
+    if (!isWin) chmodSync(kubectlBin(), 0o755);
+    mkdirSync(docatzDir('kube'), { recursive: true });
+    writeFileSync(kubectlMark(), KUBECTL_VERSION);
+    this.detail = '';
+    this.onChange();
+  }
+
+  /**
+   * LoadBalancer Services reach the computer: k3s's own load balancer is off (its host ports would only open inside the
+   * cluster's container), so DoCatz keeps one forwarder container on the cluster's network that publishes each
+   * LoadBalancer port on 127.0.0.1 and sends it to the Service's NodePort. Recreated when the set of ports changes; the
+   * Service gets `localhost` as its external address. A port already taken on the computer is left out and named.
+   */
+  async syncPublished(): Promise<void> {
+    if (this.syncing || this.busy || !(await k8sRunning())) return;
+    this.syncing = true;
+    try {
+      const r = await kubectl(['get', 'services', '-A', '-o', 'json'], 20_000);
+      if (r.code !== 0) return;
+      type Svc = { metadata: { name: string; namespace: string }; spec: { type: string; ports?: { port: number; nodePort?: number; protocol?: string }[] }; status?: { loadBalancer?: { ingress?: unknown[] } } };
+      const lbs = (JSON.parse(r.stdout) as { items: Svc[] }).items.filter((s) => s.spec.type === 'LoadBalancer');
+      const want = new Map<number, number>();
+      for (const s of lbs) for (const p of s.spec.ports ?? []) if (p.nodePort && (p.protocol ?? 'TCP') === 'TCP' && !want.has(p.port)) want.set(p.port, p.nodePort);
+      const sig = [...want].sort((a, b) => a[0] - b[0]).map(([p, n]) => `${p}:${n}`).join(',');
+      const have = (await docker(['inspect', LB_NAME, '--format', '{{index .Config.Labels "com.mrcatz.docatz.k8s.ports"}}|{{.State.Running}}'], 15_000)).stdout.trim();
+      if (have !== `${sig}|true`) {
+        const mine = new Set(this.published);
+        await docker(['rm', '-f', LB_NAME], 60_000);
+        this.published = [];
+        this.publishError = '';
+        let ports = [...want];
+        // A port something else on this computer listens on is left out and named (ours from before are not asked:
+        // their forward may still be closing).
+        const taken: number[] = [];
+        for (const [p] of ports) if (!mine.has(p) && !(await portFree(p))) taken.push(p);
+        if (taken.length) {
+          ports = ports.filter(([p]) => !taken.includes(p));
+          this.publishError = `Port ${taken.join(', ')} ${taken.length === 1 ? 'is' : 'are'} already in use on this computer, so ${taken.length === 1 ? 'that Service is' : 'those Services are'} not opened on it.`;
+        }
+        // A port taken on the computer fails the whole run: it is dropped and the rest tried again (at most 5 times).
+        for (let i = 0; ports.length && i < 5; i++) {
+          const conf = `events{} stream{ ${ports.map(([p, n]) => `server{ listen ${p}; proxy_pass ${K8S_NAME}:${n}; }`).join(' ')} }`;
+          const run = await docker(
+            ['run', '-d', '--name', LB_NAME, '--label', `${K8S_LABEL}=1`, '--label', `com.mrcatz.docatz.k8s.ports=${sig}`, '--restart', 'unless-stopped', '--network', NET, ...ports.flatMap(([p]) => ['-p', `127.0.0.1:${p}:${p}`]), LB_IMAGE, 'sh', '-c', `echo '${conf}' > /etc/nginx/nginx.conf && exec nginx -g 'daemon off;'`],
+            120_000,
+          );
+          if (run.code === 0) {
+            this.published = ports.map(([p]) => p).sort((a, b) => a - b);
+            break;
+          }
+          await docker(['rm', '-f', LB_NAME], 60_000);
+          const taken = Number(/(?:port|:)(\d{1,5})(?: failed|: bind| is already)/i.exec(run.stderr)?.[1] ?? /0\.0\.0\.0:(\d+)|127\.0\.0\.1:(\d+)/.exec(run.stderr)?.slice(1).find(Boolean));
+          if (!taken || !ports.some(([p]) => p === taken)) {
+            this.publishError = lastLine(run.stderr);
+            break;
+          }
+          this.publishError = `Port ${taken} is already in use, so that Service is not opened on it.`;
+          ports = ports.filter(([p]) => p !== taken);
+        }
+        this.onChange();
+      }
+      // `localhost` as the external address (a hostname: kube-proxy makes no rules for it), so kubectl shows it.
+      for (const s of lbs) {
+        const key = `${s.metadata.namespace}/${s.metadata.name}`;
+        if (s.status?.loadBalancer?.ingress?.length || this.named.has(key)) continue;
+        this.named.add(key);
+        await kubectl(['patch', 'service', '-n', s.metadata.namespace, s.metadata.name, '--subresource=status', '--type=merge', '-p', '{"status":{"loadBalancer":{"ingress":[{"hostname":"localhost"}]}}}'], 20_000).catch(() => undefined);
+      }
+    } finally {
+      this.syncing = false;
+    }
+  }
 }

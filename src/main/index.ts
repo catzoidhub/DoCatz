@@ -69,7 +69,11 @@ const runs = new Runs();
 const updater = new Updater();
 const reviews = new Reviews();
 const k8s = new K8s();
-k8s.onChange = () => void k8s.state().then((s) => send('app:k8s', s)).catch(() => undefined);
+// LoadBalancer Services follow the cluster onto 127.0.0.1 (k8s.ts); only while a cluster runs.
+/** Nothing about the cluster may touch the socket of a sleeping engine (it would wake it). */
+const engineAsleep = async () => (await host.engine.backend.sleeping?.().catch(() => false)) === true;
+setInterval(() => void engineAsleep().then((a) => (a ? undefined : k8s.syncPublished())).catch(() => undefined), 10_000);
+k8s.onChange = () => void engineAsleep().then((a) => k8s.state(a)).then((s) => send('app:k8s', s)).catch(() => undefined);
 const reporter = new Reporter();
 const tray = new DocatzTray({
   open: (route) => openWindow(route),
@@ -91,7 +95,11 @@ host.onList = (list) => {
   send('app:changed', null);
   void engine.state().then((s) => tray.update(s, containers)).catch(() => tray.update(null, containers));
 };
+let engineWas = '';
 host.onEngine = (s) => {
+  // The engine just came up: the cluster follows where Docker could not start it itself (k8s.resume).
+  if (s.status === 'running' && engineWas !== 'running') void k8s.resume().catch((e) => console.warn('kubernetes resume:', (e as Error).message));
+  engineWas = s.status;
   send('app:engine', s);
   tray.update(s, containers);
 };
@@ -654,13 +662,14 @@ function api(): DoCatzApi {
       socket.on('error', () => socket.destroy());
       return session;
     },
-    k8sState: () => k8s.state(),
+    k8sState: async () => k8s.state(await engineAsleep()),
     k8sStart: async () => (await needEngine(() => k8s.start()), k8s.state()),
     k8sStop: async () => (await k8s.stop(), k8s.state()),
     k8sRemove: async (confirm) => (await k8s.remove(confirm), k8s.state()),
     k8sWorkloads: () => needEngine(() => k8s.workloads()),
     k8sDeletePod: (namespace, name) => k8s.deletePod(namespace, name),
     k8sPodLogs: (namespace, name) => k8s.podLogs(namespace, name),
+    k8sInstallKubectl: async () => (await k8s.installKubectl(), k8s.state()),
     activeJobs: async () => ({ runs: [...recentRuns.values()].filter((r) => !r.done), sibling: siblingTask && !siblingTask.done && !siblingTask.error ? siblingTask : null }),
     termInput: async (session, data) => {
       terms.get(session)?.socket.write(data);

@@ -21,8 +21,18 @@ const logs = ref<{ name: string; text: string } | null>(null);
 let off: (() => void) | undefined;
 let timer: ReturnType<typeof setInterval> | undefined;
 
+let loading = false;
 async function load() {
-  if (!engineUp.value) return;
+  // One at a time: a slow cluster must not get a second question before it answered the first.
+  if (!engineUp.value || loading) return;
+  loading = true;
+  try {
+    await read();
+  } finally {
+    loading = false;
+  }
+}
+async function read() {
   s.value = (await api.k8sState().catch(() => null)) ?? s.value;
   if (s.value?.status === 'running') w.value = (await api.k8sWorkloads().catch(() => null)) ?? w.value;
   else w.value = null;
@@ -115,9 +125,14 @@ const useContext = computed(() => `export KUBECONFIG="$HOME/.kube/config:${s.val
               <span v-if="s.context" class="text-success">It is your current context.</span>
             </p>
             <pre class="selectable overflow-x-auto rounded-lg bg-base-200/70 px-3 py-2 font-mono text-xs leading-relaxed">{{ useContext }}</pre>
-            <div class="flex gap-2">
+            <div class="flex flex-wrap items-center gap-2">
               <button class="btn btn-sm" @click="api.copyText(useContext).then(() => notify('success', 'Copied'))">Copy</button>
               <button class="btn btn-ghost btn-sm" @click="api.reveal(s.kubeconfig)">Show the file</button>
+              <span class="flex-1" />
+              <span v-if="s.kubectl" class="text-xs opacity-60">kubectl is in DoCatz’s bin folder, next to docker.</span>
+              <button v-else class="btn btn-sm" :disabled="!!busy" :title="'Downloads kubectl (about 55 MB) into DoCatz’s bin folder, next to docker'" @click="run('kubectl', () => api.k8sInstallKubectl())">
+                <span v-if="busy === 'kubectl'" class="loading loading-spinner loading-xs" />{{ busy === 'kubectl' && s.detail ? s.detail : 'Install kubectl' }}
+              </button>
             </div>
             <p class="text-xs opacity-55">DoCatz never changes your own ~/.kube/config. An image built here is used with <span class="font-mono">imagePullPolicy: Never</span> (or <span class="font-mono">IfNotPresent</span>).</p>
           </div>
@@ -168,16 +183,24 @@ const useContext = computed(() => `export KUBECONFIG="$HOME/.kube/config:${s.val
                   <tr v-if="!deployments.length"><td colspan="4" class="py-6 text-center opacity-60">No deployments here.</td></tr>
                 </tbody>
               </table>
-              <table v-else class="table table-sm">
-                <thead><tr><th>Service</th><th>Namespace</th><th>Type</th><th>Cluster IP</th><th>Ports</th><th>Age</th></tr></thead>
+              <p v-if="tab === 'services'" class="mb-2 text-xs opacity-60">A Service of type <span class="font-mono">LoadBalancer</span> opens on <span class="font-mono">localhost</span> at its own port, on this computer only.<template v-if="s.publishError"> <span class="text-warning">{{ s.publishError }}</span></template></p>
+              <table v-if="tab === 'services'" class="table table-sm">
+                <thead><tr><th>Service</th><th>Namespace</th><th>Type</th><th>Cluster IP</th><th>Ports</th><th>On this computer</th><th>Age</th></tr></thead>
                 <tbody>
                   <tr v-for="v in services" :key="v.namespace + v.name">
                     <td class="font-medium">{{ v.name }}</td><td class="opacity-70">{{ v.namespace }}</td><td>{{ v.type }}</td>
                     <td class="font-mono text-xs">{{ v.clusterIP ?? '—' }}</td>
                     <td class="font-mono text-xs">{{ v.ports.map((p) => `${p.port}${p.nodePort ? `:${p.nodePort}` : ''}/${p.protocol}`).join(' ') || '—' }}</td>
+                    <td class="text-xs">
+                      <template v-if="v.type === 'LoadBalancer'">
+                        <a v-for="p in v.ports.filter((x) => s!.published.includes(x.port))" :key="p.port" class="link link-primary mr-2 font-mono" @click.prevent="api.openUrl(`http://localhost:${p.port}`)">localhost:{{ p.port }}</a>
+                        <span v-if="!v.ports.some((x) => s!.published.includes(x.port))" class="opacity-50">opening…</span>
+                      </template>
+                      <span v-else class="opacity-40">—</span>
+                    </td>
                     <td class="opacity-70">{{ ago(Date.parse(v.created)) }}</td>
                   </tr>
-                  <tr v-if="!services.length"><td colspan="6" class="py-6 text-center opacity-60">No services here.</td></tr>
+                  <tr v-if="!services.length"><td colspan="7" class="py-6 text-center opacity-60">No services here.</td></tr>
                 </tbody>
               </table>
             </div>

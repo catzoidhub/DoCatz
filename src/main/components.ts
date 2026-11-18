@@ -88,3 +88,16 @@ const LITE_PINS: Record<Arch, { vmm: Pinned; guest: Pinned } | null> = {
   },
 };
 export const litePackages = () => LITE_PINS[machineArch()];
+
+/** kubectl for the local cluster (TODO #28), from dl.k8s.io, the same minor as the pinned k3s. */
+export const KUBECTL_VERSION = '1.37.2';
+const kube = (path: string, sha256: string, exe = ''): Pinned => ({ name: `kubectl-${KUBECTL_VERSION}-${path.replace('/', '-')}${exe}`, url: `https://dl.k8s.io/release/v${KUBECTL_VERSION}/bin/${path}/kubectl${exe}`, sha256 });
+const KUBECTL: Record<`${Os}-${Arch}`, Pinned | null> = {
+  'mac-arm64': kube('darwin/arm64', '55701af0d51815ee335f240e48acf0959c3c23017ed3fa816e880c4a92bae581'),
+  'mac-x64': kube('darwin/amd64', '88379aff5c8111de6be0a394adffba2819e44cde269f3ab23cef76de1a48eaa8'),
+  'win-x64': kube('windows/amd64', '1691938f7de0e931969f9968c3601cf32d6b0d573573afb4ce471f3d28f51984', '.exe'),
+  'win-arm64': null,
+  'linux-x64': kube('linux/amd64', 'c04487523e7aa7d1493f7808174c899db93d7a9cf57531420cd76b9bd415f8f4'),
+  'linux-arm64': kube('linux/arm64', 'fcc16f63186659d9722014b7e02d5fdd2d4e669cb8c0ab66365d7d3b8ba03509'),
+};
+export const kubectlPackage = () => need(KUBECTL[`${os()}-${arch()}`], 'kubectl');

@@ -23,6 +23,7 @@ export const MCATZP_COVERAGE: Record<keyof DoCatzApi, string> = {
   k8sWorkloads: 'tool: list_kubernetes_workloads',
   k8sDeletePod: 'tool: delete_pod',
   k8sPodLogs: 'tool: get_pod_logs',
+  k8sInstallKubectl: 'not a tool: a download onto the computer, the user starts it in DoCatz',
   activeJobs: 'not a tool: list_runs carries the runs',
   ratingSend: 'never: a rating goes out in the users name',
   ratingRefresh: 'not a tool',
