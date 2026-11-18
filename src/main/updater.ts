@@ -268,9 +268,14 @@ export class Updater {
     return this.get();
   }
 
+  /** Runs before Restart now installs (#107: on Windows the engine helper runs DoCatz.exe, which the installer replaces). */
+  beforeInstall: () => Promise<void> = async () => undefined;
+
   install(now: boolean): void {
     if (this.state.status !== 'downloaded') return;
-    if (now) setImmediate(() => autoUpdater.quitAndInstall(false, true));
+    // Windows: silent, or the assisted NSIS installer stops on its "Who should this application be installed for?" page
+    // with nothing saying why (DialCatz in the Windows VM, 2026-11-18); it opens the new version afterwards.
+    if (now) void this.beforeInstall().catch(() => undefined).then(() => setImmediate(() => autoUpdater.quitAndInstall(process.platform === 'win32', true)));
     // Otherwise autoInstallOnAppQuit installs it when DoCatz quits.
   }
 

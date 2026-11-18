@@ -174,6 +174,8 @@ app.on('before-quit', () => {
   for (const t of terms.values()) t.socket.destroy();
   host.stopWatching();
   domains.stop();
+  // Windows, "Install when I quit": the installer that runs now replaces DoCatz.exe, which the helper runs too.
+  if (process.platform === 'win32' && helper?.connected && updater.get().status === 'downloaded') void helper.call('helper.quit', false).catch(() => undefined);
   // With the helper the engine, the proxy and bridge.json stay (#107); RemoteEngine only closes the channel.
   engine.dispose();
   tray.destroy();
@@ -215,20 +217,34 @@ async function attachHelper(): Promise<void> {
   if (!helper || !remote) return;
   helper.onEvent = (e) => {
     if (e.event === 'engine') remote.changed(e.data as Awaited<ReturnType<typeof engine.state>>);
-    else if (e.event === 'domains') send('app:domains', e.data);
-    else if (e.event === 'list') void refresh();
+    else if (e.event === 'domains') {
+      send('app:domains', e.data);
+      void syncNaming().then(() => refresh());
+    } else if (e.event === 'list') void syncNaming().then(() => refresh());
   };
   helper.onClose = () => setTimeout(() => void attachHelper().catch((e) => console.warn('engine helper:', (e as Error).message)), 2000);
   await ensureHelper(helper);
+  await syncNaming();
   // The MCatzP entry in bridge.json goes through the helper: one process writes the file.
   forwardBridgeMcatzp((entry) => void helper.call('bridge.mcatzp', entry).catch(() => undefined));
   remote.changed(await engine.state());
   void refresh();
 }
 
+/** How the helper names URLs (HTTPS with its CA, names without a port once :443 reaches it): the window's URLs follow. */
+async function syncNaming(): Promise<void> {
+  if (!helper?.connected) return;
+  const n = await helper.call<ReturnType<typeof domains.naming>>('domains.naming').catch(() => null);
+  if (n) domains.external = n;
+}
+
 /** The domains' settings changed in the window: the helper's proxy starts again with them. */
 const domainsChanged = async <T>(r: T): Promise<T> => {
-  if (helper?.connected) await helper.call('domains.reload').catch((e) => console.warn('domains reload:', (e as Error).message));
+  if (helper?.connected) {
+    await helper.call('domains.reload').catch((e) => console.warn('domains reload:', (e as Error).message));
+    await syncNaming();
+    void refresh();
+  }
   return r;
 };
 
@@ -767,6 +783,13 @@ app.whenReady().then(async () => {
     send('app:update', s);
     setUpdateLabel(s.status === 'available' || s.status === 'downloaded' ? 'Update Available…' : 'Check for Updates…');
   };
+  // Windows: the installer cannot replace DoCatz.exe while the engine helper runs it; the new DoCatz starts it again.
+  updater.beforeInstall = async () => {
+    if (process.platform === 'win32' && helper?.connected) {
+      await helper.call('helper.quit', false).catch(() => undefined);
+      await new Promise((r) => setTimeout(r, 1500));
+    }
+  };
   updater.onOpen = () => {
     openWindow();
     send('app:updateOpen', null);
@@ -836,7 +859,9 @@ app.whenReady().then(async () => {
     if (s.status === 'stopped' && s.config.autoStart) void engine.start().catch((e) => console.warn('engine autostart:', (e as Error).message));
     else tray.update(s, []);
   }
-  // A light poll while nothing else tells us (the VM stopped from outside, stats of the tray).
-  setInterval(() => void refresh(), 30_000);
+  // A light poll while nothing else tells us (the VM stopped from outside, stats of the tray), with the :443 probe that
+  // decides names without a port: a first probe that failed (DevCatz's front starting, the engine restarting) is not
+  // kept until the Domains page opens. With the helper, the helper probes and DoCatz follows its naming.
+  setInterval(() => void (helper ? Promise.resolve() : domains.state().catch(() => undefined)).then(() => refresh()), 30_000);
 });
 

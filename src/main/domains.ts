@@ -302,7 +302,14 @@ export class Domains {
   }
 
   /** What a container's URL is made of, for a process that names containers without running the proxy (#107). */
+  /**
+   * DoCatz with the engine helper (#107): the proxy, its CA and the :443 probe live in the helper, so the URLs the window
+   * shows are named with the helper's answer (helperctl / index.ts keep it fresh), not with this idle copy's.
+   */
+  external: Naming | null = null;
+
   naming(): Naming {
+    if (this.external) return this.external;
     return { tld: this.tld(), https: this.https() && this.ca !== null, clean: shared().cleanUrls?.on === true && this.probe?.reaches === true, httpsPort: this.httpsPort, httpPort: this.httpPort };
   }
 

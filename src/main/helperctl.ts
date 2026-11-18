@@ -1,6 +1,7 @@
 import { app } from 'electron';
 import { execFile, spawn } from 'node:child_process';
-import { existsSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
+import { createHash } from 'node:crypto';
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { homedir, userInfo } from 'node:os';
 import { join } from 'node:path';
 import type { EngineConfig, EngineState } from '@shared/types';
@@ -19,8 +20,22 @@ const plistPath = () => join(homedir(), 'Library', 'LaunchAgents', `${LABEL}.pli
 const helperScript = () => join(app.getAppPath(), 'out', 'helper', 'index.js');
 const logFile = () => join(app.getPath('userData'), 'logs', 'helper.log');
 
+/** Which helper build this DoCatz carries: a hash of out/helper/index.js, so a rebuilt DoCatz of the same version replaces it too. */
+let build = '';
+function helperBuild(): string {
+  if (!build) {
+    try {
+      build = createHash('sha256').update(readFileSync(helperScript())).digest('hex').slice(0, 16);
+    } catch {
+      build = app.getVersion();
+    }
+  }
+  return build;
+}
+
 function helperEnv(): Record<string, string> {
   return {
+    DOCATZ_HELPER_BUILD: helperBuild(),
     ELECTRON_RUN_AS_NODE: '1',
     DOCATZ_USERDATA: app.getPath('userData'),
     DOCATZ_VERSION: app.getVersion(),
@@ -77,8 +92,8 @@ async function launch(): Promise<void> {
 /** Connects to a running helper of this version, else (re)starts it and waits up to 20 s. */
 export async function ensureHelper(client: HelperClient): Promise<void> {
   if (await client.connect()) {
-    const v = await client.call<{ version: string; protocol: number }>('helper.version').catch(() => null);
-    if (v && v.version === app.getVersion() && v.protocol === HELPER_PROTOCOL) return;
+    const v = await client.call<{ version: string; protocol: number; build?: string }>('helper.version').catch(() => null);
+    if (v && v.version === app.getVersion() && v.protocol === HELPER_PROTOCOL && v.build === helperBuild()) return;
     // An older (or newer) helper: it goes, the engine itself keeps running on macOS (Lima's VM is not its child).
     await client.call('helper.quit', false).catch(() => undefined);
     client.close();

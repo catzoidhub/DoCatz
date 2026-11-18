@@ -81,7 +81,7 @@ async function main(): Promise<void> {
     }
     switch (req.method) {
       case 'helper.version':
-        return { version: VERSION, protocol: HELPER_PROTOCOL, pid: process.pid };
+        return { version: VERSION, protocol: HELPER_PROTOCOL, pid: process.pid, build: process.env.DOCATZ_HELPER_BUILD || '' };
       case 'helper.quit':
         void quit(args[0] === true);
         return true;
@@ -99,6 +99,8 @@ async function main(): Promise<void> {
         await host.domains.start();
         await host.refresh();
         return true;
+      case 'domains.naming':
+        return host.domains.naming();
       case 'domains.setName':
         host.domains.setName(String(args[0]), args[1] === null ? null : String(args[1]));
         return true;
@@ -144,8 +146,9 @@ async function main(): Promise<void> {
     const s = await host.engine.state();
     if (s.status === 'stopped' && s.config.autoStart) void host.engine.start().catch((e) => log('engine autostart:', (e as Error).message));
   }
-  // A light poll while nothing else tells us (the VM stopped from outside).
-  setInterval(() => void host.refresh(), 30_000);
+  // A light poll while nothing else tells us (the VM stopped from outside), and the :443 probe that decides names
+  // without a port (DevCatz's front may come or go): DoCatz names its URLs from it (domains.naming).
+  setInterval(() => void host.domains.state().catch(() => undefined).then(() => host.refresh()), 30_000);
 }
 
 main().catch((e) => {
