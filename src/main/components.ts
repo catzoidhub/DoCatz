@@ -74,17 +74,17 @@ export const wslRootfs = () => ALPINE_WSL[machineArch()];
  * (docs/CONTRACT.md §2), catzoidhub/DoCatz-Engine v0.1.3 (cb10a99: 0.1.2 with docatz-vmm signed by Developer ID). DOCATZ_LITE_LOCAL still takes a local build instead
  * (engine/lite.ts).
  */
-export const LITE = { version: '0.1.3' } as const;
+export const LITE = { version: '0.1.4' } as const;
 const LITE_URL = `https://github.com/catzoidhub/DoCatz-Engine/releases/download/v${LITE.version}`;
 const litePin = (name: string, sha256: string): Pinned => ({ name, url: `${LITE_URL}/${name}`, sha256 });
 const LITE_PINS: Record<Arch, { vmm: Pinned; guest: Pinned } | null> = {
   arm64: {
-    vmm: litePin(`docatz-vmm-${LITE.version}-darwin-arm64.tar.gz`, '38664f64290f4cec48c45a8b4eced3d1a88e5440da247d03d46362d82b0c3de1'),
-    guest: litePin(`docatz-guest-${LITE.version}-arm64.tar.gz`, '1a60a308cab04e66ffd4f9599939b11eed358de74a0e9d587815abe47dba082f'),
+    vmm: litePin(`docatz-vmm-${LITE.version}-darwin-arm64.tar.gz`, '0e285e3472e307c8d6e1972145ef0b81bf1d1c6e35de4fb20b653df82cd5ca4e'),
+    guest: litePin(`docatz-guest-${LITE.version}-arm64.tar.gz`, 'a9f23aa23f42d675762ac24f6aa646bbd76e37622886dac83ee7179118a81428'),
   },
   x64: {
-    vmm: litePin(`docatz-vmm-${LITE.version}-darwin-x86_64.tar.gz`, '192608d5e64c54fdd2725af2c40471b0e9212f133cdd6c2c9d3653e06f950f85'),
-    guest: litePin(`docatz-guest-${LITE.version}-x86_64.tar.gz`, 'a16ffcdf38f8214072089dbe894dbc66d0ee98402a4248bce53ab4f9b9371622'),
+    vmm: litePin(`docatz-vmm-${LITE.version}-darwin-x86_64.tar.gz`, '8b3c26a31e6033149295a970578654bd5f7fbe06f4a0e7dc906b7e7e434d0e4f'),
+    guest: litePin(`docatz-guest-${LITE.version}-x86_64.tar.gz`, '5cbe7bc6673ab35cd28494f035868b9bbda7ed745fa353e62e64234a7a154587'),
   },
 };
 export const litePackages = () => LITE_PINS[machineArch()];
