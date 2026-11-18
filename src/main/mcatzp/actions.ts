@@ -362,7 +362,7 @@ export function readActions(api: DoCatzApi, s: Scopes, more: EngineReads): Actio
     }),
     {
       ...read('list_devcatz_services', 'What DevCatz runs on DoCatz\'s engine (its gateways; on Windows also Typesense, Sonic, Sockudo), installed or not. DevCatz controls them; here they are only looked at.', OBJECT(), async () => {
-        return (await api.devcatzGateways()).map((g) => ({ kind: g.kind, name: g.name, category: g.category, installed: g.installed, status: g.status, version: g.version, project: g.project, container: g.container }));
+        return (await api.devcatzGateways()).map((g) => ({ kind: g.kind, name: g.name, category: g.category, installed: g.installed, status: g.status, version: g.version, runsIn: g.runsIn, project: g.project, container: g.container }));
       }),
     },
     read('list_migrate_sources', `Other Docker engines on this computer that images and volumes can be moved from (${isLinux ? 'Docker Desktop, Rancher Desktop, Colima, Podman' : isWin ? 'Docker Desktop, Rancher Desktop' : 'Docker Desktop, OrbStack, Colima, Rancher Desktop'}): running or stopped; and how a copy under way goes (check it after migrate_run and tell the user).`, OBJECT(), async () => {

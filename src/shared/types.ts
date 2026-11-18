@@ -768,6 +768,11 @@ export interface DcGateway {
   container: string | null;
   /** Where DevCatz shows it: devcatz://gateways/<kind> or devcatz://services/<kind> (#62). */
   link: string;
+  /**
+   * Another engine runs it (#111, DevCatz "Run in"): its name (OrbStack, Kiri, Podman …). It is not in DoCatz's
+   * engine, so DoCatz shows a read-only "runs in …" row with no containers. Null: DoCatz's engine.
+   */
+  runsIn: string | null;
 }
 
 // ------------------------------------------------------------ move from another Docker (#11)

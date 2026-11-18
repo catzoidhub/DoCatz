@@ -186,6 +186,11 @@ export class LiteBackend implements Backend {
       diskGiB: config.diskGiB,
     };
     writeFileSync(configFile(), JSON.stringify(cfg, null, 2));
+    // One owner per VM: the app and the engine helper (#107) can both start Lite. A VM that already answers on its
+    // control socket is waited for, not started twice (a second run would take its sockets and then fail on the disk);
+    // docatz-vmm 0.1.1+ also refuses itself (exit 3, "already running").
+    const already = await control<VmmStatus>('status', undefined, 2000).catch(() => null);
+    if (already && already.state !== 'stopped' && already.state !== 'error') return this.waitRunning(r, () => null);
     // Its own process group, its output in run.log: the VM outlives the process that started it.
     const out = openSync(runLog(), 'a');
     const child = spawn(vmm(), ['run', '--config', configFile()], { detached: true, stdio: ['ignore', out, out] });
@@ -193,12 +198,19 @@ export class LiteBackend implements Backend {
     closeSync(out);
     let exited: number | null = null;
     child.on('exit', (code) => (exited = code ?? 1));
+    // exit 3: another docatz-vmm runs this VM already — the same as found answering above.
+    await this.waitRunning(r, () => (exited === null || exited === 3 ? null : exited));
+  }
+
+  /** Waits for docatz-vmm to say running (2 minutes); `failed()` returns an exit code once the process is gone. */
+  private async waitRunning(r: StepReporter, failed: () => number | null): Promise<void> {
     for (let i = 0; i < 240; i++) {
       if (r.signal.aborted) {
         await this.stop().catch(() => undefined);
         throw new Error('Cancelled');
       }
-      if (exited !== null) throw new Error(`The Lite VM did not start: ${this.lastError() || `docatz-vmm exited ${exited}`}`);
+      const code = failed();
+      if (code !== null) throw new Error(`The Lite VM did not start: ${this.lastError() || `docatz-vmm exited ${code}`}`);
       const s = await control<VmmStatus>('status', undefined, 2000).catch(() => null);
       if (s?.state === 'running' && s.guest?.docker !== false) break;
       if (s?.state === 'error') throw new Error(`The Lite VM did not start: ${this.lastError() || 'see the engine log'}`);

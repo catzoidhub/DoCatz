@@ -43,10 +43,15 @@ export function devcatzGateways(): DcGateway[] {
   const entries = [...(doc?.gateways ?? []).map((g) => [g, 'gateways'] as const), ...(doc?.services ?? []).map((g) => [g, 'services'] as const)] as [Record<string, unknown>, 'gateways' | 'services'][];
   for (const [g, from] of entries) {
     const kind = str(g?.kind, /^[a-z0-9-]{1,30}$/);
-    if (!kind || g.docker !== true) continue;
-    const project = str(g.project, /^devcatz-(gw|svc)-[a-z0-9-]{1,40}$/);
-    const container = str(g.container, /^devcatz-[\w.-]{1,60}$/);
-    if (!project && !container) continue;
+    if (!kind) continue;
+    // #111 (DevCatz 3a0bac9): `docker` true = DoCatz's engine; `where` + `runsIn` = a container in another engine (it
+    // keeps its project name there); neither = a binary, or not a container at all.
+    const where = str(g.where, /^(docatz|system|ctx:[\w.@-]{1,64}|cli:[a-z]{1,20})$/);
+    const runsIn = g.docker !== true && where && where !== 'docatz' ? (str(g.runsIn, /^[\w .+()-]{1,40}$/) ?? where.replace(/^(ctx|cli):/, '')) : null;
+    if (g.docker !== true && !runsIn) continue;
+    const project = runsIn ? null : str(g.project, /^devcatz-(gw|svc)-[a-z0-9-]{1,40}$/);
+    const container = runsIn ? null : str(g.container, /^devcatz-[\w.-]{1,60}$/);
+    if (!runsIn && !project && !container) continue;
     list.push({
       kind,
       name: str(g.name, /^[\w .+-]{1,60}$/) ?? kind,
@@ -64,6 +69,7 @@ export function devcatzGateways(): DcGateway[] {
       container,
       // DevCatz's own link for it; a missing or odd one falls back to the page it has for that list
       link: str(g.link, /^devcatz:\/\/(gateways|services|storage)\/[a-z0-9-]{1,30}(\?[\w=&-]{0,60})?$/) ?? `devcatz://${from}/${kind}`,
+      runsIn,
     });
   }
   cache = { mtime, list };
