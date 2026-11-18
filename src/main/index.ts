@@ -42,6 +42,7 @@ import { DocatzTray } from './tray';
 import { uninstallPlan, uninstallRun } from './uninstall';
 import { installId, Updater } from './updater';
 import { Reviews } from './reviews';
+import { K8s } from './k8s';
 import { appMenuPopup, applyMenu, mainWindow, menuKey, menuShortcuts, onWindowClosed, openWindow, setUpdateLabel } from './window';
 
 /**
@@ -67,6 +68,8 @@ const domains = host.domains;
 const runs = new Runs();
 const updater = new Updater();
 const reviews = new Reviews();
+const k8s = new K8s();
+k8s.onChange = () => void k8s.state().then((s) => send('app:k8s', s)).catch(() => undefined);
 const reporter = new Reporter();
 const tray = new DocatzTray({
   open: (route) => openWindow(route),
@@ -651,6 +654,13 @@ function api(): DoCatzApi {
       socket.on('error', () => socket.destroy());
       return session;
     },
+    k8sState: () => k8s.state(),
+    k8sStart: async () => (await needEngine(() => k8s.start()), k8s.state()),
+    k8sStop: async () => (await k8s.stop(), k8s.state()),
+    k8sRemove: async (confirm) => (await k8s.remove(confirm), k8s.state()),
+    k8sWorkloads: () => needEngine(() => k8s.workloads()),
+    k8sDeletePod: (namespace, name) => k8s.deletePod(namespace, name),
+    k8sPodLogs: (namespace, name) => k8s.podLogs(namespace, name),
     activeJobs: async () => ({ runs: [...recentRuns.values()].filter((r) => !r.done), sibling: siblingTask && !siblingTask.done && !siblingTask.error ? siblingTask : null }),
     termInput: async (session, data) => {
       terms.get(session)?.socket.write(data);

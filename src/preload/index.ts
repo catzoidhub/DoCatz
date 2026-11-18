@@ -1,5 +1,5 @@
 import { contextBridge, ipcRenderer } from 'electron';
-import { API_METHODS, type DcDomains, type DcLogChunk, type DcRun, type DcTermData, type DcUpdateState, type DoCatzApi, type DoCatzSettings, type EngineState, type McatzpAsk, type McatzpInstallProgress, type TaskProgress } from '@shared/types';
+import { API_METHODS, type DcDomains, type DcLogChunk, type DcRun, type DcTermData, type DcUpdateState, type K8sState, type DoCatzApi, type DoCatzSettings, type EngineState, type McatzpAsk, type McatzpInstallProgress, type TaskProgress } from '@shared/types';
 
 const api = Object.fromEntries(API_METHODS.map((m) => [m, (...args: unknown[]) => ipcRenderer.invoke(`docatz:${m}`, ...args)])) as unknown as DoCatzApi;
 
@@ -46,6 +46,7 @@ const bridge = {
   onFileJob: (cb: (t: TaskProgress | null) => void) => on('app:file-job', cb),
   /** The settings changed outside the window (another Catzoid app changed the shared theme / AI connection). */
   onSettings: (cb: (s: DoCatzSettings) => void) => on('app:settings', cb),
+  onK8s: (cb: (s: K8sState) => void) => on('app:k8s', cb),
   onUpdate: (cb: (s: DcUpdateState) => void) => on('app:update', cb),
   onUpdateOpen: (cb: () => void) => on('app:updateOpen', cb),
   onReportsAsk: (cb: () => void) => on('app:reportsAsk', cb),

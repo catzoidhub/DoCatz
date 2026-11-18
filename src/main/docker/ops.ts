@@ -83,7 +83,7 @@ export async function listContainers(urlFor: UrlFor): Promise<DcContainer[]> {
   const list = await docker.get<ApiContainer[]>('/containers/json', { all: true });
   // DoCatz's own router (domains for containers without a published port) and the helpers that copy a volume's files
   // (#102) are not the user's containers.
-  return list.filter((c) => !c.Labels?.['com.mrcatz.docatz.router'] && !c.Labels?.['com.mrcatz.docatz.helper']).map((c) => shape(c, urlFor)).sort((a, b) => (a.project ?? '￿').localeCompare(b.project ?? '￿') || a.name.localeCompare(b.name));
+  return list.filter((c) => !c.Labels?.['com.mrcatz.docatz.router'] && !c.Labels?.['com.mrcatz.docatz.helper'] && !c.Labels?.['com.mrcatz.docatz.k8s'] && !c.Labels?.['io.kubernetes.pod.namespace']).map((c) => shape(c, urlFor)).sort((a, b) => (a.project ?? '￿').localeCompare(b.project ?? '￿') || a.name.localeCompare(b.name));
 }
 
 /** The folders and files on the computer that running containers mount. */

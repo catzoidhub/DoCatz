@@ -33,7 +33,7 @@ export async function attempt<T>(fn: () => Promise<T>, success?: string): Promis
 
 // ---------------------------------------------------------------- where the user is
 
-export type Section = 'containers' | 'images' | 'volumes' | 'networks' | 'builds' | 'engine' | 'monitoring' | 'commands' | 'settings';
+export type Section = 'containers' | 'images' | 'volumes' | 'networks' | 'builds' | 'kubernetes' | 'engine' | 'monitoring' | 'commands' | 'settings';
 export const section = ref<Section>('containers');
 /** The open container (by name) in Containers, and its tab. */
 export const openContainer = ref<string | null>(null);
@@ -56,7 +56,7 @@ export const settingsTab = ref<'general' | 'domains' | 'ai' | 'mcatzp' | 'update
  * a link (docatz://…) or a menu command still wins, and a container gone meanwhile shows the empty pane.
  */
 const PLACE = 'docatz.place';
-const SECTIONS: Section[] = ['containers', 'images', 'volumes', 'networks', 'builds', 'engine', 'monitoring', 'commands', 'settings'];
+const SECTIONS: Section[] = ['containers', 'images', 'volumes', 'networks', 'builds', 'kubernetes', 'engine', 'monitoring', 'commands', 'settings'];
 try {
   const p = JSON.parse(localStorage.getItem(PLACE) ?? 'null') as { section?: Section; container?: string | null; project?: string | null; settings?: typeof settingsTab.value } | null;
   if (p && SECTIONS.includes(p.section as Section)) {

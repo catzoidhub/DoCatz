@@ -9,6 +9,7 @@ import ImagesView from './ImagesView.vue';
 import VolumesView from './VolumesView.vue';
 import NetworksView from './NetworksView.vue';
 import BuildsView from './BuildsView.vue';
+import K8sView from './K8sView.vue';
 import MonitoringView from './MonitoringView.vue';
 import CommandsView from './CommandsView.vue';
 import EngineView from './EngineView.vue';
@@ -40,6 +41,8 @@ const ICONS: Record<string, string> = {
   volumes: 'M10 2.5c-3.87 0-7 1.12-7 2.5v10c0 1.38 3.13 2.5 7 2.5s7-1.12 7-2.5V5c0-1.38-3.13-2.5-7-2.5Zm0 1.5c3.45 0 5.5.95 5.5 1s-2.05 1-5.5 1-5.5-.95-5.5-1 2.05-1 5.5-1ZM4.5 7.08C5.83 7.66 7.8 8 10 8s4.17-.34 5.5-.92V10c0 .05-2.05 1-5.5 1s-5.5-.95-5.5-1V7.08Zm0 5C5.83 12.66 7.8 13 10 13s4.17-.34 5.5-.92V15c0 .05-2.05 1-5.5 1s-5.5-.95-5.5-1v-2.92Z',
   networks: 'M10 2a2.5 2.5 0 0 1 .75 4.89V9h3.5a1.75 1.75 0 0 1 1.75 1.75v1.36a2.5 2.5 0 1 1-1.5 0v-1.36a.25.25 0 0 0-.25-.25h-8.5a.25.25 0 0 0-.25.25v1.36a2.5 2.5 0 1 1-1.5 0v-1.36C4 9.78 4.78 9 5.75 9h3.5V6.89A2.5 2.5 0 0 1 10 2Z',
   builds: 'M11.98 1.8a1 1 0 0 1 .87 1.16L12.2 7H16a1 1 0 0 1 .78 1.63l-7 8.6a1 1 0 0 1-1.76-.8L8.67 12.6H5a1 1 0 0 1-.78-1.63l7-8.82a1 1 0 0 1 .76-.35Z',
+  // a ship's wheel, drawn simply: a ring, a hub and eight spokes
+  kubernetes: 'M10 1.5a.75.75 0 0 1 .75.75v1.56a6.2 6.2 0 0 1 2.9 1.2l1.1-1.1a.75.75 0 1 1 1.06 1.06l-1.1 1.1a6.2 6.2 0 0 1 1.2 2.9h1.56a.75.75 0 0 1 0 1.5h-1.56a6.2 6.2 0 0 1-1.2 2.9l1.1 1.1a.75.75 0 1 1-1.06 1.06l-1.1-1.1a6.2 6.2 0 0 1-2.9 1.2v1.56a.75.75 0 0 1-1.5 0v-1.56a6.2 6.2 0 0 1-2.9-1.2l-1.1 1.1a.75.75 0 0 1-1.06-1.06l1.1-1.1a6.2 6.2 0 0 1-1.2-2.9H2.25a.75.75 0 0 1 0-1.5h1.56a6.2 6.2 0 0 1 1.2-2.9l-1.1-1.1a.75.75 0 0 1 1.06-1.06l1.1 1.1a6.2 6.2 0 0 1 2.9-1.2V2.25A.75.75 0 0 1 10 1.5Zm0 3.75a4.75 4.75 0 1 0 0 9.5 4.75 4.75 0 0 0 0-9.5Zm0 3a1.75 1.75 0 1 1 0 3.5 1.75 1.75 0 0 1 0-3.5Z',
   engine: 'M7 2a1 1 0 0 1 1 1v1h4V3a1 1 0 1 1 2 0v1h.5A2.5 2.5 0 0 1 17 6.5V7h1a1 1 0 1 1 0 2h-1v2h1a1 1 0 1 1 0 2h-1v.5a2.5 2.5 0 0 1-2.5 2.5H14v1a1 1 0 1 1-2 0v-1H8v1a1 1 0 1 1-2 0v-1h-.5A2.5 2.5 0 0 1 3 13.5V13H2a1 1 0 1 1 0-2h1V9H2a1 1 0 1 1 0-2h1v-.5A2.5 2.5 0 0 1 5.5 4H6V3a1 1 0 0 1 1-1Zm0 5a.5.5 0 0 0-.5.5v5a.5.5 0 0 0 .5.5h6a.5.5 0 0 0 .5-.5v-5A.5.5 0 0 0 13 7H7Z',
   monitoring: 'M3 3.75A.75.75 0 0 1 3.75 3h.5a.75.75 0 0 1 .75.75v11.5h11.25a.75.75 0 0 1 .75.75v.5a.75.75 0 0 1-.75.75H3.75A.75.75 0 0 1 3 16.5V3.75Zm11.53 2.72a.75.75 0 0 1 0 1.06l-3.5 3.5a.75.75 0 0 1-1.06 0L8.5 9.56l-1.97 1.97a.75.75 0 1 1-1.06-1.06l2.5-2.5a.75.75 0 0 1 1.06 0L10.5 9.44l2.97-2.97a.75.75 0 0 1 1.06 0Z',
   commands: 'M3 4.5A1.5 1.5 0 0 1 4.5 3h11A1.5 1.5 0 0 1 17 4.5v11a1.5 1.5 0 0 1-1.5 1.5h-11A1.5 1.5 0 0 1 3 15.5v-11Zm3.22 2.72a.75.75 0 0 0 0 1.06L8.94 11l-2.72 2.72a.75.75 0 1 0 1.06 1.06l3.25-3.25a.75.75 0 0 0 0-1.06L7.28 7.22a.75.75 0 0 0-1.06 0ZM11 13.25a.75.75 0 0 0 0 1.5h3a.75.75 0 0 0 0-1.5h-3Z',
@@ -51,6 +54,7 @@ const RAIL: { id: Section; label: string }[] = [
   { id: 'volumes', label: 'Volumes' },
   { id: 'networks', label: 'Networks' },
   { id: 'builds', label: 'Builds' },
+  { id: 'kubernetes', label: 'Kubernetes' },
   { id: 'engine', label: 'Engine' },
 ];
 /** A group of its own under a divider (as OrbStack's): what runs now, and the commands to drive it. */
@@ -116,7 +120,7 @@ function openRoute(route: string) {
   } else if (head === 'settings') {
     section.value = 'settings';
     if (arg) settingsTab.value = arg as typeof settingsTab.value;
-  } else if (['images', 'volumes', 'networks', 'builds', 'engine', 'monitoring', 'commands'].includes(head)) section.value = head as Section;
+  } else if (['images', 'volumes', 'networks', 'builds', 'kubernetes', 'engine', 'monitoring', 'commands'].includes(head)) section.value = head as Section;
 }
 
 const askOn = aiOn('ask');
@@ -254,6 +258,7 @@ function openAppMenu(e: MouseEvent) {
         <VolumesView v-else-if="section === 'volumes'" />
         <NetworksView v-else-if="section === 'networks'" />
         <BuildsView v-else-if="section === 'builds'" />
+        <K8sView v-else-if="section === 'kubernetes'" />
         <MonitoringView v-else-if="section === 'monitoring'" />
         <CommandsView v-else-if="section === 'commands'" />
         <EngineView v-else-if="section === 'engine'" />

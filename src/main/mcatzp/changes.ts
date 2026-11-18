@@ -426,6 +426,12 @@ export function changeActions(api: DoCatzApi, scopes: Scopes, reads: EngineReads
       if (r.done && r.error) throw new Error(r.error);
       return ok(r.done ? { running: true } : { running: false, note: r.error });
     }),
+    change('start_kubernetes', 'Turn on Kubernetes', 'Creates or starts the local k3s cluster on DoCatz\'s engine (an 80 MB download the first time, about 600 MB of memory while on). It may take a minute; get_kubernetes shows how it goes.', OBJECT(), async () => ({ title: 'Turn on Kubernetes?', facts: fact('Uses', 'about 600 MB of memory while it is on'), page: 'kubernetes' }), async () => ok(await api.k8sStart())),
+    change('stop_kubernetes', 'Stop Kubernetes', 'Stops the local cluster: its pods stop; the cluster\'s data stays for the next start.', OBJECT(), async () => ({ title: 'Stop Kubernetes?', facts: fact('Stops', 'every pod in the cluster'), page: 'kubernetes' }), async () => ok(await api.k8sStop())),
+    change('delete_pod', 'Delete a pod', 'Deletes one pod of the local cluster; a deployment starts a new one.', OBJECT({ namespace: { type: 'string' }, name: { type: 'string' } }, ['namespace', 'name']), async (a) => ({ title: `Delete the pod ${String(a.name)}?`, facts: fact('Namespace', a.namespace), page: 'kubernetes' }), async (a) => {
+      await api.k8sDeletePod(String(a.namespace), String(a.name));
+      return ok({ deleted: true });
+    }),
     change('stop_engine', 'Stop the engine', isLinux ? "Stops this computer's Docker Engine (the system service; the system asks for the password): every running container stops with it, and Docker for every other app too." : 'Stops the Docker engine: every running container stops with it.', OBJECT(), async () => {
       const running = (await api.containers().catch(() => [])).filter((c) => c.state === 'running').length;
       return { title: 'Stop the engine?', facts: fact('Stops', `${running} running container${running === 1 ? '' : 's'}`), page: 'engine' };

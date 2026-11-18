@@ -781,6 +781,27 @@ export interface DcGateway {
   runsIn: string | null;
 }
 
+// ------------------------------------------------------------ Kubernetes (#28)
+
+/** The local cluster (k3s as one container on DoCatz's engine). `off`: never enabled (no container). */
+export interface K8sState {
+  status: 'off' | 'stopped' | 'starting' | 'running' | 'stopping';
+  version: string;
+  node: string | null;
+  apiPort: number;
+  /** DoCatz's kubeconfig for it (context `docatz`). */
+  kubeconfig: string;
+  /** `docatz` is the current context of the user's own ~/.kube/config. */
+  context: boolean;
+  detail: string;
+  error: string;
+}
+export interface K8sWorkloads {
+  pods: { namespace: string; name: string; status: string; ready: string; restarts: number; image: string; ip: string | null; created: string }[];
+  deployments: { namespace: string; name: string; ready: number; replicas: number; created: string }[];
+  services: { namespace: string; name: string; type: string; clusterIP: string | null; ports: { port: number; nodePort: number | null; protocol: string }[]; created: string }[];
+}
+
 // ------------------------------------------------------------ move from another Docker (#11)
 
 export type DcMigrateSourceId = 'docker-desktop' | 'orbstack' | 'colima' | 'rancher' | 'podman' | 'docatz-other' | 'kiri';
@@ -849,6 +870,15 @@ export interface DoCatzApi {
   /** Opens a sibling Catzoid app at a link (devcatz://…, dbcatz://…); false when it is not installed. */
   openSibling(app: SiblingApp, link: string): Promise<boolean>;
   /** Other Docker engines on this computer (Docker Desktop, OrbStack, Colima, Rancher Desktop) to move from (#11). */
+  k8sState(): Promise<K8sState>;
+  /** Creates / starts the cluster (downloads k3s the first time); the state follows on app:k8s. */
+  k8sStart(): Promise<K8sState>;
+  k8sStop(): Promise<K8sState>;
+  /** Removes the cluster and its data; `confirm` is the typed word delete. */
+  k8sRemove(confirm: string): Promise<K8sState>;
+  k8sWorkloads(): Promise<K8sWorkloads>;
+  k8sDeletePod(namespace: string, name: string): Promise<void>;
+  k8sPodLogs(namespace: string, name: string): Promise<string>;
   migrateSources(): Promise<DcMigrateSource[]>;
   migrateInventory(source: DcMigrateSourceId): Promise<DcMigrateInventory>;
   /** Copies the picked images and volumes onto DoCatz's engine (the other keeps them); steps via onMigrate; the items that failed. */
@@ -1016,7 +1046,7 @@ export interface DoCatzApi {
 export const API_METHODS: (keyof DoCatzApi)[] = [
   'appInfo', 'aboutInfo', 'updateState', 'updateCheck', 'updateNotes', 'updateDownload', 'updateCancel', 'updateSkip', 'updateInstall', 'updateConfigure', 'ratingSend', 'ratingRefresh', 'reportPreview', 'reportSend', 'captureWindow', 'reportError', 'reportSettings', 'reportConfigure', 'uninstallPlan', 'uninstallRun', 'settings', 'setSettings', 'setAiKey', 'aiModels', 'aiProbe', 'aiTest', 'aiCancel', 'aiAsk', 'aiPreviewAsk', 'aiExplainLog', 'aiPreviewLog', 'aiFile', 'aiPreviewFile', 'openUrl', 'browsers', 'reveal', 'openSibling', 'mcatzpActivity', 'mcatzpClearActivity', 'mcatzpRevoke', 'mcatzpSetup', 'mcatzpInstall', 'mcatzpUninstall', 'mcatzpInstallCancel', 'mcatzpApprovals', 'mcatzpTargets', 'mcatzpAddToClient', 'mcatzpRemoveFromClient', 'mcatzpUpdate', 'mcatzpPending', 'mcatzpAnswer', 'copyText', 'apiSource', 'siblingVersions', 'migrateSources', 'migrateInventory', 'migrateRun', 'migrateCancel', 'devcatzGateways', 'databases', 'siblingInstall', 'siblingInstallCancel', 'runInTerminal',
   'engineState', 'engineStart', 'engineStop', 'engineRestart', 'engineReset', 'engineConfigure', 'engineCancel', 'engineSetupWsl', 'restartComputer', 'engineLog', 'contextSet', 'cliInstall', 'cliPath', 'diskUsage',
-  'containers', 'container', 'containerEnv', 'containerAction', 'containerRemove', 'stats', 'logsFollow', 'logsStop', 'termOpen', 'termInput', 'termResize', 'termClose', 'files', 'fileSave', 'projects', 'composePick', 'composeRun', 'composeProject', 'runCancel', 'activeJobs', 'readText', 'writeText',
+  'containers', 'container', 'containerEnv', 'containerAction', 'containerRemove', 'stats', 'logsFollow', 'logsStop', 'termOpen', 'termInput', 'termResize', 'termClose', 'files', 'fileSave', 'projects', 'composePick', 'composeRun', 'composeProject', 'runCancel', 'activeJobs', 'k8sState', 'k8sStart', 'k8sStop', 'k8sRemove', 'k8sWorkloads', 'k8sDeletePod', 'k8sPodLogs', 'readText', 'writeText',
   'images', 'imageRemove', 'imagePull', 'volumes', 'volumeRemove', 'volumeWriters', 'volumeExport', 'volumeImportPick', 'volumeImport', 'volumeCancel', 'imageExport', 'imageImportPick', 'imageImport', 'networks', 'networkRemove', 'prunePreview', 'prune',
   'projectPrefs', 'setProjectPrefs',
   'envState', 'envRead', 'envWrite', 'envCreate', 'envLock', 'envRemove', 'envDrift', 'setDomainName',

@@ -220,6 +220,17 @@ export function destructiveActions(api: DoCatzApi, scopes: Scopes, reads: Engine
       platforms: ['darwin', 'win32'],
     },
     typed(
+      'remove_kubernetes',
+      'Remove the Kubernetes cluster',
+      'Deletes the local cluster and everything in it (pods, cluster volumes, settings). Docker containers, images and volumes stay.',
+      OBJECT(),
+      async () => ({ title: 'Remove the Kubernetes cluster?', facts: [...fact('Goes', 'the cluster and everything in it'), ...fact('Stays', 'Docker containers, images and volumes')], page: 'kubernetes', typeName: 'delete' }),
+      async () => {
+        await api.k8sRemove('delete');
+        return ok({ removed: true });
+      },
+    ),
+    typed(
       'env_remove_variable',
       'Remove an environment variable',
       'Removes one variable from a project\'s environment file in DoCatz. A secret\'s value cannot be read back.',
