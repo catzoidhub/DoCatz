@@ -196,6 +196,9 @@ export class Engine {
     void this.changed();
     const signal = this.abort.signal;
     try {
+      // The first start after a switch: take the VM's own sizes before starting it, or the defaults would grow its disk.
+      const b = await this.backend.status().catch(() => null);
+      if (b?.running) adoptSizes(engineConfig().kind, { cpus: b.running.cpus, memoryGiB: b.running.memoryGiB, diskGiB: b.running.diskGiB });
       await this.backend.start(engineConfig(), {
         step: (i, detail) => this.progress({ step: i, detail, fraction: undefined }),
         detail: (text, fraction) => this.progress({ detail: text, fraction }),
