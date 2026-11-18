@@ -19,13 +19,17 @@ const s = computed(() => engine.value);
 const c = computed(() => s.value?.config);
 const isMac = computed(() => s.value?.backend === 'lima' || s.value?.backend === 'lite');
 /** Standard and Lite side by side (TODO #106): what each is, and DoCatz's own measured numbers. */
+/** The two engines' cards: what each is in a line. */
+const ENGINES: { kind: 'standard' | 'lite'; name: string; about: string }[] = [
+  { kind: 'standard', name: 'Standard', about: 'A full Ubuntu VM managed by Lima — the most compatible.' },
+  { kind: 'lite', name: 'Lite', about: 'DoCatz’s own small Linux VM — lighter and faster to wake. Some Docker features may not work yet.' },
+];
 const ENGINE_ROWS: [string, string, string][] = [
-  ['Linux inside', 'Ubuntu LTS, managed by Lima', 'Alpine, DoCatz’s own small VM'],
   ['First download', 'about 950 MB', 'about 90 MB'],
   ['Memory when idle', 'about 2.8 GB', 'about 430 MB'],
   ['Start until Docker answers', 'about 27 s', 'about 1 s'],
-  ['After 15 minutes with nothing running', 'Keeps running', 'Sleeps and gives its memory back; wakes in about 1 s'],
-  ['Compatibility', 'Full', 'Most images and compose projects (beta)'],
+  ['Nothing running for 15 min', 'Keeps running', 'Sleeps, wakes in about 1 s'],
+  ['Compatibility', 'Full', 'Most images and compose projects'],
 ];
 /** Standard ⇄ Lite (TODO #106, beta): macOS only for now. */
 const canLite = computed(() => isMac.value);
@@ -165,29 +169,47 @@ const copy = (t: string) => {
         <div v-if="canLite && c" v-show="tab === 'settings'" class="card">
           <div class="card-body gap-3">
             <h2>Standard or Lite</h2>
-            <div class="opt-row">
-              <span class="flex flex-col">
-                <span class="label-caps">Which engine</span>
-                <span class="text-xs opacity-50">
-                  <template v-if="c.kind === 'lite'">Lite: DoCatz’s own small Linux VM — lighter and faster to wake, still in beta: some Docker features may not work yet.</template>
-                  <template v-else>Standard: a full Ubuntu VM (Lima), the most compatible. Lite is lighter and faster to wake, still in beta.</template>
-                </span>
-              </span>
-              <div class="seg">
-                <button class="seg-item" :class="{ 'is-active': c.kind !== 'lite' }" :disabled="!!busy" @click="c.kind === 'lite' && set({ kind: 'standard' })">Standard</button>
-                <button class="seg-item" :class="{ 'is-active': c.kind === 'lite' }" :disabled="!!busy" @click="c.kind !== 'lite' && set({ kind: 'lite' })">Lite <span class="badge badge-xs badge-soft badge-warning ml-1">beta</span></button>
+            <!-- Two cards (user, 2026-11-18: a segmented switch did not read as a choice): what each is, DoCatz's own
+                 numbers (an Apple M4, CatzTodo/DoCatz/measurements.md), "In use" on one and a button on the other. -->
+            <div class="grid gap-3 sm:grid-cols-2">
+              <div
+                v-for="e in ENGINES"
+                :key="e.kind"
+                class="flex flex-col gap-3 rounded-box border p-4 transition-colors"
+                :class="(c.kind ?? 'standard') === e.kind ? 'border-primary/60 bg-primary/8 ring-1 ring-primary/30' : 'border-base-300/70 bg-base-100'"
+              >
+                <div class="flex items-start gap-2">
+                  <div class="min-w-0 flex-1">
+                    <div class="flex items-center gap-2">
+                      <span class="text-base font-semibold tracking-tight">{{ e.name }}</span>
+                      <span v-if="e.kind === 'lite'" class="badge badge-xs badge-soft badge-warning">beta</span>
+                    </div>
+                    <p class="mt-0.5 text-xs leading-relaxed opacity-65">{{ e.about }}</p>
+                  </div>
+                  <span v-if="(c.kind ?? 'standard') === e.kind" class="badge badge-sm badge-primary shrink-0 gap-1">
+                    <svg viewBox="0 0 20 20" class="size-3" fill="currentColor"><path fill-rule="evenodd" d="M16.7 5.3a1 1 0 0 1 0 1.4l-7.5 7.5a1 1 0 0 1-1.4 0l-3.5-3.5a1 1 0 1 1 1.4-1.4l2.8 2.8 6.8-6.8a1 1 0 0 1 1.4 0Z" clip-rule="evenodd" /></svg>
+                    In use
+                  </span>
+                </div>
+                <dl class="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-xs">
+                  <template v-for="row in ENGINE_ROWS" :key="row[0]">
+                    <dt class="opacity-55">{{ row[0] }}</dt>
+                    <dd class="font-medium">{{ e.kind === 'lite' ? row[2] : row[1] }}</dd>
+                  </template>
+                </dl>
+                <div class="mt-auto pt-1">
+                  <button
+                    v-if="(c.kind ?? 'standard') !== e.kind"
+                    class="btn btn-sm w-full"
+                    :class="e.kind === 'lite' ? 'btn-primary' : ''"
+                    :disabled="!!busy"
+                    @click="set({ kind: e.kind })"
+                  >
+                    Switch to {{ e.name }}
+                  </button>
+                  <p v-else class="text-center text-xs opacity-55">The engine DoCatz runs now</p>
+                </div>
               </div>
-            </div>
-            <!-- The two engines side by side (user, 2026-11-18): DoCatz's own numbers, measured on an Apple M4 (CatzTodo/DoCatz/measurements.md). -->
-            <div class="overflow-x-auto rounded-box border border-base-300/60">
-              <table class="table table-sm">
-                <thead>
-                  <tr><th></th><th :class="{ 'text-[var(--primary-ink,var(--color-primary))]': c.kind !== 'lite' }">Standard</th><th :class="{ 'text-[var(--primary-ink,var(--color-primary))]': c.kind === 'lite' }">Lite <span class="badge badge-xs badge-soft badge-warning ml-0.5">beta</span></th></tr>
-                </thead>
-                <tbody>
-                  <tr v-for="row in ENGINE_ROWS" :key="row[0]"><td class="opacity-60">{{ row[0] }}</td><td>{{ row[1] }}</td><td>{{ row[2] }}</td></tr>
-                </tbody>
-              </table>
             </div>
             <p class="text-xs opacity-60">Measured on an Apple M4 with 4 CPUs and 4 GB for the VM; yours will differ. Each engine keeps its own containers, images and volumes; switching stops one and starts the other, and DoCatz restarts once. Move from another Docker brings images and volumes across.</p>
           </div>
