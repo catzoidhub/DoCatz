@@ -246,7 +246,7 @@ export interface TaskProgress {
 
 // ------------------------------------------------------------ engine
 
-export type EngineBackendId = 'lima' | 'wsl' | 'system';
+export type EngineBackendId = 'lima' | 'wsl' | 'system' | 'lite';
 export type EngineStatus = 'missing' | 'stopped' | 'starting' | 'running' | 'stopping' | 'error' | 'unsupported';
 export interface EngineConfig {
   cpus: number;
@@ -261,6 +261,11 @@ export interface EngineConfig {
    * process of their own that stays when DoCatz quits, and starts at login. Off = all of it lives and ends with DoCatz.
    */
   keepRunning: boolean;
+  /**
+   * Which engine (TODO #106): Standard (Lima + Ubuntu on macOS, the WSL 2 distro on Windows, the system's Docker on
+   * Linux) or Lite (beta, macOS for now: DoCatz's own small VM). Each keeps its own disk; switching restarts DoCatz.
+   */
+  kind: 'standard' | 'lite';
 }
 export interface EnginePrereqs {
   /** SVM / VT-x on in the BIOS / UEFI; null when Windows does not say. */

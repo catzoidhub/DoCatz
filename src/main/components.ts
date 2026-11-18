@@ -68,3 +68,12 @@ export const dockerPackage = () => need(DOCKER[`${os()}-${arch()}`], 'Docker CLI
 export const composePackage = () => need(COMPOSE[`${os()}-${arch()}`], 'Docker Compose');
 export const buildxPackage = () => need(BUILDX[`${os()}-${arch()}`], 'Docker Buildx');
 export const wslRootfs = () => ALPINE_WSL[machineArch()];
+
+/**
+ * DoCatz Lite (TODO #106, beta): docatz-vmm and its guest from catzoidhub/docatz-engine's releases, pinned like the rest
+ * (docs/CONTRACT.md §2). `version` is the engine release DoCatz speaks to; the pins stay null until v0.1.0 is published —
+ * meanwhile DOCATZ_LITE_LOCAL points at a local docatz-engine build (engine/lite.ts).
+ */
+export const LITE = { version: '0.1.0' } as const;
+const LITE_PINS: Record<Arch, { vmm: Pinned; guest: Pinned } | null> = { arm64: null, x64: null };
+export const litePackages = () => LITE_PINS[machineArch()];

@@ -17,7 +17,17 @@ import MigrateDialog from './MigrateDialog.vue';
  */
 const s = computed(() => engine.value);
 const c = computed(() => s.value?.config);
-const isMac = computed(() => s.value?.backend === 'lima');
+const isMac = computed(() => s.value?.backend === 'lima' || s.value?.backend === 'lite');
+/** Standard and Lite side by side (TODO #106): what each is, and DoCatz's own measured numbers. */
+const ENGINE_ROWS: [string, string, string][] = [
+  ['Linux inside', 'Ubuntu LTS, managed by Lima', 'Alpine, DoCatz’s own small VM'],
+  ['First download', 'about 950 MB', 'about 220 MB'],
+  ['Memory when idle', 'about 2.8 GB', 'about 430 MB'],
+  ['Start until Docker answers', 'about 27 s', 'about 3 s (9 s the first time)'],
+  ['Compatibility', 'Full', 'Most images; UDP ports not forwarded yet'],
+];
+/** Standard ⇄ Lite (TODO #106, beta): macOS only for now. */
+const canLite = computed(() => isMac.value);
 /** Linux (#101): the system's Docker Engine, no VM — no limits to set and no Reset. */
 const isSystem = computed(() => s.value?.backend === 'system');
 /** The engines DoCatz can move from on this platform (#103: said when none is there). */
@@ -119,6 +129,38 @@ const copy = (t: string) => {
               <span>Restart the engine to apply: {{ s.pending.join(', ') }}.</span>
               <button class="btn btn-sm" :disabled="!!busy" @click="run('restart', () => api.engineRestart())">Restart now</button>
             </div>
+          </div>
+        </div>
+
+        <!-- engine choice (TODO #106) -->
+        <div v-if="canLite && c" class="card">
+          <div class="card-body gap-3">
+            <h2>Standard or Lite</h2>
+            <div class="opt-row">
+              <span class="flex flex-col">
+                <span class="label-caps">Which engine</span>
+                <span class="text-xs opacity-50">
+                  <template v-if="c.kind === 'lite'">Lite: DoCatz’s own small Linux VM — lighter and faster to wake, still in beta: some Docker features may not work yet.</template>
+                  <template v-else>Standard: a full Ubuntu VM (Lima), the most compatible. Lite is lighter and faster to wake, still in beta.</template>
+                </span>
+              </span>
+              <div class="seg">
+                <button class="seg-item" :class="{ 'is-active': c.kind !== 'lite' }" :disabled="!!busy" @click="c.kind === 'lite' && set({ kind: 'standard' })">Standard</button>
+                <button class="seg-item" :class="{ 'is-active': c.kind === 'lite' }" :disabled="!!busy" @click="c.kind !== 'lite' && set({ kind: 'lite' })">Lite <span class="badge badge-xs badge-soft badge-warning ml-1">beta</span></button>
+              </div>
+            </div>
+            <!-- The two engines side by side (user, 2026-11-18): DoCatz's own numbers, measured on an Apple M4 (CatzTodo/DoCatz/measurements.md). -->
+            <div class="overflow-x-auto rounded-box border border-base-300/60">
+              <table class="table table-sm">
+                <thead>
+                  <tr><th></th><th :class="{ 'text-[var(--primary-ink,var(--color-primary))]': c.kind !== 'lite' }">Standard</th><th :class="{ 'text-[var(--primary-ink,var(--color-primary))]': c.kind === 'lite' }">Lite <span class="badge badge-xs badge-soft badge-warning ml-0.5">beta</span></th></tr>
+                </thead>
+                <tbody>
+                  <tr v-for="row in ENGINE_ROWS" :key="row[0]"><td class="opacity-60">{{ row[0] }}</td><td>{{ row[1] }}</td><td>{{ row[2] }}</td></tr>
+                </tbody>
+              </table>
+            </div>
+            <p class="text-xs opacity-60">Measured on an Apple M4 with 4 CPUs and 4 GB for the VM; yours will differ. Each engine keeps its own containers, images and volumes; switching stops one and starts the other, and DoCatz restarts once. Move from another Docker brings images and volumes across.</p>
           </div>
         </div>
 

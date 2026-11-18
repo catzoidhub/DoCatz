@@ -10,6 +10,7 @@ import { isLinux, isWin } from '../platform';
 import { store } from '../store';
 import type { Backend, BackendStatus } from './backend';
 import { LimaBackend } from './lima';
+import { LiteBackend } from './lite';
 import { WslBackend } from './wsl';
 import { LinuxBackend } from './linux';
 import { machineArch } from '../machine';
@@ -25,7 +26,7 @@ const GiB = 1024 ** 3;
 const host = { cpus: hostCpus().length, memoryGiB: Math.round(totalmem() / GiB), arch: machineArch(), rosetta: process.platform === 'darwin' && machineArch() === 'arm64' };
 
 function defaults(): EngineConfig {
-  return { cpus: Math.max(2, Math.min(4, Math.floor(host.cpus / 2))), memoryGiB: Math.max(2, Math.min(4, Math.floor(host.memoryGiB / 2))), diskGiB: 64, rosetta: host.rosetta, autoStart: true, keepRunning: false };
+  return { cpus: Math.max(2, Math.min(4, Math.floor(host.cpus / 2))), memoryGiB: Math.max(2, Math.min(4, Math.floor(host.memoryGiB / 2))), diskGiB: 64, rosetta: host.rosetta, autoStart: true, keepRunning: false, kind: 'standard' };
 }
 
 export function engineConfig(): EngineConfig {
@@ -39,11 +40,13 @@ export function engineConfig(): EngineConfig {
     rosetta: host.rosetta && s.rosetta !== false,
     autoStart: s.autoStart !== false,
     keepRunning: s.keepRunning === true,
+    // Lite runs on macOS for now (docatz-engine); elsewhere the choice stays Standard.
+    kind: s.kind === 'lite' && process.platform === 'darwin' ? 'lite' : 'standard',
   };
 }
 
 export class Engine {
-  readonly backend: Backend = isWin ? new WslBackend() : isLinux ? new LinuxBackend() : new LimaBackend();
+  readonly backend: Backend = isWin ? new WslBackend() : isLinux ? new LinuxBackend() : engineConfig().kind === 'lite' ? new LiteBackend() : new LimaBackend();
   private task: TaskProgress | null = null;
   private abort: AbortController | null = null;
   private busy: 'starting' | 'stopping' | null = null;

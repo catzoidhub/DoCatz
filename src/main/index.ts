@@ -212,6 +212,31 @@ async function switchHelper(on: boolean): Promise<void> {
   app.exit(0);
 }
 
+/**
+ * Standard ⇄ Lite (#106, beta). Each engine keeps its own disk (its containers, images, volumes): the one in use stops,
+ * the choice is saved and DoCatz restarts on the other (with the helper on, the helper restarts too). Move from another
+ * Docker (#11) brings images and volumes across afterwards.
+ */
+async function switchEngine(kind: 'standard' | 'lite'): Promise<void> {
+  const r = await messageBox(mainWindow(), {
+    type: kind === 'lite' ? 'warning' : 'info',
+    buttons: [kind === 'lite' ? 'Switch to Lite' : 'Switch to Standard', 'Cancel'],
+    defaultId: 0,
+    cancelId: 1,
+    message: kind === 'lite' ? 'Switch to the Lite engine (beta)?' : 'Switch back to the Standard engine?',
+    detail:
+      kind === 'lite'
+        ? 'Lighter and faster to wake, still in beta: some Docker features may not work yet; you can switch back to Standard any time.\n\nThe Standard engine stops and keeps its containers, images and volumes for when you switch back. Lite starts with an empty disk — Move from another Docker can bring images and volumes over. DoCatz restarts once.'
+        : 'The Lite engine stops and keeps its disk for later. The Standard engine starts with its own containers, images and volumes again. DoCatz restarts once.',
+  });
+  if (r.response !== 0) return;
+  await engine.stop().catch((e) => console.warn('engine stop:', (e as Error).message));
+  await engine.configure({ kind });
+  if (helper) await helper.call('helper.quit', false).catch(() => undefined);
+  app.relaunch();
+  app.exit(0);
+}
+
 /** Connects to the engine helper (starting it when needed) and follows its events; reconnects if it restarts. */
 async function attachHelper(): Promise<void> {
   if (!helper || !remote) return;
@@ -571,7 +596,15 @@ function api(): DoCatzApi {
       void refresh();
     },
     engineConfigure: async (patch) => {
-      const turned = typeof patch.keepRunning === 'boolean' && patch.keepRunning !== engineConfig().keepRunning ? patch.keepRunning : null;
+      const before = engineConfig();
+      // Standard ⇄ Lite (#106): asked first, the current engine stopped, then DoCatz restarts on the other one.
+      if ((patch.kind === 'lite' || patch.kind === 'standard') && patch.kind !== before.kind) {
+        const { kind, ...rest } = patch;
+        if (Object.keys(rest).length) await engine.configure(rest);
+        await switchEngine(kind);
+        return engine.state();
+      }
+      const turned = typeof patch.keepRunning === 'boolean' && patch.keepRunning !== before.keepRunning ? patch.keepRunning : null;
       const r = await engine.configure(patch);
       if (turned !== null) await switchHelper(turned);
       return r;
