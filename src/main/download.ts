@@ -37,7 +37,9 @@ export async function fetchPinned(p: Pinned, onProgress: (fraction: number, rece
   for (let attempt = 0; ; attempt++) {
     let res: Response;
     try {
-      res = await net.fetch(p.url, { signal, headers: received ? { Range: `bytes=${received}-` } : undefined });
+      // no-store: the file is kept in ~/.docatz/downloads already; without it Chromium also kept a copy of every
+      // guest, k3s and app installer in its HTTP cache (1.1 GB found on a Mac, 2026-11-19).
+      res = await net.fetch(p.url, { signal, cache: 'no-store', headers: received ? { Range: `bytes=${received}-` } : undefined });
     } catch (e) {
       if (signal?.aborted) throw new Cancelled();
       if (attempt < 6 && transient(e)) {

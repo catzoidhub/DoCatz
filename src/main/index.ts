@@ -171,6 +171,9 @@ function handleLink(raw: string): void {
 // a docatz:// link starts one; found by DBCatz, 2026-11-10). The running DoCatz gets the link through second-instance.
 // Windows' login item (#107): DoCatz.exe --docatz-engine-helper starts the engine helper and leaves at once — no lock,
 // no window. With the helper switched off since, it does nothing (the entry is removed when it is switched off).
+// Chromium's HTTP cache (userData/Cache) has no useful size limit of its own; downloads that still pass through it,
+// such as electron-updater's, are held to 64 MB.
+app.commandLine.appendSwitch('disk-cache-size', String(64 * 1024 * 1024));
 if (process.argv.includes(LOGIN_FLAG)) {
   if (helperMode) startHelperFromLogin();
   app.exit(0);
