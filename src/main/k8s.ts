@@ -200,7 +200,11 @@ export class K8s {
             '-p', `127.0.0.1:${API_PORT}:6443`,
             IMAGE, 'server', '--docker', '--disable=traefik,servicelb', '--tls-san', '127.0.0.1', '--tls-san', 'localhost',
             `--data-dir=${DATA}/rancher`, `--kubelet-arg=root-dir=${DATA}/kubelet`,
-            ...(systemd ? ['--kubelet-arg=cgroup-driver=systemd'] : []),
+            // Inside a systemd .scope (dockerd's container) k3s hands kubelet --kubelet-cgroups=/k3s, and kubelet moves
+            // k3s there — with the host's cgroup namespace that is the host's /k3s: the container's scope empties,
+            // systemd removes it, and every `docker exec` into the cluster fails ("can't open cgroup …scope"), so the
+            // node never showed Ready (Ubuntu 26.04 docker.io, Hyper-V VM, 2026-11-18). Empty = kubelet stays put.
+            ...(systemd ? ['--kubelet-arg=cgroup-driver=systemd', '--kubelet-arg=kubelet-cgroups='] : []),
           ],
           180_000,
         );
