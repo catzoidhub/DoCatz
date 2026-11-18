@@ -69,6 +69,7 @@ const runs = new Runs();
 const updater = new Updater();
 const reviews = new Reviews();
 const k8s = new K8s();
+k8s.naming = () => domains.naming();
 // LoadBalancer Services follow the cluster onto 127.0.0.1 (k8s.ts); only while a cluster runs.
 /** Nothing about the cluster may touch the socket of a sleeping engine (it would wake it). */
 const engineAsleep = async () => (await host.engine.backend.sleeping?.().catch(() => false)) === true;

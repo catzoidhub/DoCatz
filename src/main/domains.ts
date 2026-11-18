@@ -340,8 +340,10 @@ export class Domains {
    * port, else the one it listens on, else 80 — so nothing needs publishing (as OrbStack). A published port on
    * localhost is the fallback when the router cannot run.
    */
-  async setRoutes(containers: DcContainer[], streams: DbStream[] = []): Promise<void> {
+  async setRoutes(containers: DcContainer[], streams: DbStream[] = [], k8s: { name: string; port: number }[] = []): Promise<void> {
     const next = new Map<string, { router: boolean; port: number }>();
+    // Kubernetes Services opened on 127.0.0.1 (#28): their names go to that port.
+    for (const s of k8s) next.set(`${s.name}.docatz.${this.tld()}`, { router: false, port: s.port });
     const targets: RouterTarget[] = [];
     for (const c of containers) {
       if (c.state !== 'running') {

@@ -800,6 +800,8 @@ export interface K8sState {
   /** LoadBalancer ports now open on 127.0.0.1, and those that could not be (taken on this computer). */
   published: number[];
   publishError: string;
+  /** The names' ending (`localhost`, `test` …): Services are `<name>.<namespace>.k8s.docatz.<tld>`. */
+  tld: string;
 }
 export interface K8sPod {
   namespace: string;
@@ -828,6 +830,8 @@ export interface K8sService {
   /** The pods it sends to. Empty: no selector (an external or headless one). */
   selector: Record<string, string>;
   created: string;
+  /** Its name address (`<name>.<namespace>.k8s.docatz.<tld>`), for a LoadBalancer opened on this computer. */
+  url: string | null;
 }
 export interface K8sDeployment {
   namespace: string;

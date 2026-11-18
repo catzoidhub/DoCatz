@@ -86,6 +86,21 @@ export async function listContainers(urlFor: UrlFor): Promise<DcContainer[]> {
   return list.filter((c) => !c.Labels?.['com.mrcatz.docatz.router'] && !c.Labels?.['com.mrcatz.docatz.helper'] && !c.Labels?.['com.mrcatz.docatz.k8s'] && !c.Labels?.['io.kubernetes.pod.namespace']).map((c) => shape(c, urlFor)).sort((a, b) => (a.project ?? '￿').localeCompare(b.project ?? '￿') || a.name.localeCompare(b.name));
 }
 
+/**
+ * Kubernetes LoadBalancer Services' name addresses (#28): the forwarder (k8s.ts) carries `<name>.<namespace>.k8s=<port>`
+ * for each port it opens on 127.0.0.1, so the proxy can route `<name>.<namespace>.k8s.docatz.<tld>` there.
+ */
+export async function k8sHosts(): Promise<{ name: string; port: number }[]> {
+  const list = await docker.get<ApiContainer[]>('/containers/json', { filters: JSON.stringify({ label: ['com.mrcatz.docatz.k8s.hosts'] }) });
+  return list.flatMap((c) =>
+    (c.Labels?.['com.mrcatz.docatz.k8s.hosts'] ?? '')
+      .split(';')
+      .map((x) => /^([a-z0-9.-]+)=(\d{1,5})$/.exec(x))
+      .filter((m): m is RegExpExecArray => !!m)
+      .map((m) => ({ name: m[1], port: Number(m[2]) })),
+  );
+}
+
 /** The folders and files on the computer that running containers mount. */
 export async function bindMounts(): Promise<string[]> {
   const list = await docker.get<ApiContainer[]>('/containers/json');

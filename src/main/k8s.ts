@@ -3,6 +3,7 @@ import { createServer } from 'node:net';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import type { K8sState, K8sWorkloads } from '@shared/types';
+import type { Naming } from './domains';
 import { cliInstalled, dockerBin } from './cli';
 import { KUBECTL_VERSION, kubectlPackage } from './components';
 import { fetchPinned } from './download';
@@ -34,6 +35,14 @@ export const K8S_LABEL = 'com.mrcatz.docatz.k8s';
 const kubeconfigFile = () => join(docatzDir('kube'), 'config');
 /** LoadBalancer Services on the computer: one small forwarder container (the router's image) publishing their ports. */
 const LB_NAME = 'docatz-k8s-lb';
+/** On the forwarder: `<name>.<namespace>.k8s=<port>;…` — the proxy (domains.ts) gives each its name address. */
+export const K8S_HOSTS_LABEL = 'com.mrcatz.docatz.k8s.hosts';
+const dnsLabel = (s: string) => s.toLowerCase().replace(/[^a-z0-9-]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 63) || 'x';
+/** A Service's name before .docatz.<tld>. */
+export const k8sHostName = (name: string, namespace: string): string => `${dnsLabel(name)}.${dnsLabel(namespace)}.k8s`;
+/** Of a Service's ports, the one its name address opens: a web port when it has one, else its first. */
+const WEB = [80, 443, 8080, 3000, 8000, 5000, 8443];
+const webPort = (ports: number[]): number | undefined => WEB.find((w) => ports.includes(w)) ?? ports[0];
 const LB_IMAGE = 'nginx:alpine';
 const kubectlBin = () => exe('kubectl');
 const kubectlMark = () => join(docatzDir('kube'), 'kubectl-version');
@@ -114,6 +123,10 @@ export class K8s {
   private error = '';
   private published: number[] = [];
   private publishError = '';
+  /** Ports left out because something else had them: tried again once one is free. */
+  private leftOut: number[] = [];
+  /** How the proxy names things (index.ts: the helper's answer when it serves). */
+  naming: () => Naming | null = () => null;
   private syncing = false;
   /** One read of the workloads at a time: a second asker gets the same answer. */
   private reading: Promise<K8sWorkloads> | null = null;
@@ -126,7 +139,7 @@ export class K8s {
 
   /** `asleep`: the engine sleeps (Lite, on-demand Docker) — a running cluster would have kept it awake, so nothing is asked. */
   async state(asleep = false): Promise<K8sState> {
-    const base = { version: K8S_VERSION.replace('-k3s', '+k3s'), apiPort: API_PORT, kubeconfig: kubeconfigFile(), detail: this.detail, error: this.error, node: null as string | null, context: this.contextInUse(), kubectl: this.kubectlInstalled(), published: this.published, publishError: this.publishError };
+    const base = { version: K8S_VERSION.replace('-k3s', '+k3s'), apiPort: API_PORT, kubeconfig: kubeconfigFile(), detail: this.detail, error: this.error, node: null as string | null, context: this.contextInUse(), kubectl: this.kubectlInstalled(), published: this.published, publishError: this.publishError, tld: this.naming()?.tld ?? 'localhost' };
     if (!cliInstalled()) return { ...base, status: 'off' };
     if (this.busy) return { ...base, status: this.busy };
     if (asleep) return { ...base, status: this.idle };
@@ -338,8 +351,16 @@ export class K8s {
         ports: (s.spec.ports ?? []).map((p) => ({ name: p.name ?? null, port: p.port, targetPort: String(p.targetPort ?? p.port), nodePort: p.nodePort ?? null, protocol: p.protocol ?? 'TCP' })),
         selector: s.spec.selector ?? {},
         created: s.metadata.creationTimestamp,
+        url: this.urlOf(s.metadata.name, s.metadata.namespace, s.spec.type, (s.spec.ports ?? []).filter((p) => (p.protocol ?? 'TCP') === 'TCP').map((p) => p.port)),
       })),
     };
+  }
+
+  private urlOf(name: string, namespace: string, type: string, ports: number[]): string | null {
+    const n = this.naming();
+    const port = webPort(ports.filter((p) => this.published.includes(p)));
+    if (!n || type !== 'LoadBalancer' || !port) return null;
+    return `${n.https ? 'https' : 'http'}://${k8sHostName(name, namespace)}.docatz.${n.tld}${n.clean ? '' : `:${n.https ? n.httpsPort : n.httpPort}`}`;
   }
 
   async deletePod(namespace: string, name: string): Promise<void> {
@@ -397,9 +418,20 @@ export class K8s {
       const lbs = (JSON.parse(r.stdout) as { items: Svc[] }).items.filter((s) => s.spec.type === 'LoadBalancer');
       const want = new Map<number, number>();
       for (const s of lbs) for (const p of s.spec.ports ?? []) if (p.nodePort && (p.protocol ?? 'TCP') === 'TCP' && !want.has(p.port)) want.set(p.port, p.nodePort);
-      const sig = [...want].sort((a, b) => a[0] - b[0]).map(([p, n]) => `${p}:${n}`).join(',');
+      // Each Service's name address goes to its web port (the first Service on a port has it).
+      const hostsOf = (open: number[]) =>
+        lbs
+          .map((s) => [k8sHostName(s.metadata.name, s.metadata.namespace), webPort((s.spec.ports ?? []).filter((p) => (p.protocol ?? 'TCP') === 'TCP').map((p) => p.port).filter((p) => open.includes(p) && want.get(p) === s.spec.ports?.find((x) => x.port === p)?.nodePort))] as const)
+          .filter((h): h is readonly [string, number] => h[1] !== undefined)
+          .map(([h, p]) => `${h}=${p}`)
+          .sort()
+          .join(';');
+      const sig = [...want].sort((a, b) => a[0] - b[0]).map(([p, n]) => `${p}:${n}`).join(',') + `|${hostsOf([...want.keys()])}`;
+      // A port left out because it was taken is tried again once it is free.
+      const freed = this.leftOut.some((p) => want.has(p)) && (await Promise.all(this.leftOut.filter((p) => want.has(p)).map(portFree))).some(Boolean);
       const have = (await docker(['inspect', LB_NAME, '--format', '{{index .Config.Labels "com.mrcatz.docatz.k8s.ports"}}|{{.State.Running}}'], 15_000)).stdout.trim();
-      if (have !== `${sig}|true`) {
+      // No LoadBalancer and no forwarder: nothing to do (no remove / notify every 10 s).
+      if ((have !== `${sig}|true` || freed) && (want.size || have)) {
         const mine = new Set(this.published);
         await docker(['rm', '-f', LB_NAME], 60_000);
         this.published = [];
@@ -417,7 +449,7 @@ export class K8s {
         for (let i = 0; ports.length && i < 5; i++) {
           const conf = `events{} stream{ ${ports.map(([p, n]) => `server{ listen ${p}; proxy_pass ${K8S_NAME}:${n}; }`).join(' ')} }`;
           const run = await docker(
-            ['run', '-d', '--name', LB_NAME, '--label', `${K8S_LABEL}=1`, '--label', `com.mrcatz.docatz.k8s.ports=${sig}`, '--restart', 'unless-stopped', '--network', NET, ...ports.flatMap(([p]) => ['-p', `127.0.0.1:${p}:${p}`]), LB_IMAGE, 'sh', '-c', `echo '${conf}' > /etc/nginx/nginx.conf && exec nginx -g 'daemon off;'`],
+            ['run', '-d', '--name', LB_NAME, '--label', `${K8S_LABEL}=1`, '--label', `com.mrcatz.docatz.k8s.ports=${sig}`, '--label', `${K8S_HOSTS_LABEL}=${hostsOf(ports.map(([p]) => p))}`, '--restart', 'unless-stopped', '--network', NET, ...ports.flatMap(([p]) => ['-p', `127.0.0.1:${p}:${p}`]), LB_IMAGE, 'sh', '-c', `echo '${conf}' > /etc/nginx/nginx.conf && exec nginx -g 'daemon off;'`],
             120_000,
           );
           if (run.code === 0) {
@@ -433,6 +465,7 @@ export class K8s {
           this.publishError = `Port ${taken} is already in use, so that Service is not opened on it.`;
           ports = ports.filter(([p]) => p !== taken);
         }
+        this.leftOut = [...want.keys()].filter((p) => !this.published.includes(p));
         this.onChange();
       }
       // `localhost` as the external address (a hostname: kube-proxy makes no rules for it), so kubectl shows it.

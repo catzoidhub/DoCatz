@@ -330,7 +330,8 @@ const INK = 'text-[var(--primary-ink,var(--color-primary))]';
             <h1 class="truncate text-base font-semibold tracking-tight">{{ service.name }}</h1>
             <p class="truncate text-xs opacity-60">{{ service.type }} · {{ service.namespace }}</p>
           </div>
-          <button v-for="p in opened(service)" :key="p.port" class="no-drag btn btn-primary btn-sm" @click="api.openUrl(`http://localhost:${p.port}`)">Open localhost:{{ p.port }}</button>
+          <button v-if="service.url" class="no-drag btn btn-primary btn-sm" :title="service.url" @click="api.openUrl(service.url)">Open</button>
+          <button v-for="p in opened(service)" :key="p.port" class="no-drag btn btn-sm" :class="service.url ? 'btn-ghost' : 'btn-primary'" @click="api.openUrl(`http://localhost:${p.port}`)">{{ service.url ? '' : 'Open ' }}localhost:{{ p.port }}</button>
         </header>
         <div class="min-h-0 flex-1 overflow-y-auto">
           <div class="mx-auto max-w-4xl space-y-4 p-5">
@@ -340,6 +341,7 @@ const INK = 'text-[var(--primary-ink,var(--color-primary))]';
                 <dl class="selectable grid grid-cols-[8rem_1fr] gap-x-4 gap-y-1.5 text-sm">
                   <dt class="opacity-60">Type</dt><dd>{{ service.type }}</dd>
                   <dt class="opacity-60">Cluster IP</dt><dd class="font-mono text-xs leading-5">{{ service.clusterIP ?? '—' }}</dd>
+                  <template v-if="service.url"><dt class="opacity-60">Address</dt><dd class="min-w-0 truncate"><a class="link link-primary font-mono text-xs" @click.prevent="api.openUrl(service.url)">{{ service.url.replace(/^https?:\/\//, '') }}</a></dd></template>
                   <dt class="opacity-60">Created</dt><dd>{{ since(service.created) }}</dd>
                 </dl>
                 <table class="table table-sm">
@@ -454,8 +456,8 @@ const INK = 'text-[var(--primary-ink,var(--color-primary))]';
                 <ul class="space-y-2 text-sm">
                   <li class="flex gap-2.5"><span class="mt-0.5" :class="INK">●</span><span>One node (k3s) on DoCatz’s engine — Standard or Lite, nothing else to install.</span></li>
                   <li class="flex gap-2.5"><span class="mt-0.5" :class="INK">●</span><span>Its pods are containers of the same Docker: an image from <span class="font-mono text-xs">docker build</span> runs at once, no registry.</span></li>
-                  <li class="flex gap-2.5"><span class="mt-0.5" :class="INK">●</span><span>A Service of type <span class="font-mono text-xs">LoadBalancer</span> opens on <span class="font-mono text-xs">localhost</span> at its own port.</span></li>
-                  <li class="flex gap-2.5"><span class="mt-0.5 opacity-50">●</span><span class="opacity-70">About 600 MB of memory while it is on, and an 80 MB download the first time. Off again any time.</span></li>
+                  <li class="flex gap-2.5"><span class="mt-0.5" :class="INK">●</span><span>A Service of type <span class="font-mono text-xs">LoadBalancer</span> opens on <span class="font-mono text-xs">localhost</span> at its own port, and at <span class="font-mono text-xs">&lt;name&gt;.&lt;namespace&gt;.k8s.docatz.{{ s?.tld ?? 'localhost' }}</span>.</span></li>
+                  <li class="flex gap-2.5"><span class="mt-0.5 opacity-50">●</span><span class="opacity-70">About 500 MB of memory while it is on, and an 80 MB download the first time. Off again any time.</span></li>
                 </ul>
               </div>
             </div>

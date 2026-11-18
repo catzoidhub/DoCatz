@@ -84,7 +84,8 @@ export class EngineHost {
       void this.maybeSleep(containers);
       if (this.engine.backend.watchMounts) this.engine.backend.watchMounts(containers.length ? await ops.bindMounts().catch(() => []) : []);
       const streams = await updateDatabases(containers).catch((e) => (console.warn('databases:', (e as Error).message), []));
-      await this.domains.setRoutes(containers, streams).catch((e) => console.warn('routes:', (e as Error).message));
+      const k8sHosts = await ops.k8sHosts().catch(() => []);
+      await this.domains.setRoutes(containers, streams, k8sHosts).catch((e) => console.warn('routes:', (e as Error).message));
       // Frameworks of services built from source (their marks): learnt per project in the background.
       if (containers.some((c) => c.project && !c.framework))
         void this.projects()
