@@ -42,6 +42,8 @@ function helperEnv(): Record<string, string> {
     DOCATZ_PACKAGED: app.isPackaged ? '1' : '0',
     PATH: process.env.PATH || '/usr/bin:/bin:/usr/sbin:/sbin',
     ...(process.env.DOCATZ_HOME ? { DOCATZ_HOME: process.env.DOCATZ_HOME } : {}),
+    // Lite from a local docatz-engine build until its release (engine/lite.ts).
+    ...(process.env.DOCATZ_LITE_LOCAL ? { DOCATZ_LITE_LOCAL: process.env.DOCATZ_LITE_LOCAL } : {}),
   };
 }
 

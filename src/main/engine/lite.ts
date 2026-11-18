@@ -143,7 +143,7 @@ export class LiteBackend implements Backend {
     return { status, message: status === 'error' ? 'The Lite VM stopped with an error — see the engine log, or Reset' : '', manager, dir: vmDir(), running };
   }
 
-  async start(config: EngineConfig, r: StepReporter): Promise<void> {
+  async start(config: EngineConfig, r: StepReporter, opts: { dockerSocket?: string; forwardPorts?: boolean } = {}): Promise<void> {
     r.step(0);
     if (!(await this.installed())) await this.install(r);
     if (r.signal.aborted) throw new Error('Cancelled');
@@ -165,10 +165,10 @@ export class LiteBackend implements Backend {
       memoryMiB: config.memoryGiB * 1024,
       rosetta: machineArch() === 'arm64' && config.rosetta,
       shares: [{ path: homedir(), readOnly: false }, { path: '/tmp/docatz', readOnly: false }],
-      dockerSocket: socketPath(),
+      dockerSocket: opts.dockerSocket ?? socketPath(),
       controlSocket: ctlSocket(),
       console: consoleLog(),
-      forwardPorts: true,
+      forwardPorts: opts.forwardPorts ?? true,
       balloon: true,
       restoreFrom: null,
       diskGiB: config.diskGiB,
@@ -283,4 +283,20 @@ export class LiteBackend implements Backend {
     // The VM runs on its own; only the file events stop with this process.
     this.events.stop();
   }
+}
+
+/** Move between DoCatz's engines (TODO #106): Lite brought up for a while beside Standard on a socket of its own, with no
+ * ports forwarded (they are Standard's then). Null when there is no Lite disk yet. */
+export const liteMoveSocket = () => join(vmDir(), 'move-docker.sock');
+export async function startLiteForMove(config: EngineConfig): Promise<string | null> {
+  if (!existsSync(dataDisk())) return null;
+  const b = new LiteBackend();
+  if (!(await control('status', undefined, 2000).catch(() => null))) {
+    const abort = new AbortController();
+    await b.start(config, { step: () => undefined, detail: () => undefined, signal: abort.signal }, { dockerSocket: liteMoveSocket(), forwardPorts: false });
+  }
+  return `unix://${liteMoveSocket()}`;
+}
+export async function stopLiteForMove(): Promise<void> {
+  await new LiteBackend().stop();
 }

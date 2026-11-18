@@ -7,6 +7,9 @@ import { dockerBin } from './cli';
 import { dockerHost } from './paths';
 import { isLinux, isWin } from './platform';
 import { run } from './proc';
+import { engineConfig } from './engine';
+import { startStandardForMove, stopStandardForMove } from './engine/lima';
+import { startLiteForMove, stopLiteForMove, liteMoveSocket } from './engine/lite';
 
 /**
  * Move from another Docker (DoCatz TODO #11): Docker Desktop, OrbStack, Colima or Rancher Desktop on this computer
@@ -105,10 +108,44 @@ export async function migrateSources(): Promise<DcMigrateSource[]> {
     }
     if (host || k.installed()) out.push({ id: k.id, name: k.name, host, version, running: !!host, ...(k.hint && !host ? { hint: k.hint } : {}) });
   }
+  // DoCatz's other engine: listed when it has a disk; DoCatz starts it itself when picked.
+  if (process.platform === 'darwin' && otherExists()) {
+    const host = otherSocket();
+    const version = await answers(host);
+    out.unshift({ id: 'docatz-other', name: otherName(), host: version ? host : null, version, running: !!version, own: true });
+  }
   return out;
 }
 
+/**
+ * DoCatz's other engine (TODO #106): Standard while Lite is in use, or Lite while Standard is. It is DoCatz's own, so
+ * DoCatz starts it for the move on a socket of its own (no ports forwarded on Lite; Standard's forwarded socket) and
+ * stops it again: right after the copy, or 5 minutes after the last look when nothing was copied.
+ */
+const otherKind = () => (engineConfig().kind === 'lite' ? 'standard' : 'lite');
+const otherName = () => (otherKind() === 'lite' ? 'DoCatz Lite' : 'DoCatz Standard');
+const otherSocket = () => (otherKind() === 'lite' ? `unix://${liteMoveSocket()}` : `unix://${join(homedir(), '.docatz', 'vm', 'docatz', 'sock', 'docker.sock')}`);
+const otherExists = () => existsSync(otherKind() === 'lite' ? join(homedir(), '.docatz', 'lite', 'vm', 'data.img') : join(homedir(), '.docatz', 'vm', 'docatz'));
+let otherStarted = false;
+let otherTimer: ReturnType<typeof setTimeout> | null = null;
+async function startOther(): Promise<string> {
+  if (otherTimer) clearTimeout(otherTimer);
+  const host = otherKind() === 'lite' ? await startLiteForMove(engineConfig()) : await startStandardForMove();
+  if (!host) throw new Error(`${otherName()} has nothing to move yet`);
+  otherStarted = true;
+  otherTimer = setTimeout(() => void stopOther(), 5 * 60_000);
+  return host;
+}
+export async function stopOther(): Promise<void> {
+  if (otherTimer) clearTimeout(otherTimer);
+  otherTimer = null;
+  if (!otherStarted) return;
+  otherStarted = false;
+  await (otherKind() === 'lite' ? stopLiteForMove() : stopStandardForMove()).catch((e) => console.warn('move: other engine stop:', (e as Error).message));
+}
+
 const sourceHost = async (id: DcMigrateSourceId): Promise<string> => {
+  if (id === 'docatz-other') return (await answers(otherSocket())) ? otherSocket() : startOther();
   const s = (await migrateSources()).find((x) => x.id === id);
   if (!s?.host) throw new Error(`${s?.name ?? id} is not running: start it, then look again`);
   return s.host;
@@ -265,5 +302,6 @@ export async function migrate(id: DcMigrateSourceId, images: string[], volumes: 
     step++;
   }
   set({ step, detail: '', fraction: undefined });
+  if (id === 'docatz-other') await stopOther();
   return failed;
 }

@@ -325,3 +325,22 @@ function watchImageDownload(report: (text: string, fraction?: number) => void): 
   const timer = setInterval(() => void tick(), 1000);
   return { active: () => active, stop: () => clearInterval(timer) };
 }
+
+/**
+ * Move between DoCatz's engines (TODO #106): Standard brought up for a while beside Lite, so its images and volumes can be
+ * copied over. Its own forwarded socket (not ~/.docatz/run/docker.sock, which is Lite's then); null when there is no
+ * Standard VM to start.
+ */
+export async function startStandardForMove(): Promise<string | null> {
+  if (!existsSync(limactl()) || !existsSync(vmDir())) return null;
+  if (!existsSync(forwarded())) {
+    const s = await run(limactl(), ['start', '--tty=false', '--timeout=10m', NAME], { env: env(), timeout: 660_000 });
+    if (s.code !== 0) throw new Error(`The Standard engine did not start: ${lastLine(s.stderr) || `limactl exited ${s.code}`}`);
+  }
+  return `unix://${forwarded()}`;
+}
+
+export async function stopStandardForMove(): Promise<void> {
+  if (!existsSync(limactl())) return;
+  await run(limactl(), ['stop', NAME], { env: env(), timeout: 180_000 });
+}

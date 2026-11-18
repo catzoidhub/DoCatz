@@ -281,10 +281,10 @@ const copy = (t: string) => {
               <li v-for="o in others" :key="o.id" class="flex items-center gap-3 py-2">
                 <span class="min-w-0 flex-1">
                   <span class="block text-sm font-medium">{{ o.name }}</span>
-                  <span class="block text-xs opacity-55">{{ o.running ? `Running · Docker ${o.version}` : 'Installed, not running — start it to move from it' }}</span>
+                  <span class="block text-xs opacity-55">{{ o.own ? (o.running ? `Running · Docker ${o.version}` : 'Your other DoCatz engine — DoCatz starts it for the move, then stops it') : o.running ? `Running · Docker ${o.version}` : 'Installed, not running — start it to move from it' }}</span>
                   <span v-if="o.hint" class="selectable block font-mono text-[11px] opacity-55">{{ o.hint }}</span>
                 </span>
-                <button v-if="o.running" class="btn btn-sm" @click="moving = o">Choose what to move…</button>
+                <button v-if="o.running || o.own" class="btn btn-sm" @click="moving = o">Choose what to move…</button>
                 <button v-else class="btn btn-ghost btn-sm" @click="lookAgain">Look again</button>
               </li>
             </ul>

@@ -108,7 +108,7 @@ function close() {
           {{ busyVolumes.length === 1 ? 'its containers' : 'their containers' }} there first, as a database still writing can be copied half way.
         </p>
       </template>
-      <div v-else-if="!error" class="py-6 text-center"><span class="loading loading-dots" /><p class="mt-1 text-xs opacity-55">Looking at {{ source.name }}…</p></div>
+      <div v-else-if="!error" class="py-6 text-center"><span class="loading loading-dots" /><p class="mt-1 text-xs opacity-55">{{ source.own && !source.running ? `Starting ${source.name} for the move, then looking at it…` : `Looking at ${source.name}…` }}</p></div>
 
       <p v-if="error || (task?.error && !task.cancelled)" class="selectable rounded-lg border border-error/30 bg-error/10 px-3 py-2 text-[12.5px] whitespace-pre-line text-error">{{ error || task?.error }}</p>
 

@@ -772,7 +772,7 @@ export interface DcGateway {
 
 // ------------------------------------------------------------ move from another Docker (#11)
 
-export type DcMigrateSourceId = 'docker-desktop' | 'orbstack' | 'colima' | 'rancher' | 'podman';
+export type DcMigrateSourceId = 'docker-desktop' | 'orbstack' | 'colima' | 'rancher' | 'podman' | 'docatz-other';
 /** Another Docker engine on this computer: running (with its address) or installed and stopped. */
 export interface DcMigrateSource {
   id: DcMigrateSourceId;
@@ -782,6 +782,8 @@ export interface DcMigrateSource {
   running: boolean;
   /** Installed but not answering: what turns it on (Podman's socket). */
   hint?: string;
+  /** DoCatz's other engine (Standard / Lite, TODO #106): DoCatz starts it for the move and stops it afterwards. */
+  own?: boolean;
 }
 export interface DcMigrateInventory {
   images: { ref: string; id: string; size: number; inDocatz: boolean }[];
