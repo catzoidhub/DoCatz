@@ -74,7 +74,10 @@ export class Engine {
     this.last = b;
     let status = this.busy ?? b.status;
     let message = this.task?.error ?? b.message;
-    if (status === 'running') {
+    // Asleep (Lite / Linux on-demand, #106): a ping would wake it — the state comes from the manager alone.
+    if (status === 'running' && this.backend.sleeping && (await this.backend.sleeping().catch(() => false))) {
+      // keep what the backend said
+    } else if (status === 'running') {
       const answers = await docker.ping();
       if (!answers) {
         status = 'starting';

@@ -85,17 +85,24 @@ export class EngineHost {
           .then((list) => list.forEach((p) => void learnProject(p.name, p.files, () => void this.refresh())))
           .catch(() => undefined);
       if (!this.serving) return this.onList(containers);
+      const up = await this.engine.up(); // false while asleep, without touching the socket
+      // Asleep: nothing below may touch the socket — the routes' and k8s' reads woke Docker again within a second of
+      // the idle stop (Linux on-demand, Hyper-V VM, 2026-11-18). Asleep counts as running for the other apps: their
+      // first use of the socket wakes it.
+      if (!up && (await this.engine.backend.sleeping?.().catch(() => false))) {
+        writeBridge([], 'running', { httpsPort: this.domains.httpsPort, httpPort: this.domains.httpPort });
+        return this.onList(containers);
+      }
       // Woken by someone using Docker (the VM was asleep): its events are followed again.
-      if (!this.stopEvents && (await this.engine.up())) void this.watchEvents();
-      void this.maybeSleep(containers);
+      if (!this.stopEvents && up) void this.watchEvents();
       if (this.engine.backend.watchMounts) this.engine.backend.watchMounts(containers.length ? await ops.bindMounts().catch(() => []) : []);
       const streams = await updateDatabases(containers).catch((e) => (console.warn('databases:', (e as Error).message), []));
       const k8sHosts = await ops.k8sHosts().catch(() => []);
       await this.domains.setRoutes(containers, streams, k8sHosts).catch((e) => console.warn('routes:', (e as Error).message));
-      // Asleep counts as running for the other apps: their first use of the socket wakes it.
-      const asleep = !containers.length && (await this.engine.backend.sleeping?.().catch(() => false));
-      writeBridge(containers, containers.length || asleep || (await this.engine.up()) ? 'running' : 'stopped', { httpsPort: this.domains.httpsPort, httpPort: this.domains.httpPort });
+      writeBridge(containers, containers.length || up ? 'running' : 'stopped', { httpsPort: this.domains.httpsPort, httpPort: this.domains.httpPort });
       this.onList(containers);
+      // Last, so nothing of this refresh reaches the socket once the engine is put to sleep.
+      void this.maybeSleep(containers);
     })();
     try {
       await this.refreshing;
@@ -162,16 +169,21 @@ export class EngineHost {
     this.idleSince ??= Date.now();
     if (Date.now() - Math.max(this.idleSince, this.lastActivity) < EngineHost.IDLE_SLEEP_MS) return;
     this.idleSince = null;
-    // "Nobody using it": docatz-vmm refuses while more Docker connections are open than DoCatz's own events stream (a
-    // quiet `docker build`, a CLI session) — then the 15 minutes start again.
+    // DoCatz's own events stream goes first: ending with the sleep, it refreshed at once, and a ping while systemd still
+    // said "active" went to the socket and started Docker again within 0.2 s (Linux on-demand, Hyper-V VM, 2026-11-18).
+    // It comes back once the engine answers again (refresh), or right away when the sleep is refused.
+    const watching = !!this.stopEvents;
+    this.stopWatching();
+    if (watching) await new Promise((r) => setTimeout(r, 300));
+    // "Nobody using it": docatz-vmm refuses while other Docker connections are open (a quiet `docker build`, a CLI
+    // session) — then the 15 minutes start again.
     try {
-      await b.sleep(this.stopEvents ? 1 : 0);
+      await b.sleep(0);
     } catch (e) {
       if (!/in use/i.test((e as Error).message)) console.warn('idle sleep:', (e as Error).message);
+      if (watching) void this.watchEvents();
       return;
     }
-    // Its events stream ended with the sleep; it comes back once the engine answers again (refresh).
-    this.stopWatching();
     this.onEngine(await this.engine.state());
     void this.refresh();
   }
