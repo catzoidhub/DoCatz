@@ -154,6 +154,13 @@ const copy = (t: string) => {
               <span class="flex flex-col"><span class="label-caps">Start with DoCatz</span><span class="text-xs opacity-50">Starts the engine when DoCatz opens.</span></span>
               <input type="checkbox" class="toggle toggle-sm toggle-primary" :checked="c.autoStart" @change="set({ autoStart: ($event.target as HTMLInputElement).checked })" />
             </label>
+            <label class="opt-row cursor-pointer">
+              <span class="flex flex-col">
+                <span class="label-caps">Keep the engine running after DoCatz quits <span class="badge badge-xs badge-soft badge-warning ml-1 align-middle normal-case tracking-normal">beta</span></span>
+                <span class="text-xs opacity-50">A small background helper keeps the engine, container domains and database ports going with DoCatz closed, and starts them when you log in. DoCatz restarts once to switch.</span>
+              </span>
+              <input type="checkbox" class="toggle toggle-sm toggle-primary" :checked="c.keepRunning" @change="set({ keepRunning: ($event.target as HTMLInputElement).checked })" />
+            </label>
           </div>
         </div>
 

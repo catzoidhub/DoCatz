@@ -1,4 +1,4 @@
-import { app, clipboard, ipcMain, Notification, shell } from 'electron';
+import { app, clipboard, dialog, ipcMain, Notification, shell } from 'electron';
 import { execFile, spawn } from 'node:child_process';
 import { binDir } from './paths';
 import { isLinux, isWin } from './platform';
@@ -16,8 +16,7 @@ import { composeEnvironmentKeys, envCreate, ownServices, envRead, envRemove, env
 import { MCATZP_TARGETS } from '@catzoid/mcatzp-host';
 import { Mcatzp } from './mcatzp';
 import * as mcatzpSetup from './mcatzp/install';
-import { writeBridge } from './bridge';
-import { listDatabases, updateDatabases } from './dbservices';
+import { listDatabases } from './dbservices';
 import { migrate, migrateInventory, migrateSources } from './migrate';
 import { exportImages, importImages, readImageArchive } from './imagefile';
 import { exportVolume, importVolume, readArchive, volumeWriters } from './volumefile';
@@ -26,13 +25,15 @@ import { removeContext, setPath as setCliPath } from './cli';
 import { findCatzoidApp, installCatzoidApp, installedVersion, installSteps, openCatzoidApp, platformId, siteAsset } from './companion';
 import { DockerError } from './docker/client';
 import * as ops from './docker/ops';
-import { Domains } from './domains';
-import { Engine } from './engine';
+import { EngineHost } from './enginehost';
+import { engineConfig } from './engine';
+import { HelperClient } from './helperproto';
+import { ensureHelper, removeHelper, RemoteEngine } from './helperctl';
+import { forwardBridgeMcatzp } from './bridge';
 import { devcatzGateways } from './gateways';
 import { Reporter } from './reporter';
 import { run } from './proc';
 import { projects, Runs } from './runs';
-import { learnProject } from './frameworks';
 import { projectPrefs, setProjectPrefs } from './prefs';
 import { applySettings, migrateToShared, setAiKey, setSettings, settings } from './settings';
 import { browsersState, openWeb, refreshBrowsers } from './browsers';
@@ -55,9 +56,14 @@ import { appMenuPopup, applyMenu, mainWindow, menuKey, menuShortcuts, onWindowCl
  *   docatz://engine[?action=start]                       the Engine page; `start` starts a stopped engine (for DevCatz)
  */
 
-const engine = new Engine();
-const domains = new Domains();
-ops.setDomainNameLookup(domains.nameOf);
+// The engine, the proxy, the list and bridge.json (#107): in this process, or — "Keep the engine running after
+// DoCatz quits" — in the engine helper, which this process then only asks (RemoteEngine) and listens to.
+const helperMode = engineConfig().keepRunning;
+const helper = helperMode ? new HelperClient() : null;
+const remote = helper ? new RemoteEngine(helper) : null;
+const host = new EngineHost(remote ? { engine: remote, serving: false } : {});
+const engine = host.engine;
+const domains = host.domains;
 const runs = new Runs();
 const updater = new Updater();
 const reviews = new Reviews();
@@ -75,86 +81,18 @@ const send = (channel: string, payload: unknown) => mainWindow()?.webContents.se
 
 // ---------------------------------------------------------------- the list, kept fresh by engine events
 
-let refreshing: Promise<void> | null = null;
-let refreshAgain = false;
-async function refresh(): Promise<void> {
-  if (refreshing) {
-    refreshAgain = true;
-    return refreshing;
-  }
-  refreshing = (async () => {
-    try {
-      containers = (await engine.up()) ? await ops.listContainers(domains.urlFor) : [];
-    } catch {
-      containers = [];
-    }
-    if (engine.backend.watchMounts) engine.backend.watchMounts(containers.length ? await ops.bindMounts().catch(() => []) : []);
-    const streams = await updateDatabases(containers).catch((e) => (console.warn('databases:', (e as Error).message), []));
-    await domains.setRoutes(containers, streams).catch((e) => console.warn('routes:', (e as Error).message));
-    // Frameworks of services built from source (their marks): learnt per project in the background.
-    if (containers.some((c) => c.project && !c.framework))
-      void projects()
-        .then((list) => list.forEach((p) => void learnProject(p.name, p.files, () => void refresh())))
-        .catch(() => undefined);
-    writeBridge(containers, containers.length || (await engine.up()) ? 'running' : 'stopped', { httpsPort: domains.httpsPort, httpPort: domains.httpPort });
-    send('app:changed', null);
-    tray.update(await engine.state().catch(() => null), containers);
-  })();
-  try {
-    await refreshing;
-  } finally {
-    refreshing = null;
-    if (refreshAgain) {
-      refreshAgain = false;
-      void refresh();
-    }
-  }
-}
-
-/** Engine events that change what the window lists (containers, images, volumes, networks). */
-const LIST_EVENTS = new Set([
-  ...['create', 'start', 'stop', 'die', 'destroy', 'kill', 'pause', 'unpause', 'restart', 'rename', 'update', 'oom', 'health_status'].map((a) => `container:${a}`),
-  ...['pull', 'delete', 'tag', 'untag', 'import', 'load', 'prune'].map((a) => `image:${a}`),
-  ...['create', 'destroy', 'prune'].map((a) => `volume:${a}`),
-  ...['create', 'destroy', 'connect', 'disconnect', 'prune'].map((a) => `network:${a}`),
-]);
-let stopEvents: (() => void) | null = null;
-let eventTimer: ReturnType<typeof setTimeout> | null = null;
-async function watchEvents(): Promise<void> {
-  if (stopEvents) return;
-  try {
-    stopEvents = await ops.watchEvents(
-      (type, action) => {
-        // Only what changes a list: healthchecks and DoCatz's own reads run `exec` many times a minute.
-        if (!LIST_EVENTS.has(`${type}:${action.split(':')[0].trim()}`)) return;
-        if (eventTimer) return;
-        eventTimer = setTimeout(() => {
-          eventTimer = null;
-          void refresh();
-        }, 300);
-      },
-      () => {
-        stopEvents = null;
-        void refresh();
-        // The engine went away (stopped, restarted): try again while it comes back.
-        setTimeout(() => void engine.up().then((up) => (up ? watchEvents() : undefined)), 3000);
-      },
-    );
-  } catch {
-    stopEvents = null;
-  }
-}
-
-engine.onChange = (s) => {
+const refresh = () => host.refresh();
+host.projects = () => projects();
+host.onList = (list) => {
+  containers = list;
+  send('app:changed', null);
+  void engine.state().then((s) => tray.update(s, containers)).catch(() => tray.update(null, containers));
+};
+host.onEngine = (s) => {
   send('app:engine', s);
   tray.update(s, containers);
 };
-engine.onUp = () => {
-  void watchEvents();
-  void refresh();
-};
-domains.onChange = () => void refresh();
-domains.onState = (d) => send('app:domains', d);
+host.onDomains = (d) => send('app:domains', d);
 /** The latest compose runs and pulls, for MCatzP's list_runs. */
 const recentRuns = new Map<string, DcRun>();
 runs.onChange = (r) => {
@@ -234,11 +172,65 @@ app.on('before-quit', () => {
   mcatzp?.quit();
   for (const stop of follows.values()) stop();
   for (const t of terms.values()) t.socket.destroy();
-  stopEvents?.();
+  host.stopWatching();
   domains.stop();
+  // With the helper the engine, the proxy and bridge.json stay (#107); RemoteEngine only closes the channel.
   engine.dispose();
   tray.destroy();
 });
+
+/**
+ * "Keep the engine running after DoCatz quits" turned on or off (#107, beta): the engine's side moves between this
+ * process and the helper, so DoCatz restarts once. On: this process lets go of the proxy and ports, the helper starts
+ * and takes them (on macOS the VM itself keeps running; on Windows dockerd starts again inside the helper). Off: the
+ * helper goes (the engine keeps running on macOS) and DoCatz runs it again itself.
+ */
+async function switchHelper(on: boolean): Promise<void> {
+  const r = await messageBox(mainWindow(), {
+    type: 'info',
+    buttons: ['Restart DoCatz', 'Later'],
+    defaultId: 0,
+    cancelId: 1,
+    message: on ? 'The engine will keep running after DoCatz quits' : 'The engine will run inside DoCatz again',
+    detail: on
+      ? 'DoCatz restarts once to hand the engine, its domains and ports to a small background helper. Containers keep running.'
+      : 'DoCatz restarts once to take the engine back from the background helper. Quitting DoCatz then stops the domains and ports again.',
+  });
+  if (r.response !== 0) return;
+  if (on) {
+    host.stopWatching();
+    domains.stop();
+    // Windows: dockerd is DoCatz's child — it ends here and starts again in the helper.
+    if (process.platform === 'win32') engine.dispose();
+    await ensureHelper(new HelperClient()).catch((e) => console.warn('engine helper:', (e as Error).message));
+  } else {
+    await removeHelper(false);
+  }
+  app.relaunch();
+  app.exit(0);
+}
+
+/** Connects to the engine helper (starting it when needed) and follows its events; reconnects if it restarts. */
+async function attachHelper(): Promise<void> {
+  if (!helper || !remote) return;
+  helper.onEvent = (e) => {
+    if (e.event === 'engine') remote.changed(e.data as Awaited<ReturnType<typeof engine.state>>);
+    else if (e.event === 'domains') send('app:domains', e.data);
+    else if (e.event === 'list') void refresh();
+  };
+  helper.onClose = () => setTimeout(() => void attachHelper().catch((e) => console.warn('engine helper:', (e as Error).message)), 2000);
+  await ensureHelper(helper);
+  // The MCatzP entry in bridge.json goes through the helper: one process writes the file.
+  forwardBridgeMcatzp((entry) => void helper.call('bridge.mcatzp', entry).catch(() => undefined));
+  remote.changed(await engine.state());
+  void refresh();
+}
+
+/** The domains' settings changed in the window: the helper's proxy starts again with them. */
+const domainsChanged = async <T>(r: T): Promise<T> => {
+  if (helper?.connected) await helper.call('domains.reload').catch((e) => console.warn('domains reload:', (e as Error).message));
+  return r;
+};
 
 /** Plain words for the engine being off. */
 function needEngine<T>(fn: () => Promise<T>): Promise<T> {
@@ -365,13 +357,14 @@ function api(): DoCatzApi {
         reviews.stop();
         reporter.stop();
         for (const t of terms.values()) t.socket.destroy();
-        stopEvents?.();
+        host.stopWatching();
         await engine.reset('reset').catch((e) => console.warn('uninstall: VM not removed:', (e as Error).message));
         removeContext();
         await setCliPath(false).catch(() => undefined);
         await mcatzp.set(false).catch(() => undefined);
         await domains.uninstall(withShared);
         domains.stop();
+        await removeHelper(true).catch(() => undefined);
       }),
     settings: async () => settings(),
     setSettings: async (patch) => {
@@ -561,7 +554,12 @@ function api(): DoCatzApi {
       await engine.reset(confirm);
       void refresh();
     },
-    engineConfigure: (patch) => engine.configure(patch),
+    engineConfigure: async (patch) => {
+      const turned = typeof patch.keepRunning === 'boolean' && patch.keepRunning !== engineConfig().keepRunning ? patch.keepRunning : null;
+      const r = await engine.configure(patch);
+      if (turned !== null) await switchHelper(turned);
+      return r;
+    },
     engineCancel: async () => engine.cancel(),
     engineSetupWsl: () => engine.setupWsl(),
     restartComputer: async () => {
@@ -738,7 +736,7 @@ function api(): DoCatzApi {
       }
       return out;
     },
-    setDomainName: async (key, name) => domains.setName(key, name),
+    setDomainName: async (key, name) => domainsChanged(domains.setName(key, name)),
 
     builds: () => needEngine(() => listBuilds()),
     build: (ref) => needEngine(() => buildDetail(ref)),
@@ -746,10 +744,10 @@ function api(): DoCatzApi {
     buildRemove: (ref) => needEngine(() => removeBuild(ref)),
 
     domains: () => domains.refresh(),
-    setDomains: (patch) => domains.set(patch),
-    caTrust: (on) => domains.trust(on),
-    cleanUrls: (on) => domains.cleanUrls(on),
-    resolver: (on) => domains.resolver(on),
+    setDomains: async (patch) => domainsChanged(await domains.set(patch)),
+    caTrust: async (on) => domainsChanged(await domains.trust(on)),
+    cleanUrls: async (on) => domainsChanged(await domains.cleanUrls(on)),
+    resolver: async (on) => domainsChanged(await domains.resolver(on)),
 
     appMenu: async (x, y) => appMenuPopup(x, y),
     menuShortcuts: async () => menuShortcuts(),
@@ -812,12 +810,19 @@ app.whenReady().then(async () => {
   void migrateToShared().catch((e) => console.warn('Shared settings migration:', (e as Error).message));
   applyMenu();
   tray.start();
-  await domains.start().catch((e) => console.warn('DoCatz proxy:', (e as Error).message));
+  if (!helper) await domains.start().catch((e) => console.warn('DoCatz proxy:', (e as Error).message));
   const link = process.argv.find((a) => a.startsWith('docatz://'));
   if (link) handleLink(link);
   else openWindow();
+  // The engine helper keeps the engine (#107): it starts it at login / with itself, and adopts one found running.
+  if (helper) {
+    await attachHelper().catch((e) => {
+      console.warn('engine helper:', (e as Error).message);
+      dialog.showErrorBox('The engine helper did not start', `${(e as Error).message}\n\nTurn off "Keep the engine running after DoCatz quits" in Engine to run the engine inside DoCatz again.`);
+    });
+  }
   // Found running (DoCatz was quit, the VM was not), or set to start with DoCatz.
-  if (await engine.up()) {
+  else if (await engine.up()) {
     engine.onUp();
     void engine.adopt();
   } else {

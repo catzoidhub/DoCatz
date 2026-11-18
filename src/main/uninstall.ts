@@ -151,6 +151,8 @@ export async function uninstallPlan(): Promise<DcUninstallPlan> {
     { label: 'Preferences', path: lib('Preferences', `${BUNDLE_ID}.plist`) },
     { label: 'Saved window state', path: lib('Saved Application State', `${BUNDLE_ID}.savedState`) },
     { label: 'Web storage', path: lib('HTTPStorages', BUNDLE_ID) },
+    // #107: the engine helper's login item (stopped and unloaded first)
+    { label: 'The engine helper (starts at login)', path: lib('LaunchAgents', 'tech.catzoid.docatz.engine.plist') },
   ].filter((f) => existsSync(f.path));
   const items = [
     { label: 'The engine: the Linux VM and its disk — every container, image and volume in it', path: join(DOCATZ_HOME, 'vm') },

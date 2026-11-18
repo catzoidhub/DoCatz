@@ -1,4 +1,4 @@
-import { chmodSync, existsSync, mkdirSync, renameSync, writeFileSync } from 'node:fs';
+import { chmodSync, existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { app } from 'electron';
 import type { DcContainer, DcDatabase, DcDbEngine } from '@shared/types';
@@ -84,8 +84,19 @@ const servicesFile = () => process.env.DOCATZ_DBCATZ_FILE || join(app.getPath('u
 let databases: DcDatabase[] = [];
 let lastBody = '';
 
-/** The database containers as DBCatz sees them (the UI shows the address and Open in DBCatz). */
-export const listDatabases = (): DcDatabase[] => databases;
+/**
+ * The database containers as DBCatz sees them (the UI shows the address and Open in DBCatz). The process that keeps
+ * them (the engine helper, #107) has them in memory; the window's process reads the file it wrote.
+ */
+export function listDatabases(): DcDatabase[] {
+  if (lastBody) return databases;
+  try {
+    const doc = JSON.parse(readFileSync(servicesFile(), 'utf8')) as { services?: (DcDatabase & { containerId?: string })[] };
+    return (doc.services ?? []).map((d) => ({ ...d, containerId: d.containerId ?? '', project: d.project ?? null, service: d.service ?? null }));
+  } catch {
+    return [];
+  }
+}
 
 /**
  * Finds the database containers, gives each a local port, writes services.json and returns the router's streams. A
@@ -142,7 +153,7 @@ export async function updateDatabases(containers: DcContainer[]): Promise<DbStre
 
 /** dbcatz/services.json in DevCatz's shape (version 1), plus the compose project / service, the database and the container (docatz://container/<container>). */
 function write(list: DcDatabase[]): void {
-  const services = list.map((d) => ({ id: d.id, name: d.name, engine: d.engine, version: d.version, host: d.host, port: d.port, user: d.user, password: d.password, database: d.database, dataDir: '', socket: '', running: d.running, project: d.project, service: d.service, container: d.container }));
+  const services = list.map((d) => ({ id: d.id, name: d.name, engine: d.engine, version: d.version, host: d.host, port: d.port, user: d.user, password: d.password, database: d.database, dataDir: '', socket: '', running: d.running, project: d.project, service: d.service, container: d.container, containerId: d.containerId }));
   const body = JSON.stringify(services);
   if (body === lastBody) return;
   try {

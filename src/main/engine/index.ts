@@ -25,10 +25,10 @@ const GiB = 1024 ** 3;
 const host = { cpus: hostCpus().length, memoryGiB: Math.round(totalmem() / GiB), arch: machineArch(), rosetta: process.platform === 'darwin' && machineArch() === 'arm64' };
 
 function defaults(): EngineConfig {
-  return { cpus: Math.max(2, Math.min(4, Math.floor(host.cpus / 2))), memoryGiB: Math.max(2, Math.min(4, Math.floor(host.memoryGiB / 2))), diskGiB: 64, rosetta: host.rosetta, autoStart: true };
+  return { cpus: Math.max(2, Math.min(4, Math.floor(host.cpus / 2))), memoryGiB: Math.max(2, Math.min(4, Math.floor(host.memoryGiB / 2))), diskGiB: 64, rosetta: host.rosetta, autoStart: true, keepRunning: false };
 }
 
-function config(): EngineConfig {
+export function engineConfig(): EngineConfig {
   const d = defaults();
   const s = store.extra<Partial<EngineConfig>>(KEY) ?? {};
   const int = (v: unknown, min: number, max: number, fallback: number) => (Number.isFinite(v) ? Math.min(max, Math.max(min, Math.round(v as number))) : fallback);
@@ -38,6 +38,7 @@ function config(): EngineConfig {
     diskGiB: int(s.diskGiB, 16, 2048, d.diskGiB),
     rosetta: host.rosetta && s.rosetta !== false,
     autoStart: s.autoStart !== false,
+    keepRunning: s.keepRunning === true,
   };
 }
 
@@ -54,7 +55,7 @@ export class Engine {
   onUp: () => void = () => undefined;
 
   config(): EngineConfig {
-    return config();
+    return engineConfig();
   }
 
   /** Is Docker answering? (cheap: one ping) */
@@ -82,7 +83,7 @@ export class Engine {
         }
       }
     } else this.dockerInfo = null;
-    const c = config();
+    const c = engineConfig();
     const pending: string[] = [];
     if (b.running) {
       if (b.running.cpus !== c.cpus) pending.push(`CPUs ${b.running.cpus} → ${c.cpus}`);
@@ -146,7 +147,7 @@ export class Engine {
     void this.changed();
     const signal = this.abort.signal;
     try {
-      await this.backend.start(config(), {
+      await this.backend.start(engineConfig(), {
         step: (i, detail) => this.progress({ step: i, detail, fraction: undefined }),
         detail: (text, fraction) => this.progress({ detail: text, fraction }),
         signal,
@@ -232,7 +233,7 @@ export class Engine {
   /** Stop, apply the settings saved while it ran (pending), start. */
   async restart(): Promise<void> {
     await this.stop();
-    await this.backend.configure(config());
+    await this.backend.configure(engineConfig());
     await this.start();
   }
 
@@ -252,10 +253,10 @@ export class Engine {
   }
 
   async configure(patch: Partial<EngineConfig>): Promise<EngineState> {
-    const next = { ...config(), ...patch };
+    const next = { ...engineConfig(), ...patch };
     store.setExtra(KEY, next);
     // A stopped VM takes the values now; a running one at its next start (the window lists them as pending).
-    if (this.last?.status !== 'running' && (patch.cpus !== undefined || patch.memoryGiB !== undefined || patch.diskGiB !== undefined || patch.rosetta !== undefined)) await this.backend.configure(config());
+    if (this.last?.status !== 'running' && (patch.cpus !== undefined || patch.memoryGiB !== undefined || patch.diskGiB !== undefined || patch.rosetta !== undefined)) await this.backend.configure(engineConfig());
     return this.state();
   }
 

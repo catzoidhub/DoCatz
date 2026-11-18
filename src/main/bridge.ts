@@ -1,5 +1,5 @@
 import { app } from 'electron';
-import { chmodSync, existsSync, mkdirSync, renameSync, writeFileSync } from 'node:fs';
+import { chmodSync, existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { BridgeEntry } from '@catzoid/mcatzp-host';
 import type { DcContainer } from '@shared/types';
@@ -23,10 +23,37 @@ let lastEngine: 'running' | 'stopped' = 'stopped';
 let lastProxy = { httpsPort: 0, httpPort: 0 };
 let mcatzp: BridgeEntry | null = null;
 
+/**
+ * Who writes the file: the engine helper when it runs (#107), else the app. The app's MCatzP entry then goes to the
+ * helper (`forward`), so one process writes bridge.json.
+ */
+let forward: ((entry: BridgeEntry) => void) | null = null;
+export function forwardBridgeMcatzp(to: ((entry: BridgeEntry) => void) | null): void {
+  forward = to;
+  if (to && mcatzp) to(mcatzp);
+}
+
 /** The MCatzP entry (protocol version, on / off, channel), so MCatzP finds DoCatz; written at once, whatever else changed. */
 export function setBridgeMcatzp(entry: BridgeEntry): void {
   mcatzp = entry;
+  if (forward) return forward(entry);
   writeBridge(lastContainers, lastEngine, lastProxy);
+}
+
+/** The helper starting: the MCatzP entry the app wrote last stays (the app sends it again when it connects). */
+export function keepBridgeMcatzp(): void {
+  try {
+    const doc = JSON.parse(readFileSync(bridgeFile(), 'utf8')) as { mcatzp?: BridgeEntry };
+    if (doc.mcatzp && !mcatzp) mcatzp = doc.mcatzp;
+  } catch {
+    /* none yet */
+  }
+}
+
+/** The engine helper (#107) for DevCatz and others: which process keeps the engine, and its version. */
+let helper: { pid: number; version: string } | null = null;
+export function setBridgeHelper(h: { pid: number; version: string } | null): void {
+  helper = h;
 }
 
 /** `proxy`: DoCatz's proxy ports, so DevCatz's proxy can hand *.docatz.<tld> on when :443 points at it (#61). */
@@ -50,14 +77,14 @@ export function writeBridge(containers: DcContainer[], engine: 'running' | 'stop
     framework: c.framework?.framework ?? null,
     library: c.framework?.library ?? null,
   }));
-  const body = JSON.stringify({ engine, list, proxy, mcatzp });
+  const body = JSON.stringify({ engine, list, proxy, mcatzp, helper });
   if (body === last) return;
   try {
     const file = bridgeFile();
     const dir = join(file, '..');
     if (!existsSync(dir)) mkdirSync(dir, { recursive: true, mode: 0o700 });
     else chmodSync(dir, 0o700);
-    const doc = { schema: 1, app: 'DoCatz', version: app.getVersion(), updatedAt: Date.now(), engine, engineEndpoint: dockerHost(), proxy, containers: list, ...(mcatzp ? { mcatzp } : {}) };
+    const doc = { schema: 1, app: 'DoCatz', version: app.getVersion(), updatedAt: Date.now(), engine, engineEndpoint: dockerHost(), proxy, ...(helper ? { helper } : {}), containers: list, ...(mcatzp ? { mcatzp } : {}) };
     const tmp = `${file}.${process.pid}.tmp`;
     writeFileSync(tmp, JSON.stringify(doc, null, 2) + '\n', { mode: 0o600 });
     renameSync(tmp, file);

@@ -256,6 +256,11 @@ export interface EngineConfig {
   rosetta: boolean;
   /** Start the engine when DoCatz starts. */
   autoStart: boolean;
+  /**
+   * The engine helper (#107, beta): the engine, the domains proxy, the database ports and bridge.json run in a small
+   * process of their own that stays when DoCatz quits, and starts at login. Off = all of it lives and ends with DoCatz.
+   */
+  keepRunning: boolean;
 }
 export interface EnginePrereqs {
   /** SVM / VT-x on in the BIOS / UEFI; null when Windows does not say. */

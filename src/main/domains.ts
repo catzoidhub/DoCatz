@@ -95,6 +95,35 @@ function devcatzConfig(): { tld?: string; httpsPort?: number; httpPort?: number 
 const label = (s: string) => s.toLowerCase().replace(/[^a-z0-9-]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 63) || 'x';
 const shared = (): SharedDomains => readShared().domains ?? {};
 
+/** What a container's URL is made of: the ending, HTTPS (on and a CA there), names without a port, the proxy's ports. */
+export interface Naming {
+  tld: string;
+  https: boolean;
+  clean: boolean;
+  httpsPort: number;
+  httpPort: number;
+}
+
+/** A custom name (the part before .docatz.<tld>) by the container's domain key. */
+export const domainNameOf = (key: string): string | null => (store.extra<Record<string, string>>(NAMES_KEY) ?? {})[key] ?? null;
+
+/** The container's host name: every container on a network (its own IP), or one that publishes a TCP port. */
+export function hostWith(tld: string, nameOf: (key: string) => string | null, c: Pick<DcContainer, 'name' | 'project' | 'service' | 'ports' | 'ip' | 'domainKey'>): string | null {
+  if (!c.ip && !c.ports.some((p) => p.type === 'tcp' && p.public)) return null;
+  const name = nameOf(c.domainKey) ?? (c.project && c.service ? `${label(c.service)}.${label(c.project)}` : label(c.name));
+  return `${name}.docatz.${tld}`;
+}
+
+/** https://<host>[:port] — without the port only when :443 / :80 reach DoCatz's proxy. */
+export function urlWith(n: Naming, nameOf: (key: string) => string | null, c: Omit<DcContainer, 'url'>): string | null {
+  // DevCatz's gateways and services: DevCatz's own address, the one it shows everywhere (its name still routes here too).
+  const theirs = devcatzUrl(c);
+  if (theirs) return theirs;
+  const host = hostWith(n.tld, nameOf, c);
+  if (!host || !isWeb(c)) return null;
+  return `${n.https ? 'https' : 'http'}://${host}${n.clean ? '' : `:${n.https ? n.httpsPort : n.httpPort}`}`;
+}
+
 export class Domains {
   private ca: Ca | null = null;
   private contexts = new Map<string, SecureContext>();
@@ -269,14 +298,17 @@ export class Domains {
 
   /** The container's host name: every container on a network (its own IP), or one that publishes a TCP port. */
   hostFor(c: Pick<DcContainer, 'name' | 'project' | 'service' | 'ports' | 'ip' | 'domainKey'>): string | null {
-    if (!c.ip && !c.ports.some((p) => p.type === 'tcp' && p.public)) return null;
-    const name = this.nameOf(c.domainKey) ?? (c.project && c.service ? `${label(c.service)}.${label(c.project)}` : label(c.name));
-    return `${name}.docatz.${this.tld()}`;
+    return hostWith(this.tld(), this.nameOf, c);
+  }
+
+  /** What a container's URL is made of, for a process that names containers without running the proxy (#107). */
+  naming(): Naming {
+    return { tld: this.tld(), https: this.https() && this.ca !== null, clean: shared().cleanUrls?.on === true && this.probe?.reaches === true, httpsPort: this.httpsPort, httpPort: this.httpPort };
   }
 
   // ---------------------------------------------------------------- custom names (the part before .docatz.<tld>)
 
-  nameOf = (key: string): string | null => (store.extra<Record<string, string>>(NAMES_KEY) ?? {})[key] ?? null;
+  nameOf = domainNameOf;
 
   /** A name of one or more labels (`shop`, `api.shop`); the suffix .docatz.<tld> always follows the settings. */
   setName(key: string, name: string | null): void {
@@ -294,16 +326,7 @@ export class Domains {
   }
 
   /** https://<host>[:port] — without the port only when :443 / :80 reach DoCatz's proxy. */
-  urlFor = (c: Omit<DcContainer, 'url'>): string | null => {
-    // DevCatz's gateways and services: DevCatz's own address, the one it shows everywhere (its name still routes here too).
-    const theirs = devcatzUrl(c);
-    if (theirs) return theirs;
-    const host = this.hostFor(c);
-    if (!host || !isWeb(c)) return null;
-    const https = this.https() && this.ca !== null;
-    const clean = shared().cleanUrls?.on === true && this.probe?.reaches === true;
-    return `${https ? 'https' : 'http'}://${host}${clean ? '' : `:${https ? this.httpsPort : this.httpPort}`}`;
-  };
+  urlFor = (c: Omit<DcContainer, 'url'>): string | null => urlWith(this.naming(), this.nameOf, c);
 
   /**
    * The proxy's table. A container with its own IP goes through the router to that IP and its port — the first exposed
