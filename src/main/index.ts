@@ -29,7 +29,7 @@ import { EngineHost } from './enginehost';
 import { engineConfig } from './engine';
 import { HelperClient } from './helperproto';
 import { ensureHelper, LOGIN_FLAG, removeHelper, RemoteEngine, startHelperFromLogin } from './helperctl';
-import { forwardBridgeMcatzp } from './bridge';
+import { bridgeWrittenByHelper, forwardBridgeMcatzp } from './bridge';
 import { devcatzGateways } from './gateways';
 import { Reporter } from './reporter';
 import { run } from './proc';
@@ -60,6 +60,8 @@ import { appMenuPopup, applyMenu, mainWindow, menuKey, menuShortcuts, onWindowCl
 // The engine, the proxy, the list and bridge.json (#107): in this process, or — "Keep the engine running after
 // DoCatz quits" — in the engine helper, which this process then only asks (RemoteEngine) and listens to.
 const helperMode = engineConfig().keepRunning;
+// With the helper on, the helper alone writes bridge.json (this process forwards its MCatzP entry once connected).
+if (helperMode) bridgeWrittenByHelper();
 const helper = helperMode ? new HelperClient() : null;
 const remote = helper ? new RemoteEngine(helper) : null;
 const host = new EngineHost(remote ? { engine: remote, serving: false } : {});

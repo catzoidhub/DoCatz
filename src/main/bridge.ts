@@ -1,5 +1,5 @@
 import { app } from 'electron';
-import { chmodSync, existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
+import { chmodSync, existsSync, mkdirSync, readFileSync, renameSync, statSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { BridgeEntry } from '@catzoid/mcatzp-host';
 import type { DcContainer } from '@shared/types';
@@ -18,6 +18,14 @@ import { dockerHost } from './paths';
 export const bridgeFile = () => process.env.DOCATZ_BRIDGE_FILE || join(app.getPath('userData'), 'bridge.json');
 
 let last = '';
+let lastMtime = -1;
+const mtime = (f: string): number => {
+  try {
+    return statSync(f).mtimeMs;
+  } catch {
+    return -1;
+  }
+};
 let lastContainers: DcContainer[] = [];
 let lastEngine: 'running' | 'stopped' = 'stopped';
 let lastProxy = { httpsPort: 0, httpPort: 0 };
@@ -28,6 +36,15 @@ let mcatzp: BridgeEntry | null = null;
  * helper (`forward`), so one process writes bridge.json.
  */
 let forward: ((entry: BridgeEntry) => void) | null = null;
+/**
+ * DoCatz with the helper on never writes the file, not even before it has reached the helper: its MCatzP entry waits
+ * for `forward`. It used to write its own empty state then ("stopped", no containers, no helper) over the helper's,
+ * and the helper, seeing nothing new on its side, never wrote again (Linux VM, 2026-11-18).
+ */
+let writer = true;
+export function bridgeWrittenByHelper(): void {
+  writer = false;
+}
 export function forwardBridgeMcatzp(to: ((entry: BridgeEntry) => void) | null): void {
   forward = to;
   if (to && mcatzp) to(mcatzp);
@@ -37,7 +54,7 @@ export function forwardBridgeMcatzp(to: ((entry: BridgeEntry) => void) | null): 
 export function setBridgeMcatzp(entry: BridgeEntry): void {
   mcatzp = entry;
   if (forward) return forward(entry);
-  writeBridge(lastContainers, lastEngine, lastProxy);
+  if (writer) writeBridge(lastContainers, lastEngine, lastProxy);
 }
 
 /** The helper starting: the MCatzP entry the app wrote last stays (the app sends it again when it connects). */
@@ -77,8 +94,10 @@ export function writeBridge(containers: DcContainer[], engine: 'running' | 'stop
     framework: c.framework?.framework ?? null,
     library: c.framework?.library ?? null,
   }));
+  if (!writer) return;
   const body = JSON.stringify({ engine, list, proxy, mcatzp, helper });
-  if (body === last) return;
+  // Nothing new — unless the file changed since this process wrote it (another DoCatz wrote over it): written again.
+  if (body === last && lastMtime === mtime(bridgeFile())) return;
   try {
     const file = bridgeFile();
     const dir = join(file, '..');
@@ -89,6 +108,7 @@ export function writeBridge(containers: DcContainer[], engine: 'running' | 'stop
     writeFileSync(tmp, JSON.stringify(doc, null, 2) + '\n', { mode: 0o600 });
     renameSync(tmp, file);
     last = body;
+    lastMtime = mtime(file);
   } catch (e) {
     console.warn('bridge.json could not be written:', (e as Error).message);
   }
