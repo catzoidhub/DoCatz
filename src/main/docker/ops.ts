@@ -385,6 +385,76 @@ export async function imagePull(ref: string, line: (text: string) => void, signa
   });
 }
 
+/**
+ * Pulls an image and reports its download. Docker gives a layer's size only once that layer starts downloading (a few
+ * at a time), so a share of bytes seen so far would jump to 100 % early. `expectedBytes` (the image's download size,
+ * when known — a pinned image) makes `fraction` bytes done of that; otherwise it is bytes once every unfinished layer's
+ * size is known, and 0 before that. `phase` is "download" until every layer is in, then "unpack".
+ */
+export async function imagePullBytes(ref: string, report: (p: { fraction: number; done: number; total: number; phase: 'download' | 'unpack'; layers: number; finished: number }) => void, signal?: AbortSignal, expectedBytes = 0): Promise<void> {
+  const at = ref.lastIndexOf(':');
+  const hasTag = at > ref.lastIndexOf('/');
+  const res = await docker.stream('POST', '/images/create', { query: { fromImage: hasTag ? ref.slice(0, at) : ref, tag: hasTag ? ref.slice(at + 1) : 'latest' } });
+  signal?.addEventListener('abort', () => res.destroy(), { once: true });
+  const layers = new Map<string, { done: number; total: number; pulled: boolean }>();
+  let buf = '';
+  let error = '';
+  let last = 0;
+  let downloaded = false;
+  const send = (force = false) => {
+    const now = Date.now();
+    if (!force && now - last < 250) return;
+    last = now;
+    let done = 0;
+    let total = 0;
+    let finished = 0;
+    for (const l of layers.values()) {
+      total += l.total;
+      done += l.pulled ? l.total : Math.min(l.done, l.total);
+      if (l.pulled) finished++;
+    }
+    const n = layers.size;
+    const sized = [...layers.values()].every((l) => l.pulled || l.total > 0);
+    const fraction = expectedBytes ? Math.min(1, done / Math.max(expectedBytes, total)) : sized && total ? done / total : 0;
+    report({ fraction, done, total, phase: n && finished === n && downloaded ? 'unpack' : 'download', layers: n, finished });
+  };
+  await new Promise<void>((resolve, reject) => {
+    res.on('data', (c: Buffer) => {
+      buf += c.toString();
+      let nl: number;
+      while ((nl = buf.indexOf('\n')) >= 0) {
+        const l = buf.slice(0, nl).trim();
+        buf = buf.slice(nl + 1);
+        if (!l) continue;
+        try {
+          const j = JSON.parse(l) as { status?: string; id?: string; error?: string; progressDetail?: { current?: number; total?: number } };
+          if (j.error) error = j.error;
+          else if (j.id && j.status) {
+            // Only layer lines (the image's own id comes with "Pulling from …", which is not a layer).
+            if (/^Pulling from /.test(j.status)) continue;
+            const layer = layers.get(j.id) ?? { done: 0, total: 0, pulled: false };
+            if (j.status === 'Downloading' && j.progressDetail?.total) {
+              layer.total = j.progressDetail.total;
+              layer.done = j.progressDetail.current ?? layer.done;
+              downloaded = true;
+            } else if (/^(Verifying Checksum|Download complete|Extracting|Pull complete|Already exists)/.test(j.status)) layer.pulled = true;
+            layers.set(j.id, layer);
+            send();
+          }
+        } catch {
+          /* partial */
+        }
+      }
+    });
+    res.on('end', () => {
+      send(true);
+      if (error) reject(new Error(error));
+      else resolve();
+    });
+    res.on('error', (e) => reject(signal?.aborted ? new Error('Cancelled') : e));
+  });
+}
+
 interface ApiVolume {
   Name: string;
   Driver: string;

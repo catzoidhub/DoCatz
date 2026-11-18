@@ -239,6 +239,8 @@ export interface TaskProgress {
   fraction?: number;
   /** How much of the whole job each step is (same length as steps); equal when left out. */
   weights?: number[];
+  /** A plain-words line under each step: what it does and why (same length as steps). */
+  notes?: string[];
   done?: boolean;
   error?: string;
   cancelled?: boolean;
@@ -814,6 +816,8 @@ export interface K8sState {
   publishError: string;
   /** The names' ending (`localhost`, `test` …): Services are `<name>.<namespace>.k8s.docatz.<tld>`. */
   tld: string;
+  /** Turning it on: the steps, the download's progress and what each step is for; kept after a failure until the next try. */
+  task: TaskProgress | null;
 }
 export interface K8sPod {
   namespace: string;

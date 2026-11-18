@@ -2,12 +2,14 @@ import { chmodSync, copyFileSync, existsSync, mkdirSync, readFileSync, renameSyn
 import { createServer } from 'node:net';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
-import type { K8sState, K8sWorkloads } from '@shared/types';
+import type { K8sState, K8sWorkloads, TaskProgress } from '@shared/types';
+import { imagePullBytes } from './docker/ops';
 import type { Naming } from './domains';
 import { cliInstalled, dockerBin } from './cli';
 import { KUBECTL_VERSION, kubectlPackage } from './components';
 import { fetchPinned } from './download';
 import { isWin } from './platform';
+import { machineArch } from './machine';
 import { docatzDir, dockerHost, exe } from './paths';
 import { lastLine, run } from './proc';
 
@@ -28,6 +30,8 @@ import { lastLine, run } from './proc';
 export const K8S_NAME = 'docatz-k8s';
 export const K8S_VERSION = 'v1.37.2-k3s1';
 const IMAGE = `rancher/k3s:${K8S_VERSION}`;
+/** The image's download size (one compressed layer), per architecture, for the download bar: `docker manifest inspect -v`. */
+const IMAGE_BYTES: Record<string, number> = { arm64: 85_050_231, x64: 93_199_972 };
 const NET = 'docatz-k8s';
 const DATA = '/var/lib/docatz/k3s';
 const API_PORT = Number(process.env.DOCATZ_K8S_PORT) || 6443;
@@ -82,11 +86,17 @@ const kubectl = (args: string[], timeout = 30_000) => {
   return docker(['exec', K8S_NAME, 'timeout', '-s', 'KILL', String(sec), 'kubectl', `--request-timeout=${Math.max(3, sec - 2)}s`, ...args], timeout);
 };
 
-/** Pods are containers of dockerd: when the cluster stops they go too, with the mounts kubelet left on the host. */
-async function sweep(): Promise<void> {
+/** Pods are containers of dockerd: when the cluster stops they go too, with the mounts kubelet left on the host.
+ * `report` follows it: 'pods' with how many are gone of how many, then 'mounts'. */
+async function sweep(report: (what: 'pods' | 'mounts', done?: number, total?: number) => void = () => undefined): Promise<void> {
   await docker(['rm', '-f', LB_NAME], 60_000);
   const ids = (await docker(['ps', '-aq', '--filter', 'label=io.kubernetes.pod.namespace'], 30_000)).stdout.split('\n').filter(Boolean);
-  for (let i = 0; i < ids.length; i += 50) await docker(['rm', '-f', ...ids.slice(i, i + 50)], 120_000);
+  report('pods', 0, ids.length);
+  for (let i = 0; i < ids.length; i += 10) {
+    await docker(['rm', '-f', ...ids.slice(i, i + 10)], 120_000);
+    report('pods', Math.min(ids.length, i + 10), ids.length);
+  }
+  report('mounts');
   // The host's mount namespace, from a helper: kubelet's volume mounts under DATA would keep the folder busy.
   await docker(
     ['run', '--rm', '--privileged', '--pid=host', '--label', 'com.mrcatz.docatz.helper=1', '--entrypoint', 'nsenter', IMAGE, '-t', '1', '-m', '--', 'sh', '-c', `grep " ${DATA}/kubelet" /proc/self/mounts | cut -d" " -f2 | sort -r | xargs -r -n1 umount -l; true`],
@@ -117,8 +127,35 @@ async function shareMounts(): Promise<void> {
   if (r.code !== 0) throw new Error(`The engine could not be prepared for the cluster: ${lastLine(r.stderr)}`);
 }
 
+/** Turning Kubernetes on, step by step, each with a line on what it does (shown under the step). */
+const STEPS = ['Download Kubernetes (k3s)', 'Prepare the engine', 'Start the cluster', 'Wait for the node', 'Write the kubeconfig'];
+const NOTES = [
+  'The k3s image, about 90 MB, once: a small, complete Kubernetes that runs as one container on DoCatz’s engine.',
+  'Shares the engine’s mounts so pod volumes reach the cluster, and makes the cluster’s own network.',
+  'Starts the docatz-k8s container: the API server, the scheduler and kubelet, with DoCatz’s Docker running the pods.',
+  'k3s starts its system pods (DNS, metrics, storage); the node shows Ready once they run, usually within a minute.',
+  'Saves the cluster’s kubeconfig (context docatz) for kubectl and other tools. Your own kube config is not changed.',
+];
+const WEIGHTS = [55, 5, 10, 25, 5];
+const STOP_STEPS = ['Stop the cluster', 'Remove the pods’ containers', 'Release the pods’ volumes'];
+const STOP_NOTES = [
+  'Asks k3s to shut down (up to 20 s), so the API server and kubelet stop cleanly.',
+  'Pods are containers of DoCatz’s Docker, so they go with the cluster. Their deployments stay and start them again next time.',
+  'Unmounts what kubelet had mounted for the pods. The cluster’s data stays for the next start.',
+];
+const REMOVE_STEPS = [...STOP_STEPS, 'Delete the cluster’s data', 'Remove its network'];
+const REMOVE_NOTES = [
+  STOP_NOTES[0],
+  'Pods are containers of DoCatz’s Docker: each one is removed with the cluster.',
+  'Unmounts what kubelet had mounted for the pods, so their folders can be deleted.',
+  'Deletes k3s’s database, certificates and the pods’ volumes. The k3s image stays: turning it on again needs no download.',
+  'Removes the cluster’s own Docker network. Your other containers are not touched.',
+];
+const MB = (n: number) => (n / 1e6).toFixed(n < 10e6 ? 1 : 0);
+
 export class K8s {
   private busy: K8sState['status'] | null = null;
+  private task: TaskProgress | null = null;
   private detail = '';
   private error = '';
   private published: number[] = [];
@@ -139,7 +176,7 @@ export class K8s {
 
   /** `asleep`: the engine sleeps (Lite, on-demand Docker) — a running cluster would have kept it awake, so nothing is asked. */
   async state(asleep = false): Promise<K8sState> {
-    const base = { version: K8S_VERSION.replace('-k3s', '+k3s'), apiPort: API_PORT, kubeconfig: kubeconfigFile(), detail: this.detail, error: this.error, node: null as string | null, context: this.contextInUse(), kubectl: this.kubectlInstalled(), published: this.published, publishError: this.publishError, tld: this.naming()?.tld ?? 'localhost' };
+    const base = { version: K8S_VERSION.replace('-k3s', '+k3s'), apiPort: API_PORT, kubeconfig: kubeconfigFile(), detail: this.detail, error: this.error, node: null as string | null, context: this.contextInUse(), kubectl: this.kubectlInstalled(), published: this.published, publishError: this.publishError, tld: this.naming()?.tld ?? 'localhost', task: this.task };
     if (!cliInstalled()) return { ...base, status: 'off' };
     if (this.busy) return { ...base, status: this.busy };
     if (asleep) return { ...base, status: this.idle };
@@ -157,31 +194,53 @@ export class K8s {
     this.onChange();
   }
 
+  /** Moves the start's steps on: `detail` is the line under the current step, `fraction` its download bar. */
+  private step(step: number, detail = '', fraction?: number): void {
+    if (!this.task) return;
+    this.task = { ...this.task, step, detail, fraction };
+    this.detail = detail || STEPS[step];
+    this.onChange();
+  }
+
   /** Creates (or starts) the cluster and waits for its node; writes its kubeconfig. */
   async start(): Promise<void> {
     if (this.busy) return;
     this.error = '';
+    this.task = { kind: 'k8s', title: 'Turning on Kubernetes', steps: STEPS, notes: NOTES, weights: WEIGHTS, step: 0 };
     this.set('starting', 'Getting Kubernetes ready');
     try {
       const c = await inspect();
+      // A cluster from before (stopped): "Starting", and its download step is already done.
+      if (c && this.task) this.task = { ...this.task, title: 'Starting Kubernetes' };
       if (c && c.image !== IMAGE) {
         // Another k3s version from an older DoCatz: the container is replaced, the cluster's data stays.
+        this.step(0, 'Replacing the older k3s version — the cluster’s data stays');
         await removeContainer();
         await sweep();
       }
       if (c && c.image === IMAGE) {
         if (!c.running) {
+          this.step(1, 'Already downloaded; the cluster is there from before');
           await shareMounts();
+          this.step(2);
           const s = await docker(['start', K8S_NAME], 120_000);
           if (s.code !== 0) throw new Error(lastLine(s.stderr));
         }
       } else {
         if ((await docker(['image', 'inspect', IMAGE], 20_000)).code !== 0) {
-          this.set('starting', 'Downloading Kubernetes (k3s), about 80 MB');
-          const p = await docker(['pull', IMAGE], 900_000);
-          if (p.code !== 0) throw new Error(`Kubernetes could not be downloaded: ${lastLine(p.stderr)}`);
+          this.step(0, 'Connecting to the registry…', 0);
+          let shown = 0;
+          const expected = IMAGE_BYTES[machineArch()] ?? 0;
+          await imagePullBytes(IMAGE, (p) => {
+            if (p.phase === 'unpack') return this.step(0, `Unpacking ${p.layers} layers (${MB(p.total)} MB)…`, 1);
+            if (!p.layers) return;
+            shown = Math.max(shown, p.fraction); // never goes back
+            this.step(0, `Downloading ${Math.round(shown * 100)}% — ${MB(p.done)} of ${MB(Math.max(expected, p.total))} MB`, shown);
+          }, undefined, expected).catch((e: Error) => {
+            throw new Error(`Kubernetes could not be downloaded: ${e.message}`);
+          });
         }
-        this.set('starting', 'Starting the cluster');
+        this.step(1);
         await docker(['network', 'create', NET], 30_000);
         // kubelet's pod mounts must travel back to the host (rshared), which needs a shared mount there. A systemd
         // host has that; Lite's guest does not ("path … is mounted on / but it is not a shared mount"): made so here,
@@ -190,6 +249,7 @@ export class K8s {
         // dockerd under systemd (Standard, WSL with systemd, Linux) drives cgroups through systemd, and kubelet must
         // do the same; Lite's guest has no systemd (cgroupfs), where k3s's own default is right.
         const systemd = (await docker(['info', '--format', '{{.CgroupDriver}}'], 20_000)).stdout.trim() === 'systemd';
+        this.step(2);
         const r = await docker(
           [
             'run', '-d', '--name', K8S_NAME, '--label', `${K8S_LABEL}=1`, '--restart', 'unless-stopped', '--network', NET,
@@ -210,17 +270,22 @@ export class K8s {
         );
         if (r.code !== 0) throw new Error(`The cluster did not start: ${r.stderr.split('\n').map((l) => l.trim()).filter((l) => l && !/^Run 'docker run --help'/.test(l)).pop() ?? `docker exited ${r.code}`}`);
       }
-      this.set('starting', 'Waiting for the node');
+      this.step(3);
+      const t0 = Date.now();
       for (let i = 0; ; i++) {
+        if (i) this.step(3, `${Math.round((Date.now() - t0) / 1000)} s — k3s is starting its system pods`);
         const n = await kubectl(['get', 'nodes', '--no-headers'], 10_000).catch(() => null);
         if (n && n.code === 0 && / Ready /.test(n.stdout)) break;
         if (i >= 90) throw new Error(`The node did not get ready: ${lastLine((await docker(['logs', '--tail', '5', K8S_NAME], 15_000)).stderr) || 'see docker logs docatz-k8s'}`);
         if (!(await inspect())?.running) throw new Error(`The cluster stopped: ${lastLine((await docker(['logs', '--tail', '5', K8S_NAME], 15_000)).stderr)}`);
         await new Promise((res) => setTimeout(res, 2000));
       }
+      this.step(4);
       await this.writeKubeconfig();
+      this.task = null;
     } catch (e) {
       this.error = (e as Error).message;
+      if (this.task) this.task = { ...this.task, error: this.error, done: true, fraction: undefined };
       throw e;
     } finally {
       this.set(null);
@@ -247,28 +312,61 @@ export class K8s {
   async stop(): Promise<void> {
     if (this.busy) return;
     this.error = '';
+    this.task = { kind: 'k8s-stop', title: 'Stopping Kubernetes', steps: STOP_STEPS, notes: STOP_NOTES, weights: [50, 35, 15], step: 0 };
     this.set('stopping', 'Stopping the cluster');
-    try {
-      await docker(['stop', '-t', '20', K8S_NAME], 120_000);
-      await sweep();
-    } finally {
-      this.set(null);
-    }
+    await this.steps(async () => {
+      await this.stopping(() => docker(['stop', '-t', '20', K8S_NAME], 120_000));
+      await sweep((what, done, total) => this.swept(what, done, total, 1));
+    });
   }
 
   /** Removes the cluster and everything in it (typed "delete" in the window). */
   async remove(confirm: string): Promise<void> {
     if (confirm.trim().toLowerCase() !== 'delete') throw new Error('Type delete to confirm');
     if (this.busy) return;
+    this.error = '';
+    this.task = { kind: 'k8s-remove', title: 'Removing Kubernetes', steps: REMOVE_STEPS, notes: REMOVE_NOTES, weights: [35, 25, 10, 20, 10], step: 0 };
     this.set('stopping', 'Removing the cluster');
-    try {
-      await removeContainer();
-      await sweep();
+    await this.steps(async () => {
+      await this.stopping(() => removeContainer());
+      await sweep((what, done, total) => this.swept(what, done, total, 1));
+      this.step(3);
       await docker(['run', '--rm', '--privileged', '--label', 'com.mrcatz.docatz.helper=1', '-v', '/var/lib/docatz:/host', '--entrypoint', 'rm', IMAGE, '-rf', '/host/k3s'], 120_000).catch(() => undefined);
+      this.step(4);
       await docker(['network', 'rm', NET], 30_000);
+    });
+  }
+
+  /** Runs a stop / remove: the task goes once it is through, or stays with the error. */
+  private async steps(fn: () => Promise<void>): Promise<void> {
+    try {
+      await fn();
+      this.task = null;
+    } catch (e) {
+      this.error = (e as Error).message;
+      if (this.task) this.task = { ...this.task, error: this.error, done: true, fraction: undefined };
+      throw e;
     } finally {
       this.set(null);
     }
+  }
+
+  /** The cluster's own shutdown: one docker call that takes up to 20 s, so the seconds are counted under the step. */
+  private async stopping<T>(fn: () => Promise<T>): Promise<T> {
+    const t0 = Date.now();
+    this.step(0, 'Waiting for k3s to stop…');
+    const tick = setInterval(() => this.step(0, `${Math.round((Date.now() - t0) / 1000)} s — waiting for k3s to stop (at most 20 s)`), 1000);
+    try {
+      return await fn();
+    } finally {
+      clearInterval(tick);
+    }
+  }
+
+  /** sweep()'s progress as steps `first` (pods) and `first + 1` (mounts). */
+  private swept(what: 'pods' | 'mounts', done = 0, total = 0, first: number): void {
+    if (what === 'mounts') return this.step(first + 1);
+    this.step(first, total ? `${done} of ${total} pod containers removed` : 'No pod containers left', total ? done / total : undefined);
   }
 
   /** The cluster's kubeconfig as ~/.docatz/kube/config: context, cluster and user all named `docatz`. */

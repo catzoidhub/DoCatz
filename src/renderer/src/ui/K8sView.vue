@@ -5,6 +5,7 @@ import type { K8sDeployment, K8sPod, K8sService, K8sState, K8sWorkloads } from '
 import { ago, api, attempt, engineUp, errorText, notify, PROJECT_ICON } from '../store';
 import DcNavButtons from './DcNavButtons.vue';
 import EngineGate from './EngineGate.vue';
+import TaskSteps from './TaskSteps.vue';
 
 /**
  * Kubernetes (TODO #28), laid out as the Containers and Builds pages (user, 2026-11-18: "lebih estetik dan user
@@ -453,17 +454,18 @@ const INK = 'text-[var(--primary-ink,var(--color-primary))]';
         <div class="min-h-0 flex-1 overflow-y-auto">
           <div v-if="!s" class="grid h-40 place-items-center"><span class="loading loading-spinner" /></div>
           <div v-else class="mx-auto max-w-4xl space-y-4 p-5">
-            <p v-if="s.error" role="alert" class="alert alert-error alert-soft selectable text-sm">{{ s.error }}</p>
+            <TaskSteps v-if="s.task" :task="s.task" />
+            <p v-else-if="s.error" role="alert" class="alert alert-error alert-soft selectable text-sm">{{ s.error }}</p>
 
             <!-- off: what it is -->
-            <div v-if="s.status === 'off'" class="card">
+            <div v-if="s.status === 'off' && !s.task" class="card">
               <div class="card-body gap-3">
                 <h2>A Kubernetes cluster on this computer</h2>
                 <ul class="space-y-2 text-sm">
                   <li class="flex gap-2.5"><span class="mt-0.5" :class="INK">●</span><span>One node (k3s) on DoCatz’s engine — Standard or Lite, nothing else to install.</span></li>
                   <li class="flex gap-2.5"><span class="mt-0.5" :class="INK">●</span><span>Its pods are containers of the same Docker: an image from <span class="font-mono text-xs">docker build</span> runs at once, no registry.</span></li>
                   <li class="flex gap-2.5"><span class="mt-0.5" :class="INK">●</span><span>A Service of type <span class="font-mono text-xs">LoadBalancer</span> opens on <span class="font-mono text-xs">localhost</span> at its own port, and at <span class="font-mono text-xs">&lt;name&gt;.&lt;namespace&gt;.k8s.docatz.{{ s?.tld ?? 'localhost' }}</span>.</span></li>
-                  <li class="flex gap-2.5"><span class="mt-0.5 opacity-50">●</span><span class="opacity-70">About 500 MB of memory while it is on, and an 80 MB download the first time. Off again any time.</span></li>
+                  <li class="flex gap-2.5"><span class="mt-0.5 opacity-50">●</span><span class="opacity-70">About 500 MB of memory while it is on, and a download of about 90 MB the first time. Off again any time.</span></li>
                 </ul>
               </div>
             </div>

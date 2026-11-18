@@ -31,6 +31,7 @@ const percent = computed(() => taskPercent(props.task));
         </span>
         <div class="min-w-0 flex-1">
           <p class="text-sm" :class="{ 'font-medium': i === task.step, 'opacity-50': i > task.step }">{{ name }}</p>
+          <p v-if="task.notes?.[i]" class="mt-0.5 text-xs opacity-55" :class="{ 'opacity-40': i > task.step }">{{ task.notes[i] }}</p>
           <template v-if="i === task.step">
             <p v-if="task.detail" class="selectable mt-0.5 truncate text-xs opacity-60" :title="task.detail">{{ task.detail }}</p>
             <progress v-if="task.fraction !== undefined && task.fraction > 0" class="progress progress-primary mt-1.5 h-1.5 w-full" :value="Math.round(task.fraction * 100)" max="100" />
