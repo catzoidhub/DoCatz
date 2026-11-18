@@ -67,7 +67,7 @@ function control<T = unknown>(method: string, params?: unknown, timeoutMs = 10_0
   });
 }
 
-type VmmStatus = { state: 'starting' | 'running' | 'stopping' | 'stopped' | 'error'; version?: string; guest?: { docker?: boolean; bootMs?: number } };
+type VmmStatus = { state: 'starting' | 'running' | 'stopping' | 'stopped' | 'error' | 'sleeping'; version?: string; guest?: { docker?: boolean; bootMs?: number } };
 type Saved = { cpus: number; memoryMiB: number; diskGiB: number; rosetta: boolean };
 
 export class LiteBackend implements Backend {
@@ -140,10 +140,22 @@ export class LiteBackend implements Backend {
     const running = c ? { cpus: c.cpus, memoryGiB: Math.round(c.memoryMiB / 1024), diskGiB: c.diskGiB || Math.round(statSync(dataDisk()).size / 1024 ** 3), rosetta: c.rosetta } : null;
     if (!s || s.state === 'stopped') return { status: 'stopped', message: '', manager, dir: vmDir(), running };
     const status = s.state === 'running' ? 'running' : s.state === 'error' ? 'error' : s.state;
-    return { status, message: status === 'error' ? 'The Lite VM stopped with an error — see the engine log, or Reset' : '', manager, dir: vmDir(), running };
+    const message = status === 'error' ? 'The Lite VM stopped with an error — see the engine log, or Reset' : status === 'sleeping' ? 'Asleep after a while with nothing running; it wakes in about 2 s when something uses Docker.' : '';
+    return { status, message, manager, dir: vmDir(), running };
   }
 
   async start(config: EngineConfig, r: StepReporter, opts: { dockerSocket?: string; forwardPorts?: boolean } = {}): Promise<void> {
+    // Asleep: the same VM boots again (its process keeps the socket); nothing to download or create.
+    if (await this.sleeping()) {
+      r.step(2);
+      await control('wake', undefined, 10_000);
+      for (let i = 0; i < 120; i++) {
+        const s = await control<VmmStatus>('status', undefined, 2000).catch(() => null);
+        if (s?.state === 'running') return r.step(3);
+        await new Promise((res) => setTimeout(res, 500));
+      }
+      throw new Error('The Lite VM did not wake within a minute — see the engine log');
+    }
     r.step(0);
     if (!(await this.installed())) await this.install(r);
     if (r.signal.aborted) throw new Error('Cancelled');
@@ -220,6 +232,16 @@ export class LiteBackend implements Backend {
       await new Promise((res) => setTimeout(res, 500));
     }
     await control('kill', undefined, 5000).catch(() => null);
+  }
+
+  async sleeping(): Promise<boolean> {
+    const s = await control<VmmStatus>('status', undefined, 2000).catch(() => null);
+    return s?.state === 'sleeping';
+  }
+
+  /** Idle sleep (docatz-vmm `sleep`): the guest stops, its memory goes back to the Mac, the socket stays and wakes it. */
+  async sleep(): Promise<void> {
+    await control('sleep', { timeoutSec: 20 }, 40_000);
   }
 
   async reset(): Promise<void> {

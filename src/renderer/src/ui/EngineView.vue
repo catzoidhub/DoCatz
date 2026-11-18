@@ -24,7 +24,8 @@ const ENGINE_ROWS: [string, string, string][] = [
   ['First download', 'about 950 MB', 'about 220 MB'],
   ['Memory when idle', 'about 2.8 GB', 'about 430 MB'],
   ['Start until Docker answers', 'about 27 s', 'about 3 s (9 s the first time)'],
-  ['Compatibility', 'Full', 'Most images; UDP ports not forwarded yet'],
+  ['After 15 minutes with nothing running', 'Keeps running', 'Sleeps and gives its memory back; wakes in about 2 s'],
+  ['Compatibility', 'Full', 'Most images and compose projects (beta)'],
 ];
 /** Standard ⇄ Lite (TODO #106, beta): macOS only for now. */
 const canLite = computed(() => isMac.value);
@@ -46,7 +47,7 @@ async function lookAgain() {
   others.value = await api.migrateSources().catch(() => []);
 }
 watch(engineUp, (up) => up && void lookAgain(), { immediate: true });
-const STATUS: Record<string, string> = { running: 'Running', stopped: 'Stopped', starting: 'Starting…', stopping: 'Stopping…', missing: 'Not set up', error: 'Needs attention', unsupported: 'Not available' };
+const STATUS: Record<string, string> = { running: 'Running', stopped: 'Stopped', starting: 'Starting…', stopping: 'Stopping…', missing: 'Not set up', error: 'Needs attention', unsupported: 'Not available', sleeping: 'Sleeping' };
 
 async function set(patch: Partial<EngineConfig>) {
   const r = await attempt(() => api.engineConfigure(patch));
@@ -107,7 +108,7 @@ const copy = (t: string) => {
               <span class="status status-lg" :class="s.status === 'running' ? 'status-success' : s.status === 'error' ? 'status-error' : s.status === 'starting' || s.status === 'stopping' ? 'status-warning' : ''" />
               <div class="min-w-0 flex-1">
                 <h2 class="text-base">{{ STATUS[s.status] ?? s.status }}</h2>
-                <p class="text-xs opacity-60">{{ s.docker ? `Docker ${s.docker.version} · ${s.docker.os} · ${s.docker.cpus} CPUs · ${bytes(s.docker.memory)}` : s.vm?.manager }}</p>
+                <p class="text-xs opacity-60">{{ s.docker ? `Docker ${s.docker.version} · ${s.docker.os} · ${s.docker.cpus} CPUs · ${bytes(s.docker.memory)}` : s.status === 'sleeping' ? s.message : s.vm?.manager }}</p>
               </div>
               <template v-if="s.status === 'running'">
                 <button class="btn btn-sm" :disabled="!!busy" @click="run('restart', () => api.engineRestart())"><span v-if="busy === 'restart'" class="loading loading-spinner loading-xs" />Restart</button>

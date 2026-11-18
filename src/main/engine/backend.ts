@@ -48,6 +48,12 @@ export interface Backend {
   installPrerequisite?(r: StepReporter): Promise<void>;
   /** The VM manager's log, for problems. */
   log(): Promise<string>;
+  /**
+   * Idle sleep (Lite, TODO #106): the VM stops but keeps the Docker socket, and the first connection to it wakes it.
+   * While asleep nothing here may touch that socket (a ping would wake it): `sleeping()` answers from the VM manager.
+   */
+  sleeping?(): Promise<boolean>;
+  sleep?(): Promise<void>;
   /** Stops anything DoCatz itself keeps running for the engine (Windows: the relay) when DoCatz quits. */
   dispose(): void;
 }

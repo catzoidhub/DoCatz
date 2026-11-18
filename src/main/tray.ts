@@ -20,7 +20,7 @@ export interface TrayActions {
   quit(): void;
 }
 
-const STATUS: Record<string, string> = { running: 'Running', stopped: 'Stopped', starting: 'Starting…', stopping: 'Stopping…', missing: 'Not set up yet', error: 'Needs attention', unsupported: 'Not available' };
+const STATUS: Record<string, string> = { running: 'Running', stopped: 'Stopped', starting: 'Starting…', stopping: 'Stopping…', missing: 'Not set up yet', error: 'Needs attention', unsupported: 'Not available', sleeping: 'Sleeping' };
 
 export class DocatzTray {
   private tray: Tray | null = null;

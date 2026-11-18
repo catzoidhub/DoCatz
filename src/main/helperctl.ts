@@ -129,7 +129,7 @@ export class RemoteEngine implements EngineLike {
   onChange: (s: EngineState) => void = () => undefined;
   onUp: () => void = () => undefined;
   /** The VM's disk gives freed space back (after a prune): done by the helper, which owns the VM. */
-  readonly backend = { trim: () => this.client.call<void>('engine.trim') };
+  readonly backend = { trim: () => this.client.call<void>('engine.trim'), sleeping: () => this.client.call<boolean>('engine.sleeping').catch(() => false) };
   private wasUp = false;
   constructor(private client: HelperClient) {}
 

@@ -623,7 +623,8 @@ function api(): DoCatzApi {
     cliPath: (on) => engine.setPath(on),
     diskUsage: () => needEngine(() => ops.diskUsage()),
 
-    containers: () => needEngine(() => ops.listContainers(domains.urlFor)),
+    // Asleep (Lite, #106): the window's list does not wake the engine; opening a container or Start does.
+    containers: async () => ((await engine.backend.sleeping?.().catch(() => false)) ? [] : needEngine(() => ops.listContainers(domains.urlFor))),
     container: (id) => needEngine(() => ops.containerDetail(id, domains.urlFor)),
     containerEnv: (id) => needEngine(() => ops.containerEnv(id)),
     containerAction: (id, action) => needEngine(() => ops.containerAction(id, action)),

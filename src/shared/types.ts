@@ -247,7 +247,7 @@ export interface TaskProgress {
 // ------------------------------------------------------------ engine
 
 export type EngineBackendId = 'lima' | 'wsl' | 'system' | 'lite';
-export type EngineStatus = 'missing' | 'stopped' | 'starting' | 'running' | 'stopping' | 'error' | 'unsupported';
+export type EngineStatus = 'missing' | 'stopped' | 'starting' | 'running' | 'stopping' | 'error' | 'unsupported' | 'sleeping';
 export interface EngineConfig {
   cpus: number;
   memoryGiB: number;

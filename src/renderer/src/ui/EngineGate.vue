@@ -19,6 +19,8 @@ const title = computed(() => {
       return s.value?.task?.title ? `${s.value.task.title}…` : 'Starting the engine…';
     case 'stopping':
       return 'Stopping the engine…';
+    case 'sleeping':
+      return 'The engine is asleep';
     case 'error':
       return 'The engine needs attention';
     case 'unsupported':

@@ -85,6 +85,8 @@ async function main(): Promise<void> {
       case 'helper.quit':
         void quit(args[0] === true);
         return true;
+      case 'engine.sleeping':
+        return (await host.engine.backend.sleeping?.()) ?? false;
       case 'engine.trim':
         await host.engine.backend.trim?.();
         return true;

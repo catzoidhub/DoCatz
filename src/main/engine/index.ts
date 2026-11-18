@@ -63,6 +63,8 @@ export class Engine {
 
   /** Is Docker answering? (cheap: one ping) */
   async up(): Promise<boolean> {
+    // A sleeping Lite VM wakes on the first connection to its socket: asleep counts as not up, without a ping.
+    if (this.backend.sleeping && (await this.backend.sleeping().catch(() => false))) return false;
     return docker.ping();
   }
 

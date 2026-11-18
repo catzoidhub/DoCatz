@@ -17,7 +17,7 @@ import { learnProject } from './frameworks';
 export type EngineLike = Pick<Engine, 'up' | 'state' | 'start' | 'stop' | 'restart' | 'reset' | 'configure' | 'cancel' | 'adopt' | 'setupWsl' | 'log' | 'setContext' | 'installCli' | 'setPath' | 'dispose'> & {
   onChange: (s: EngineState) => void;
   onUp: () => void;
-  backend: { watchMounts?: (folders: string[]) => void; trim?: () => Promise<void> };
+  backend: { watchMounts?: (folders: string[]) => void; trim?: () => Promise<void>; sleeping?: () => Promise<boolean>; sleep?: () => Promise<void> };
 };
 
 export class EngineHost {
@@ -41,6 +41,10 @@ export class EngineHost {
   private refreshAgain = false;
   private stopEvents: (() => void) | null = null;
   private eventTimer: ReturnType<typeof setTimeout> | null = null;
+  /** Idle sleep (Lite, #106): when the engine last had something to do, and since when nothing runs. */
+  private lastActivity = Date.now();
+  private idleSince: number | null = null;
+  static IDLE_SLEEP_MS = Number(process.env.DOCATZ_IDLE_SLEEP_MS) || 15 * 60_000;
 
   constructor(opts: { engine?: EngineLike; serving?: boolean } = {}) {
     this.engine = opts.engine ?? new Engine();
@@ -74,6 +78,9 @@ export class EngineHost {
       }
       const containers = this.containers;
       if (!this.serving) return this.onList(containers);
+      // Woken by someone using Docker (the VM was asleep): its events are followed again.
+      if (!this.stopEvents && (await this.engine.up())) void this.watchEvents();
+      void this.maybeSleep(containers);
       if (this.engine.backend.watchMounts) this.engine.backend.watchMounts(containers.length ? await ops.bindMounts().catch(() => []) : []);
       const streams = await updateDatabases(containers).catch((e) => (console.warn('databases:', (e as Error).message), []));
       await this.domains.setRoutes(containers, streams).catch((e) => console.warn('routes:', (e as Error).message));
@@ -82,7 +89,9 @@ export class EngineHost {
         void this.projects()
           .then((list) => list.forEach((p) => void learnProject(p.name, p.files, () => void this.refresh())))
           .catch(() => undefined);
-      writeBridge(containers, containers.length || (await this.engine.up()) ? 'running' : 'stopped', { httpsPort: this.domains.httpsPort, httpPort: this.domains.httpPort });
+      // Asleep counts as running for the other apps: their first use of the socket wakes it.
+      const asleep = !containers.length && (await this.engine.backend.sleeping?.().catch(() => false));
+      writeBridge(containers, containers.length || asleep || (await this.engine.up()) ? 'running' : 'stopped', { httpsPort: this.domains.httpsPort, httpPort: this.domains.httpPort });
       this.onList(containers);
     })();
     try {
@@ -109,6 +118,7 @@ export class EngineHost {
     try {
       this.stopEvents = await ops.watchEvents(
         (type, action) => {
+          this.lastActivity = Date.now();
           // Only what changes a list: healthchecks and DoCatz's own reads run `exec` many times a minute.
           if (!EngineHost.LIST_EVENTS.has(`${type}:${action.split(':')[0].trim()}`)) return;
           if (this.eventTimer) return;
@@ -127,6 +137,30 @@ export class EngineHost {
     } catch {
       this.stopEvents = null;
     }
+  }
+
+  /**
+   * Lite's idle sleep (#106): nothing but DoCatz's own router running and no engine events for 15 minutes → the VM
+   * sleeps (docatz-vmm `sleep`), its memory goes back to the Mac, and the first use of the Docker socket wakes it. Only
+   * the serving process decides, and nothing here touches the socket while it sleeps (Engine.up checks first).
+   */
+  private async maybeSleep(containers: DcContainer[]): Promise<void> {
+    const b = this.engine.backend;
+    if (!this.serving || !b.sleep) return;
+    const busy = containers.some((c) => c.state === 'running' && c.name !== 'docatz-router');
+    if (busy) {
+      this.idleSince = null;
+      return;
+    }
+    // The list hides DoCatz's own router, so an empty list can still be a running engine: asked, not guessed.
+    if (!(await this.engine.up())) return; // stopped, starting or already asleep (up() does not wake it)
+    this.idleSince ??= Date.now();
+    if (Date.now() - Math.max(this.idleSince, this.lastActivity) < EngineHost.IDLE_SLEEP_MS) return;
+    this.idleSince = null;
+    this.stopWatching();
+    await b.sleep().catch((e) => console.warn('idle sleep:', (e as Error).message));
+    this.onEngine(await this.engine.state());
+    void this.refresh();
   }
 
   stopWatching(): void {
