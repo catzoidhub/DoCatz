@@ -18,6 +18,8 @@ import MigrateDialog from './MigrateDialog.vue';
 const s = computed(() => engine.value);
 const c = computed(() => s.value?.config);
 const isMac = computed(() => s.value?.backend === 'lima' || s.value?.backend === 'lite');
+/** On a Mac the two engines are two VMs: Reset takes only the one in use (on Windows Lite is the same distro). */
+const resetWhat = computed(() => (isMac.value ? (s.value?.backend === 'lite' ? { name: 'Lite', other: 'Standard' } : { name: 'Standard', other: 'Lite' }) : null));
 /** Standard and Lite side by side (TODO #106): what each is, and DoCatz's own measured numbers. */
 /** The two engines' cards: what each is in a line. */
 const isWsl = computed(() => s.value?.backend === 'wsl');
@@ -403,8 +405,9 @@ const copy = (t: string) => {
         <div v-if="!isSystem" class="card border-error/25">
           <div class="card-body flex-row items-center gap-3">
             <div class="min-w-0 flex-1">
-              <h2 class="font-semibold">Reset the engine</h2>
-              <p class="text-xs opacity-60">Deletes the VM and its disk: every container, image and volume in DoCatz. Project folders on {{ words.thisComputer }} are not touched.</p>
+              <h2 class="font-semibold">Reset the {{ resetWhat ? `${resetWhat.name} engine` : 'engine' }}</h2>
+              <p v-if="resetWhat" class="text-xs opacity-60">Deletes the {{ resetWhat.name }} VM and its disk: every container, image and volume in the {{ resetWhat.name }} engine, and its disk size goes back to the default. The {{ resetWhat.other }} engine and project folders on {{ words.thisComputer }} are not touched.</p>
+              <p v-else class="text-xs opacity-60">Deletes the VM and its disk: every container, image and volume in DoCatz. Project folders on {{ words.thisComputer }} are not touched.</p>
             </div>
             <button class="btn btn-sm btn-outline btn-error shrink-0" :disabled="s.status === 'missing' || !!busy" @click="resetting = true">Reset…</button>
           </div>
@@ -424,7 +427,7 @@ const copy = (t: string) => {
       <form class="modal-box w-[30rem] max-w-[95vw] space-y-3" @submit.prevent="resetTyped.trim().toLowerCase() === 'reset' && reset()">
         <div class="flex items-start gap-3">
           <span class="grid size-10 shrink-0 place-items-center rounded-xl bg-error/12"><CatMood mood="warning" class="size-8" /></span>
-          <div class="min-w-0"><h3 class="text-lg font-semibold tracking-tight">Reset the engine?</h3><p class="text-sm opacity-70">Every container, image and volume in DoCatz goes. The next start sets the engine up fresh.</p></div>
+          <div class="min-w-0"><h3 class="text-lg font-semibold tracking-tight">Reset the {{ resetWhat ? `${resetWhat.name} engine` : 'engine' }}?</h3><p class="text-sm opacity-70"><template v-if="resetWhat">Every container, image and volume in the {{ resetWhat.name }} engine goes; the {{ resetWhat.other }} engine keeps its own. The next start sets {{ resetWhat.name }} up fresh — its disk size can be set first in Settings.</template><template v-else>Every container, image and volume in DoCatz goes. The next start sets the engine up fresh.</template></p></div>
         </div>
         <label class="block">
           <span class="label-caps mb-1 block">Type <CopyName value="reset" /> to go ahead</span>

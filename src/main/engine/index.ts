@@ -84,6 +84,15 @@ function adoptSizes(kind: EngineConfig['kind'], running: Resources | null): void
   store.setExtra(KEY, { ...s, kinds, ...(kind === c.kind ? sizes : {}) });
 }
 
+/** After a Reset the disk is gone: its saved size goes back to the default (and the slider's floor to 16 GB), so the next
+ * start does not make the new disk as big as the old one had grown. CPUs and memory stay. */
+function forgetDisk(kind: EngineConfig['kind']): void {
+  if (!perKind) return;
+  const s = store.extra<Saved>(KEY) ?? {};
+  const kinds = { ...(s.kinds ?? {}), [kind]: { ...pickRes(engineConfig()), diskGiB: defaults().diskGiB } };
+  store.setExtra(KEY, { ...s, kinds, ...(kind === engineConfig().kind ? { diskGiB: defaults().diskGiB } : {}) });
+}
+
 export class Engine {
   readonly backend: Backend = isWin ? new WslBackend() : isLinux ? new LinuxBackend() : engineConfig().kind === 'lite' ? new LiteBackend() : new LimaBackend();
   private task: TaskProgress | null = null;
@@ -296,6 +305,7 @@ export class Engine {
     void this.changed();
     try {
       await this.backend.reset();
+      forgetDisk(engineConfig().kind);
     } finally {
       this.busy = null;
       this.task = null;
