@@ -159,7 +159,7 @@ const copy = (t: string) => {
 
         <!-- the rest in tabs (user, 2026-11-18: the page ran too long): what it is, its settings, the CLIs, moving in -->
         <div class="seg w-full">
-          <button v-for="t in TABS" :key="t.id" class="seg-item flex-1" :class="{ 'is-active': tab === t.id }" @click="tab = t.id">{{ t.label }}</button>
+          <button v-for="t in TABS" :key="t.id" class="seg-item flex-1 justify-center text-center normal-case" :class="{ 'is-active': tab === t.id }" @click="tab = t.id">{{ t.label }}</button>
         </div>
         <!-- engine choice (TODO #106) -->
         <div v-if="canLite && c" v-show="tab === 'settings'" class="card">
