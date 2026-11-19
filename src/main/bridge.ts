@@ -28,6 +28,7 @@ const mtime = (f: string): number => {
 };
 let lastContainers: DcContainer[] = [];
 let lastEngine: 'running' | 'stopped' = 'stopped';
+let lastAsleep = false;
 let lastProxy = { httpsPort: 0, httpPort: 0 };
 let mcatzp: BridgeEntry | null = null;
 
@@ -54,7 +55,7 @@ export function forwardBridgeMcatzp(to: ((entry: BridgeEntry) => void) | null): 
 export function setBridgeMcatzp(entry: BridgeEntry): void {
   mcatzp = entry;
   if (forward) return forward(entry);
-  if (writer) writeBridge(lastContainers, lastEngine, lastProxy);
+  if (writer) writeBridge(lastContainers, lastEngine, lastProxy, lastAsleep);
 }
 
 /** The helper starting: the MCatzP entry the app wrote last stays (the app sends it again when it connects). */
@@ -74,9 +75,15 @@ export function setBridgeHelper(h: { pid: number; version: string } | null): voi
 }
 
 /** `proxy`: DoCatz's proxy ports, so DevCatz's proxy can hand *.docatz.<tld> on when :443 points at it (#61). */
-export function writeBridge(containers: DcContainer[], engine: 'running' | 'stopped', proxy: { httpsPort: number; httpPort: number }): void {
+/**
+ * `asleep` (Lite / Windows Lite / Linux on-demand idle sleep, #106): `engine` stays "running" (the first use of the socket
+ * wakes it, and older siblings only know running / stopped) and `asleep: true` is added, so a sibling can leave the
+ * socket alone instead of waking it (DevCatz §47). Gone at the first refresh after it wakes (≤ 30 s).
+ */
+export function writeBridge(containers: DcContainer[], engine: 'running' | 'stopped', proxy: { httpsPort: number; httpPort: number }, asleep = false): void {
   lastContainers = containers;
   lastEngine = engine;
+  lastAsleep = asleep;
   lastProxy = proxy;
   const list = containers.map((c) => ({
     id: c.id.slice(0, 12),
@@ -95,7 +102,7 @@ export function writeBridge(containers: DcContainer[], engine: 'running' | 'stop
     library: c.framework?.library ?? null,
   }));
   if (!writer) return;
-  const body = JSON.stringify({ engine, list, proxy, mcatzp, helper });
+  const body = JSON.stringify({ engine, asleep, list, proxy, mcatzp, helper });
   // Nothing new — unless the file changed since this process wrote it (another DoCatz wrote over it): written again.
   if (body === last && lastMtime === mtime(bridgeFile())) return;
   try {
@@ -103,7 +110,7 @@ export function writeBridge(containers: DcContainer[], engine: 'running' | 'stop
     const dir = join(file, '..');
     if (!existsSync(dir)) mkdirSync(dir, { recursive: true, mode: 0o700 });
     else chmodSync(dir, 0o700);
-    const doc = { schema: 1, app: 'DoCatz', version: app.getVersion(), updatedAt: Date.now(), engine, engineEndpoint: dockerHost(), proxy, ...(helper ? { helper } : {}), containers: list, ...(mcatzp ? { mcatzp } : {}) };
+    const doc = { schema: 1, app: 'DoCatz', version: app.getVersion(), updatedAt: Date.now(), engine, ...(asleep ? { asleep: true } : {}), engineEndpoint: dockerHost(), proxy, ...(helper ? { helper } : {}), containers: list, ...(mcatzp ? { mcatzp } : {}) };
     const tmp = `${file}.${process.pid}.tmp`;
     writeFileSync(tmp, JSON.stringify(doc, null, 2) + '\n', { mode: 0o600 });
     renameSync(tmp, file);

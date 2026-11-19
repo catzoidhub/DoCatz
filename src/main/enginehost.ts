@@ -90,7 +90,7 @@ export class EngineHost {
       // the idle stop (Linux on-demand, Hyper-V VM, 2026-11-18). Asleep counts as running for the other apps: their
       // first use of the socket wakes it.
       if (!up && (await this.engine.backend.sleeping?.().catch(() => false))) {
-        writeBridge([], 'running', { httpsPort: this.domains.httpsPort, httpPort: this.domains.httpPort });
+        writeBridge([], 'running', { httpsPort: this.domains.httpsPort, httpPort: this.domains.httpPort }, true);
         return this.onList(containers);
       }
       // Woken by someone using Docker (the VM was asleep): its events are followed again.
