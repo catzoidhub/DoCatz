@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, ref, watch } from 'vue';
 import CatMood from './CatMood.vue';
-import { api, attempt, engine, runs, update, updateOpenAuto } from '../store';
+import { api, attempt, engine, runs, settings, update, updateOpenAuto } from '../store';
+import { openCommunity, openDonate } from '../support';
 import icon from '../assets/logos/docatz.png';
 
 /**
@@ -79,6 +80,11 @@ async function skip() {
 }
 /** What's New starts at the newest version's first line, not wherever focus scrolled it. */
 const notesBox = ref<HTMLElement | null>(null);
+/**
+ * Support Catzoid at the end of What's New (Catzoid #94, as DevCatz 058fc2e): one quiet line, the same links as
+ * Settings → About. Gone once the corner card is done with (joined, donated, rated or "Don't show again": supportOff).
+ */
+const supportLine = computed(() => !!settings.value && !settings.value.supportOff);
 /** The newest version's notes did not come (a failed request, the site not caught up yet): ask again on open. */
 const notesMissing = computed(() => !!u.value?.version && !u.value.notes?.find((n) => n.version === u.value?.version)?.notes.trim());
 onMounted(() => {
@@ -129,6 +135,11 @@ const quiet = (off: boolean) => attempt(() => api.updateConfigure({ dialog: !off
               <button type="button" class="link link-hover" @click="api.openUrl(u.notesUrl)">Read them on the site</button>
             </p>
           </section>
+          <p v-if="supportLine" class="border-t border-base-300/60 pt-3 text-xs opacity-60">
+            Catzoid is free and open source.
+            <button type="button" class="link" @click="openCommunity">Joining the community</button> already helps a lot — or
+            <button type="button" class="link" @click="openDonate">support us</button> if you like.
+          </p>
         </div>
 
         <!-- Download -->
