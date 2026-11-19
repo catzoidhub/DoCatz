@@ -35,6 +35,10 @@ export class DockerClient {
       const req = request(
         {
           socketPath: socketPath(),
+          // No kept-alive connections: Node's global agent keeps them open (Node 19+), and Lite's idle sleep is refused
+          // while any Docker connection is open — DoCatz's own idle ones kept it awake for good (DevCatz session,
+          // 2026-11-19: 1–4 open, quietSec back to 0 every 5–10 s). A local socket costs nothing to open per request.
+          agent: false,
           method,
           path: `${this.prefix}${path}${this.qs(o.query)}`,
           headers: { Host: 'docker', 'User-Agent': 'DoCatz', ...(body ? { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(body) } : {}), ...(o.headers ?? {}) },
