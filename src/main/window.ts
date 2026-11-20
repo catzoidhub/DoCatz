@@ -144,14 +144,18 @@ export function setUpdateLabel(label: string): void {
 }
 
 function template(): MenuItemConstructorOptions[] {
+  // Windows / Linux have no app menu (user, 2026-11-20, as DevCatz and DialCatz): Settings… and Exit go under File,
+  // the update item and About under Help. macOS keeps its DoCatz menu.
   return [
+    ...(overlay
+      ? []
+      : [{ label: app.name, submenu: [item('About DoCatz', 'about'), item(updateLabel, 'checkUpdates'), sep, item('Settings…', 'settings', 'CmdOrCtrl+,'), sep, { role: 'services' }, sep, { role: 'hide' }, { role: 'hideOthers' }, { role: 'unhide' }, sep, { role: 'quit' }] } as MenuItemConstructorOptions]),
     {
-      label: app.name,
+      label: 'File',
       submenu: overlay
-        ? [item('About DoCatz', 'about'), item(updateLabel, 'checkUpdates'), sep, item('Settings…', 'settings', 'CmdOrCtrl+,'), sep, { role: 'quit', label: 'Exit' }]
-        : [item('About DoCatz', 'about'), item(updateLabel, 'checkUpdates'), sep, item('Settings…', 'settings', 'CmdOrCtrl+,'), sep, { role: 'services' }, sep, { role: 'hide' }, { role: 'hideOthers' }, { role: 'unhide' }, sep, { role: 'quit' }],
+        ? [item('Open Compose File…', 'openCompose', 'CmdOrCtrl+O'), sep, item('Settings…', 'settings', 'CmdOrCtrl+,'), sep, { role: 'quit', label: 'Exit' }]
+        : [item('Open Compose File…', 'openCompose', 'CmdOrCtrl+O'), sep, { role: 'close' }],
     },
-    { label: 'File', submenu: [item('Open Compose File…', 'openCompose', 'CmdOrCtrl+O'), sep, { role: 'close' }] },
     { label: 'Edit', submenu: [{ role: 'undo' }, { role: 'redo' }, sep, { role: 'cut' }, { role: 'copy' }, { role: 'paste' }, { role: 'delete' }, { role: 'selectAll' }, sep, item('Find…', 'find', 'CmdOrCtrl+F')] },
     { role: 'viewMenu' },
     {
@@ -176,7 +180,7 @@ function template(): MenuItemConstructorOptions[] {
       ],
     },
     { role: 'windowMenu', submenu: overlay ? [{ role: 'minimize' }] : [{ role: 'minimize' }, { role: 'zoom' }, sep, { role: 'front' }] },
-    { role: 'help', submenu: [item('Report a Bug…', 'reportBug'), item('Send Feedback…', 'sendFeedback')] },
+    { role: 'help', submenu: [item('Report a Bug…', 'reportBug'), item('Send Feedback…', 'sendFeedback'), ...(overlay ? [sep, item(updateLabel, 'checkUpdates'), item('About DoCatz', 'about')] : [])] },
   ];
 }
 
