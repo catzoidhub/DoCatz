@@ -395,6 +395,23 @@ export interface DcContainer {
   /** Built from source: the framework found in its build folder (its mark in the list); null for an image. */
   framework: DcFramework | null;
 }
+/** A DialCatz mock server made from a DoCatz project's API service, with the name DoCatz gives it (src/main/dialcatz.ts). */
+export interface DcMock {
+  name: string;
+  workspaceId: string;
+  collectionId: string;
+  project: string;
+  service: string;
+  /** The API description it was made from, relative to the compose folder (forward slashes), when DialCatz says. */
+  specFile: string | null;
+  port: number;
+  /** Where DialCatz serves it: http://127.0.0.1:<port>. */
+  localUrl: string;
+  /** dialcatz-mock[-<service>].<project>.docatz.<tld>, and its URL through DoCatz's proxy. */
+  domain: string;
+  url: string;
+  startedAt: number | null;
+}
 /** Where DialCatz finds a project's routes (#25): Laravel's route list, an OpenAPI file, or one the app serves. */
 export interface DcApiSource {
   how: 'laravel' | 'goravel' | 'file' | 'served';
@@ -950,6 +967,8 @@ export interface DoCatzApi {
   migrateCancel(): Promise<void>;
   /** The routes DialCatz can import for a compose project, or null (no Open in DialCatz then). */
   apiSource(project: string, service?: string | null): Promise<DcApiSource | null>;
+  /** DialCatz's running mock servers made from DoCatz projects, with their DoCatz address. */
+  dialcatzMocks(): Promise<DcMock[]>;
   mcatzpActivity(): Promise<McatzpActivity[]>;
   mcatzpClearActivity(): Promise<void>;
   /** Forgets a client and closes every connection (a new token). */
@@ -1112,7 +1131,7 @@ export interface DoCatzApi {
 
 /** Every method of the bridge, registered as `docatz:<name>` IPC handlers. */
 export const API_METHODS: (keyof DoCatzApi)[] = [
-  'appInfo', 'aboutInfo', 'updateState', 'updateCheck', 'updateNotes', 'updateDownload', 'updateCancel', 'updateSkip', 'updateInstall', 'updateConfigure', 'ratingSend', 'ratingRefresh', 'reportPreview', 'reportSend', 'captureWindow', 'reportError', 'reportSettings', 'reportConfigure', 'uninstallPlan', 'uninstallRun', 'settings', 'setSettings', 'setAiKey', 'aiModels', 'aiProbe', 'aiTest', 'aiCancel', 'aiAsk', 'aiPreviewAsk', 'aiExplainLog', 'aiPreviewLog', 'aiFile', 'aiPreviewFile', 'openUrl', 'browsers', 'reveal', 'openSibling', 'mcatzpActivity', 'mcatzpClearActivity', 'mcatzpRevoke', 'mcatzpSetup', 'mcatzpInstall', 'mcatzpUninstall', 'mcatzpInstallCancel', 'mcatzpApprovals', 'mcatzpTargets', 'mcatzpAddToClient', 'mcatzpRemoveFromClient', 'mcatzpUpdate', 'mcatzpPending', 'mcatzpAnswer', 'copyText', 'apiSource', 'siblingVersions', 'migrateSources', 'migrateInventory', 'migrateRun', 'migrateCancel', 'devcatzGateways', 'databases', 'siblingInstall', 'siblingInstallCancel', 'runInTerminal',
+  'appInfo', 'aboutInfo', 'updateState', 'updateCheck', 'updateNotes', 'updateDownload', 'updateCancel', 'updateSkip', 'updateInstall', 'updateConfigure', 'ratingSend', 'ratingRefresh', 'reportPreview', 'reportSend', 'captureWindow', 'reportError', 'reportSettings', 'reportConfigure', 'uninstallPlan', 'uninstallRun', 'settings', 'setSettings', 'setAiKey', 'aiModels', 'aiProbe', 'aiTest', 'aiCancel', 'aiAsk', 'aiPreviewAsk', 'aiExplainLog', 'aiPreviewLog', 'aiFile', 'aiPreviewFile', 'openUrl', 'browsers', 'reveal', 'openSibling', 'mcatzpActivity', 'mcatzpClearActivity', 'mcatzpRevoke', 'mcatzpSetup', 'mcatzpInstall', 'mcatzpUninstall', 'mcatzpInstallCancel', 'mcatzpApprovals', 'mcatzpTargets', 'mcatzpAddToClient', 'mcatzpRemoveFromClient', 'mcatzpUpdate', 'mcatzpPending', 'mcatzpAnswer', 'copyText', 'apiSource', 'dialcatzMocks', 'siblingVersions', 'migrateSources', 'migrateInventory', 'migrateRun', 'migrateCancel', 'devcatzGateways', 'databases', 'siblingInstall', 'siblingInstallCancel', 'runInTerminal',
   'engineState', 'engineStart', 'engineStop', 'engineRestart', 'engineReset', 'engineConfigure', 'engineCancel', 'engineSetupWsl', 'restartComputer', 'wslMemory', 'wslMemorySet', 'engineLog', 'contextSet', 'cliInstall', 'cliPath', 'diskUsage',
   'containers', 'container', 'containerEnv', 'containerAction', 'containerRemove', 'stats', 'logsFollow', 'logsStop', 'termOpen', 'termInput', 'termResize', 'termClose', 'files', 'fileSave', 'projects', 'composePick', 'composeRun', 'composeProject', 'runCancel', 'activeJobs', 'k8sState', 'k8sStart', 'k8sStop', 'k8sRemove', 'k8sWorkloads', 'k8sDeletePod', 'k8sPodLogs', 'k8sInstallKubectl', 'readText', 'writeText',
   'images', 'imageRemove', 'imagePull', 'volumes', 'volumeRemove', 'volumeWriters', 'volumeExport', 'volumeImportPick', 'volumeImport', 'volumeCancel', 'imageExport', 'imageImportPick', 'imageImport', 'networks', 'networkRemove', 'prunePreview', 'prune',

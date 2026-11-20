@@ -21,6 +21,7 @@ import { migrate, migrateInventory, migrateSources } from './migrate';
 import { exportImages, importImages, readImageArchive } from './imagefile';
 import { exportVolume, importVolume, readArchive, volumeWriters } from './volumefile';
 import { apiSource, serviceSpec } from './apisource';
+import { dialcatzMocks } from './dialcatz';
 import { removeContext, setPath as setCliPath } from './cli';
 import { findCatzoidApp, installCatzoidApp, installedVersion, installSteps, openCatzoidApp, platformId, siteAsset } from './companion';
 import { DockerError } from './docker/client';
@@ -56,6 +57,7 @@ import { appMenuPopup, applyMenu, mainWindow, menuKey, menuShortcuts, onWindowCl
  *                                                        compose file ready to Up / rebuild (never run by the link)
  *   docatz://gateways?kind=<k> / docatz://services?kind=<k>  a DevCatz service in its group
  *   docatz://engine[?action=start]                       the Engine page; `start` starts a stopped engine (for DevCatz)
+ *   docatz://mocks?workspace=<id>&collection=<id>        a DialCatz mock of a project: its API container's page
  */
 
 // The engine, the proxy, the list and bridge.json (#107): in this process, or — "Keep the engine running after
@@ -154,6 +156,14 @@ function handleLink(raw: string): void {
           .then((s) => (s.status === 'stopped' || s.status === 'error' ? engine.start() : undefined))
           .catch((e) => console.warn('engine start from a link:', (e as Error).message));
       return;
+    }
+    // DialCatz's "Open in DoCatz" for one of its mocks: docatz://mocks?workspace=<id>&collection=<id> — the API
+    // container's page, where the mock is listed (src/main/dialcatz.ts).
+    if (u.hostname === 'mocks') {
+      const ws = u.searchParams.get('workspace') ?? '';
+      const col = u.searchParams.get('collection') ?? '';
+      if (!/^[\w-]{1,64}$/.test(ws) || !/^[\w-]{1,64}$/.test(col)) throw new Error('bad mock ids');
+      return openWindow(`mocks/${ws}/${col}`);
     }
     if (u.hostname === 'compose') {
       const path = u.searchParams.get('path') ?? '';
@@ -558,6 +568,7 @@ function api(): DoCatzApi {
       return true;
     },
 
+    dialcatzMocks: async () => dialcatzMocks(domains.naming()),
     apiSource: async (project, service) => {
       const list = containers.filter((c) => c.project === project);
       const dir = list.find((c) => c.workingDir)?.workingDir ?? null;

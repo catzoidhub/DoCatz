@@ -31,6 +31,11 @@ let lastEngine: 'running' | 'stopped' = 'stopped';
 let lastAsleep = false;
 let lastProxy = { httpsPort: 0, httpPort: 0 };
 let mcatzp: BridgeEntry | null = null;
+/** DialCatz's mocks DoCatz serves a name for (src/main/dialcatz.ts): DialCatz shows the url and "Open in DoCatz" from it. */
+let dialcatzMocks: { workspaceId: string; collectionId: string; domain: string; url: string }[] = [];
+export function setBridgeDialcatzMocks(list: typeof dialcatzMocks): void {
+  dialcatzMocks = list;
+}
 
 /**
  * Who writes the file: the engine helper when it runs (#107), else the app. The app's MCatzP entry then goes to the
@@ -102,7 +107,7 @@ export function writeBridge(containers: DcContainer[], engine: 'running' | 'stop
     library: c.framework?.library ?? null,
   }));
   if (!writer) return;
-  const body = JSON.stringify({ engine, asleep, list, proxy, mcatzp, helper });
+  const body = JSON.stringify({ engine, asleep, list, proxy, mcatzp, helper, dialcatzMocks });
   // Nothing new — unless the file changed since this process wrote it (another DoCatz wrote over it): written again.
   if (body === last && lastMtime === mtime(bridgeFile())) return;
   try {
@@ -110,7 +115,7 @@ export function writeBridge(containers: DcContainer[], engine: 'running' | 'stop
     const dir = join(file, '..');
     if (!existsSync(dir)) mkdirSync(dir, { recursive: true, mode: 0o700 });
     else chmodSync(dir, 0o700);
-    const doc = { schema: 1, app: 'DoCatz', version: app.getVersion(), updatedAt: Date.now(), engine, ...(asleep ? { asleep: true } : {}), engineEndpoint: dockerHost(), proxy, ...(helper ? { helper } : {}), containers: list, ...(mcatzp ? { mcatzp } : {}) };
+    const doc = { schema: 1, app: 'DoCatz', version: app.getVersion(), updatedAt: Date.now(), engine, ...(asleep ? { asleep: true } : {}), engineEndpoint: dockerHost(), proxy, ...(helper ? { helper } : {}), containers: list, dialcatzMocks, ...(mcatzp ? { mcatzp } : {}) };
     const tmp = `${file}.${process.pid}.tmp`;
     writeFileSync(tmp, JSON.stringify(doc, null, 2) + '\n', { mode: 0o600 });
     renameSync(tmp, file);

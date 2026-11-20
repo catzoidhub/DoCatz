@@ -1,7 +1,9 @@
+import { watchFile } from 'node:fs';
 import type { DcContainer, DcDomains, EngineState } from '@shared/types';
-import { writeBridge } from './bridge';
+import { setBridgeDialcatzMocks, writeBridge } from './bridge';
 import { updateDatabases } from './dbservices';
 import * as ops from './docker/ops';
+import { dialcatzBridgeFile, dialcatzMocks, mockRoutes } from './dialcatz';
 import { Domains } from './domains';
 import { Engine } from './engine';
 import { learnProject } from './frameworks';
@@ -58,6 +60,8 @@ export class EngineHost {
     };
     this.domains.onChange = () => void this.refresh();
     this.domains.onState = (d) => this.onDomains(d);
+    // A mock started or stopped in DialCatz: its name follows within a few seconds, not at the next 30 s refresh.
+    if (this.serving) watchFile(dialcatzBridgeFile(), { interval: 2000, persistent: false }, (cur, prev) => cur.mtimeMs !== prev.mtimeMs && void this.refresh());
   }
 
   /** The proxy, then the engine's list when it is already up (found running, or started with DoCatz). */
@@ -89,7 +93,12 @@ export class EngineHost {
       // Asleep: nothing below may touch the socket — the routes' and k8s' reads woke Docker again within a second of
       // the idle stop (Linux on-demand, Hyper-V VM, 2026-11-18). Asleep counts as running for the other apps: their
       // first use of the socket wakes it.
+      // DialCatz's mocks of DoCatz projects: their names through the proxy, and back in bridge.json (no Docker involved).
+      const n = this.domains.naming();
+      setBridgeDialcatzMocks(dialcatzMocks(n).map((m) => ({ workspaceId: m.workspaceId, collectionId: m.collectionId, domain: m.domain, url: m.url })));
       if (!up && (await this.engine.backend.sleeping?.().catch(() => false))) {
+        // Nothing runs while it sleeps; DialCatz's mocks still get their names (no container, no socket).
+        await this.domains.setRoutes([], [], mockRoutes()).catch(() => undefined);
         writeBridge([], 'running', { httpsPort: this.domains.httpsPort, httpPort: this.domains.httpPort }, true);
         return this.onList(containers);
       }
@@ -98,7 +107,7 @@ export class EngineHost {
       if (this.engine.backend.watchMounts) this.engine.backend.watchMounts(containers.length ? await ops.bindMounts().catch(() => []) : []);
       const streams = await updateDatabases(containers).catch((e) => (console.warn('databases:', (e as Error).message), []));
       const k8sHosts = await ops.k8sHosts().catch(() => []);
-      await this.domains.setRoutes(containers, streams, k8sHosts).catch((e) => console.warn('routes:', (e as Error).message));
+      await this.domains.setRoutes(containers, streams, [...k8sHosts, ...mockRoutes()]).catch((e) => console.warn('routes:', (e as Error).message));
       writeBridge(containers, containers.length || up ? 'running' : 'stopped', { httpsPort: this.domains.httpsPort, httpPort: this.domains.httpPort });
       this.onList(containers);
       // Last, so nothing of this refresh reaches the socket once the engine is put to sleep.

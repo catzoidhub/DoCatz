@@ -1,7 +1,8 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue';
-import type { DcApiSource, DcContainer, DcContainerDetail, DcStats } from '@shared/types';
-import { API_FRAMEWORKS, FRONT_END_LIBRARIES, WORKER_NAME, api, attempt, bytes, changes, containerTab, databaseOf, dbcatzLink, dialcatzLink, errorText, gatewayKindOf, gatewayLink, gateways, notify, openContainer, statsHistory, type ContainerTab } from '../store';
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
+import { words } from '@shared/platform';
+import type { DcApiSource, DcContainer, DcContainerDetail, DcMock, DcStats } from '@shared/types';
+import { API_FRAMEWORKS, FRONT_END_LIBRARIES, WORKER_NAME, api, attempt, bytes, changes, containerTab, databaseOf, dbcatzLink, dialcatzLink, errorText, gatewayKindOf, gatewayLink, gateways, notify, openContainer, siblingAsk, statsHistory, type ContainerTab } from '../store';
 import ConfirmDialog from '../components/ConfirmDialog.vue';
 import dbcatzLogo from '../assets/logos/dbcatz.png';
 import devcatzLogo from '../assets/logos/devcatz.png';
@@ -89,6 +90,27 @@ const dialcatz = computed(() => {
   return API_FRAMEWORKS.has(v.framework?.framework ?? '') && !FRONT_END_LIBRARIES.has((v.framework?.library ?? '').toLowerCase());
 });
 
+/**
+ * DialCatz's mock server of this API (DialCatz ↔ DoCatz mocks): "Create mock server" asks DialCatz to make one from the
+ * project's routes (dialcatz://mock); once DialCatz lists it, its DoCatz name and "Open" (DialCatz's Mock server panel).
+ * Read from DialCatz's bridge.json every few seconds while the page is open.
+ */
+const mocks = ref<DcMock[]>([]);
+const loadMocks = async () => (mocks.value = await api.dialcatzMocks().catch(() => []));
+let mockTimer: ReturnType<typeof setInterval> | undefined;
+onMounted(() => {
+  void loadMocks();
+  mockTimer = setInterval(() => void loadMocks(), 5000);
+});
+onBeforeUnmount(() => clearInterval(mockTimer));
+const mock = computed(() => mocks.value.find((m) => m.project === c.value.project && m.service === c.value.service) ?? null);
+async function createMock() {
+  const link = `dialcatz://mock?docatz=${encodeURIComponent(c.value.project!)}&service=${encodeURIComponent(c.value.service ?? '')}`;
+  const ok = await attempt(() => api.openSibling('dialcatz', link));
+  if (ok === false) siblingAsk.value = { which: 'dialcatz', link };
+}
+const openMock = (m: DcMock) => void attempt(() => api.openSibling('dialcatz', `dialcatz://open?workspace=${encodeURIComponent(m.workspaceId)}&collection=${encodeURIComponent(m.collectionId)}&mock=1`));
+
 // The domain's name (before .docatz.<tld>): editable, the ending stays as Settings → Domains says.
 const editingName = ref(false);
 const nameInput = ref('');
@@ -158,6 +180,8 @@ const memPct = computed(() => (props.stats && props.stats.memLimit ? (props.stat
       </div>
       <span class="flex-1" />
       <button v-if="dialcatz" class="btn btn-sm shrink-0 gap-2" :title="`Open in DialCatz: an environment with ${c.url} as baseUrl, and the routes from ${apiFrom!.detail} as requests`" @click="dialcatzLink(c.project!, c.service)"><img :src="dialcatzLogo" alt="" class="size-5 drop-shadow-sm" draggable="false" />Open in DialCatz</button>
+      <button v-if="mock" class="btn btn-sm shrink-0 gap-2" :title="`DialCatz's mock of this API at ${mock.url} (${mock.localUrl}) — opens its Mock server panel in DialCatz`" @click="openMock(mock)"><span class="status status-success" />Mock server running · Open</button>
+      <button v-else-if="dialcatz" class="btn btn-ghost btn-sm shrink-0" title="DialCatz makes a mock server from this API's routes, with the project's environment; DoCatz then gives it a name of this project" @click="createMock">Create mock server</button>
       <button v-if="db" class="btn btn-sm shrink-0 gap-2" :title="`Open in DBCatz: ${db.engine} on ${db.host}:${db.port}${db.user ? ` as ${db.user}` : ''}, with the password the container was started with`" @click="dbcatzLink(db.id)"><img :src="dbcatzLogo" alt="" class="size-5 drop-shadow-sm" draggable="false" />Open in DBCatz</button>
     </div>
 
@@ -166,6 +190,22 @@ const memPct = computed(() => (props.stats && props.stats.memLimit ? (props.stat
       <div v-if="containerTab === 'info'" class="h-full overflow-y-auto">
         <div v-if="!detail" class="grid h-40 place-items-center"><span class="loading loading-spinner" /></div>
         <div v-else class="mx-auto max-w-3xl space-y-4 p-5">
+          <div v-if="mock" class="card">
+            <div class="card-body gap-2">
+              <div class="flex items-center gap-2">
+                <img :src="dialcatzLogo" alt="" class="size-5 drop-shadow-sm" draggable="false" />
+                <h2 class="flex-1">Mock server</h2>
+                <button class="btn btn-sm" @click="openMock(mock)">Open in DialCatz</button>
+              </div>
+              <p class="text-sm opacity-70">DialCatz answers this API's routes with examples, so a front end can work while the real service is down or not built yet.</p>
+              <dl class="selectable grid grid-cols-[9rem_1fr] gap-x-4 gap-y-1.5 text-sm">
+                <dt class="opacity-60">Address</dt><dd><a class="link font-mono text-xs" @click="api.openUrl(mock.url)">{{ mock.url }}</a></dd>
+                <dt class="opacity-60">On {{ words.thisComputer }}</dt><dd class="font-mono text-xs">{{ mock.localUrl }}</dd>
+                <template v-if="mock.specFile"><dt class="opacity-60">From</dt><dd class="font-mono text-xs break-all">{{ mock.specFile }}</dd></template>
+                <dt class="opacity-60">Collection</dt><dd>{{ mock.name }}</dd>
+              </dl>
+            </div>
+          </div>
           <div class="card">
             <div class="card-body gap-2">
               <h2>Container</h2>

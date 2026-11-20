@@ -112,6 +112,19 @@ function openRoute(route: string) {
       if (g.project && here(g.project)) openProject.value = g.project;
       else if (g.container && here(g.container)) openContainer.value = g.container;
     });
+  } else if (head === 'mocks') {
+    // DialCatz's "Open in DoCatz" for a mock (docatz://mocks?workspace=&collection=): the API container it mocks.
+    const [ws, col] = rest.map(decodeURIComponent);
+    section.value = 'containers';
+    void api.dialcatzMocks().then((list) => {
+      const m = list.find((x) => x.workspaceId === ws && x.collectionId === col);
+      if (!m) return;
+      const c = containers.value.find((x) => x.project === m.project && x.service === m.service);
+      if (c) {
+        openContainer.value = c.name;
+        containerTab.value = 'info';
+      } else openProject.value = m.project;
+    });
   } else if (head === 'support') {
     // Support Catzoid (Catzoid #94): the heart in the rail → Settings → About, scrolled to its card.
     settingsTab.value = 'about';

@@ -239,6 +239,11 @@ export function readActions(api: DoCatzApi, s: Scopes, more: EngineReads): Actio
         routesForDialCatz: await api.apiSource(name).catch(() => null),
       };
     }),
+    read('list_mock_servers', "DialCatz's mock servers made from the shared projects' APIs: the project and service each one mocks, DialCatz's collection, its DoCatz address (dialcatz-mock[-<service>].<project>.docatz.<tld>) and where DialCatz serves it on this computer. create_mock_server makes one.", OBJECT({ project: { ...PROJECT, description: 'Only this compose project.' } }), async (a) => {
+      if (typeof a.project === 'string') projectShared(a.project);
+      const list = (await api.dialcatzMocks()).filter((m) => s.project(m.project) && (typeof a.project !== 'string' || m.project === a.project));
+      return list.map((m) => ({ project: m.project, service: m.service, name: m.name, url: m.url, domain: m.domain, localUrl: m.localUrl, specFile: m.specFile, workspaceId: m.workspaceId, collectionId: m.collectionId, startedAt: m.startedAt ? new Date(m.startedAt).toISOString() : null }));
+    }),
     read('list_containers', 'The shared containers with their state, image, address and framework. `project` keeps one compose project; `running` only those running.', OBJECT({ project: { ...PROJECT, description: 'Only this compose project.' }, running: { type: 'boolean', description: 'Only running containers.' } }), async (a) => {
       if (typeof a.project === 'string') projectShared(a.project);
       const all = await api.containers();

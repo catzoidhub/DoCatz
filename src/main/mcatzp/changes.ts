@@ -666,6 +666,28 @@ export function changeActions(api: DoCatzApi, scopes: Scopes, reads: EngineReads
       const opened = await api.openSibling('dialcatz', `dialcatz://open?docatz=${encodeURIComponent(p.name)}${typeof a.service === 'string' ? `&service=${encodeURIComponent(a.service)}` : ''}`);
       return ok({ opened });
     }, true),
+    change('create_mock_server', 'Create a mock server of an API', "Asks DialCatz to make a mock server of a project's API service: DialCatz imports the service's routes with the project's environment (or reuses the collection made before), starts the mock and opens its panel; DoCatz then serves it at dialcatz-mock[-<service>].<project>.docatz.<tld> (list_mock_servers shows it once it runs). DialCatz may ask the user before importing. False when DialCatz is not installed; install_catzoid_app installs it.", OBJECT({ project: PROJECT, service: S('The API service (its compose service name).', 63) }, ['project', 'service']), async (a) => {
+      const p = await projectOf(a.project);
+      const service = String(a.service);
+      if (!(await api.containers()).some((c) => c.project === p.name && c.service === service)) throw new Error(`No service ${service} in ${p.name} (get_project lists them)`);
+      if (!(await api.apiSource(p.name, service).catch(() => null))) throw new Error(`DialCatz cannot read ${p.name}'s routes (no route list or OpenAPI file found; get_project's routesForDialCatz says)`);
+      return { title: `Create a mock server of ${p.name} / ${service}?`, facts: [...fact('In', 'DialCatz, from the routes DoCatz found'), ...fact('Address', `dialcatz-mock.${p.name}.docatz…`)], page: null };
+    }, async (a) => {
+      const p = await projectOf(a.project);
+      const opened = await api.openSibling('dialcatz', `dialcatz://mock?docatz=${encodeURIComponent(p.name)}&service=${encodeURIComponent(String(a.service))}`);
+      return ok({ opened, ...(opened ? { note: 'DialCatz makes and starts it; list_mock_servers shows it with its DoCatz address once it runs.' } : {}) });
+    }, true),
+    change('open_mock_server', "Open a mock server's panel in DialCatz", "Opens DialCatz at the Mock server panel of a running mock (list_mock_servers lists them). The mock is not changed.", OBJECT({ project: PROJECT, service: S('The service it mocks.', 63) }, ['project', 'service']), async (a) => {
+      const p = await projectOf(a.project);
+      const m = (await api.dialcatzMocks()).find((x) => x.project === p.name && x.service === String(a.service));
+      if (!m) throw new Error(`No mock server of ${p.name} / ${String(a.service)} (list_mock_servers shows them; create_mock_server makes one)`);
+      return { title: `Open the mock server of ${p.name} / ${m.service} in DialCatz?`, facts: fact('Address', m.url), page: null };
+    }, async (a) => {
+      const p = await projectOf(a.project);
+      const m = (await api.dialcatzMocks()).find((x) => x.project === p.name && x.service === String(a.service));
+      if (!m) throw new Error('That mock server is no longer running');
+      return ok({ opened: await api.openSibling('dialcatz', `dialcatz://open?workspace=${encodeURIComponent(m.workspaceId)}&collection=${encodeURIComponent(m.collectionId)}&mock=1`) });
+    }, true),
     change('open_in_dbcatz', 'Open a database in DBCatz', 'Opens DBCatz at a database container, with the user and password it was started with (they never go through the client). False when DBCatz is not installed; install_catzoid_app installs it.', OBJECT({ container: CONTAINER }, ['container']), async (a) => {
       const c = await containerOf(a.container);
       const d = (await api.databases()).find((x) => x.containerId === c.id);
