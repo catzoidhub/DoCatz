@@ -9,28 +9,43 @@
   <a href="https://catzoid.com/community">Community</a>
 </p>
 
-A fast, light Docker engine and container manager for macOS, Windows and Linux: Docker runs in a small Linux VM on a Mac, in WSL 2 on Windows and as the system's own Docker Engine on Linux; your
-containers are grouped by compose project with their logs, a terminal and their files, and every container gets its
-own domain without publishing a port — `https://web.shop.docatz.localhost`.
+A free Docker engine and desktop for macOS, Windows and Linux: Docker runs in a small Linux VM on a Mac (Apple
+silicon or Intel), in WSL 2 on Windows 10 / 11 and as the system's own Docker Engine on Linux. Your containers are
+grouped by compose project with their logs, a terminal, their files and stats, and every container gets its own
+HTTPS name without publishing a port — `https://web.shop.docatz.localhost`.
 
 Part of [Catzoid](https://catzoid.com) — free, open-source developer tools with nine lives. All cats, no catch: no
 account, no Pro tier, nothing locked behind a payment.
 
 ## What it does
 
-- **The engine** — a Linux VM on Apple's Virtualization framework (through [Lima](https://lima-vm.io)) with fast
-  file sharing for your home folder and Rosetta for Intel images; WSL 2 on Windows; on Linux the system's Docker
-  Engine, installed for you with one password if it is missing. CPUs, memory and disk are yours to
-  set. Everything it downloads is pinned to a known checksum and kept in `~/.docatz`.
+- **The engine** — Standard or Lite. Standard is a Linux VM on Apple's Virtualization framework (through
+  [Lima](https://lima-vm.io)) with fast file sharing and Rosetta for Intel images; WSL 2 on Windows; on Linux the
+  system's Docker Engine, installed for you with one password if it is missing. CPUs, memory and disk are yours to
+  set, per engine. Everything it downloads is pinned to a known checksum.
+- **Lite, beta** — on a Mac, a small VM of our own ([DoCatz Engine](https://github.com/catzoidhub/DoCatz-Engine)):
+  about 430 MB of memory when idle against Standard's 2.8 GB, as measured on our machine; after 15 minutes with
+  nothing running it sleeps and gives the memory back, and the next docker command wakes it in about a second. On
+  Windows, Lite puts the same WSL engine to sleep when idle.
+- **Lighter when you want** — *Use less memory for WSL* on Windows; *Start Docker only when it is used* on Linux;
+  *Keep the engine running after DoCatz quits* (beta), so containers and their names stay up with the window closed.
 - **Your docker keeps working** — DoCatz brings docker, compose and buildx and adds a `docatz` context; nothing
-  switches until you choose *Use DoCatz as the default*, so Docker Desktop or OrbStack can stay side by side.
+  switches until you choose *Use DoCatz as the default*, so another Docker can stay side by side. *Move from another
+  Docker* copies its images and volumes across and leaves the other one as it was.
 - **Containers** — grouped by compose project; start, stop, restart, remove; live logs with search, a terminal
-  inside, a file browser, CPU and memory. Compose files open, edit and run (Up, Down, Pull, Build) with their output.
-- **Images, volumes, networks** — sizes, who uses what, and clean-up that lists exactly what goes first.
-- **Domains** — the default domain, HTTPS certificate and URLs without a port are shared with
-  [DevCatz](https://github.com/catzoidhub/DevCatz), and work with DoCatz alone too.
+  inside, a file browser, CPU and memory. Compose files and a project's own `.env` open and edit in place, and every
+  Up, Down, Pull or Build shows its run in the project's Output tab.
+- **Images, volumes, networks** — sizes, who uses what, export and import, and clean-up that lists exactly what goes
+  first.
+- **Kubernetes, beta** — a local k3s cluster in one click on the same engine, so a docker-built image runs without a
+  registry; a `LoadBalancer` Service opens on `localhost` and at `<name>.<namespace>.k8s.docatz.localhost`.
+- **The family** — database containers open in [DBCatz](https://github.com/catzoidhub/DBCatz); API services, sockets
+  and mock servers open in [DialCatz](https://github.com/catzoidhub/DialCatz); [DevCatz](https://github.com/catzoidhub/DevCatz)
+  services show up next to your projects, and the domain, HTTPS certificate and URLs without a port are shared with it.
 - **AI, optional** — Ask DoCatz in plain words, Explain with AI on a failing container's logs, write or fix a compose
   file. Off until you turn it on; container names and states go out, never environment values or secrets.
+- **MCatzP** — 105 tools for your AI assistant through [MCatzP](https://github.com/catzoidhub/MCatzP), the one MCP
+  server for every Catzoid app; anything that changes something waits for you to confirm in DoCatz.
 
 ## Install
 
@@ -47,9 +62,9 @@ The app is signed and notarized by Apple and updates itself (Settings → About 
 
 Windows 10 / 11 (x64): `DoCatz-Setup-<version>.exe` from the same page or the
 [latest release](https://github.com/catzoidhub/DoCatz/releases/latest). It installs for your account only, no
-administrator rights needed. It is not code-signed yet (see Code signing below).
+administrator rights needed, and offers to install WSL 2 if it is missing. It is not code-signed yet (see Code signing below).
 
-Linux (x64): `DoCatz-<version>-x64.AppImage` or `DoCatz-<version>-amd64.deb` from the same page or the
+Linux (x64 and ARM64): `DoCatz-<version>-<arch>.AppImage` or `DoCatz-<version>-<arch>.deb` from the same page or the
 [latest release](https://github.com/catzoidhub/DoCatz/releases/latest). The AppImage offers to install itself into
 `~/Applications` with a menu entry on its first run; the `.deb` suits Ubuntu and Debian. Neither is signed yet.
 
