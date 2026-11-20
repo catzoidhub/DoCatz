@@ -240,7 +240,18 @@ export class WslBackend implements Backend {
     if (!exists) {
       const i = await wsl(['--import', DISTRO, distroDir(), rootfs, '--version', '2'], { timeout: 300_000, signal: r.signal });
       if (i.code !== 0) throw new Error(`The WSL distro could not be created. ${wslError(i.stderr || i.stdout)}`);
-      const a = await inDistro('apk add --no-cache docker socat iptables ip6tables', { timeout: 600_000, signal: r.signal, onLine: (l) => r.detail(text(l)) });
+    }
+    // Docker inside the distro: on a new one, and on one whose install never finished (cancelled, DoCatz closed, no
+    // network then) — every later Start skipped it and the engine log only said "sh: exec: dockerd: not found" (user,
+    // Windows PC, 2026-11-21). A new distro's network can take a moment: tried a few times.
+    if (!exists || (await inDistro('command -v dockerd >/dev/null && command -v socat >/dev/null', { timeout: 15_000 })).code !== 0) {
+      r.detail('Installing Docker in the distro');
+      let a = await inDistro('apk add --no-cache docker socat iptables ip6tables', { timeout: 600_000, signal: r.signal, onLine: (l) => r.detail(text(l)) });
+      for (let n = 0; n < 2 && a.code !== 0 && !r.signal.aborted; n++) {
+        await new Promise((res) => setTimeout(res, 4000));
+        a = await inDistro('apk add --no-cache docker socat iptables ip6tables', { timeout: 600_000, signal: r.signal, onLine: (l) => r.detail(text(l)) });
+      }
+      if (r.signal.aborted) throw new Error('Cancelled');
       if (a.code !== 0) throw new Error(`Docker could not be installed in the distro: ${wslError(a.stderr || a.stdout)}`);
     }
     r.step(2);
