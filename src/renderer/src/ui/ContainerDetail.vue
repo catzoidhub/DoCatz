@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { words } from '@shared/platform';
-import type { DcApiSource, DcContainer, DcContainerDetail, DcMock, DcStats } from '@shared/types';
+import type { DcApiSource, DcContainer, DcContainerDetail, DcMock, DcSocketLink, DcStats } from '@shared/types';
 import { API_FRAMEWORKS, FRONT_END_LIBRARIES, WORKER_NAME, api, attempt, bytes, changes, containerTab, databaseOf, dbcatzLink, dialcatzLink, errorText, gatewayKindOf, gatewayLink, gateways, notify, openContainer, siblingAsk, statsHistory, type ContainerTab } from '../store';
 import ConfirmDialog from '../components/ConfirmDialog.vue';
 import dbcatzLogo from '../assets/logos/dbcatz.png';
@@ -109,6 +109,17 @@ async function createMock() {
   const ok = await attempt(() => api.openSibling('dialcatz', link));
   if (ok === false) siblingAsk.value = { which: 'dialcatz', link };
 }
+/** A socket service (Soketi, Reverb, Sockudo, Centrifugo, a Socket.IO app): its WebSocket tab in DialCatz (src/main/sockets.ts). */
+const socket = ref<DcSocketLink | null>(null);
+watch(
+  () => [c.value.id, c.value.state],
+  async ([id, state]) => (socket.value = state === 'running' ? await api.socketLink(id as string).catch(() => null) : null),
+  { immediate: true },
+);
+async function openSocket(s: DcSocketLink) {
+  const ok = await attempt(() => api.openSibling('dialcatz', s.link));
+  if (ok === false) siblingAsk.value = { which: 'dialcatz', link: s.link };
+}
 const openMock = (m: DcMock) => void attempt(() => api.openSibling('dialcatz', `dialcatz://open?workspace=${encodeURIComponent(m.workspaceId)}&collection=${encodeURIComponent(m.collectionId)}&mock=1`));
 
 // The domain's name (before .docatz.<tld>): editable, the ending stays as Settings → Domains says.
@@ -180,6 +191,7 @@ const memPct = computed(() => (props.stats && props.stats.memLimit ? (props.stat
       </div>
       <span class="flex-1" />
       <button v-if="dialcatz" class="btn btn-sm shrink-0 gap-2" :title="`Open in DialCatz: an environment with ${c.url} as baseUrl, and the routes from ${apiFrom!.detail} as requests`" @click="dialcatzLink(c.project!, c.service)"><img :src="dialcatzLogo" alt="" class="size-5 drop-shadow-sm" draggable="false" />Open in DialCatz</button>
+      <button v-if="socket" class="btn btn-sm shrink-0 gap-2" :title="`Open in DialCatz: a ${socket.label} tab connected to ${socket.url}${socket.mode === 'pusher' ? ', its secret taken from the project\'s .env in DialCatz' : ''}`" @click="openSocket(socket)"><img :src="dialcatzLogo" alt="" class="size-5 drop-shadow-sm" draggable="false" />{{ dialcatz ? 'Socket in DialCatz' : 'Open in DialCatz' }}</button>
       <button v-if="mock" class="btn btn-sm shrink-0 gap-2" :title="`DialCatz's mock of this API at ${mock.url} (${mock.localUrl}) — opens its Mock server panel in DialCatz`" @click="openMock(mock)"><span class="status status-success" />Mock server running · Open</button>
       <button v-else-if="dialcatz" class="btn btn-ghost btn-sm shrink-0" title="DialCatz makes a mock server from this API's routes, with the project's environment; DoCatz then gives it a name of this project" @click="createMock">Create mock server</button>
       <button v-if="db" class="btn btn-sm shrink-0 gap-2" :title="`Open in DBCatz: ${db.engine} on ${db.host}:${db.port}${db.user ? ` as ${db.user}` : ''}, with the password the container was started with`" @click="dbcatzLink(db.id)"><img :src="dbcatzLogo" alt="" class="size-5 drop-shadow-sm" draggable="false" />Open in DBCatz</button>

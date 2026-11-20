@@ -22,6 +22,7 @@ import { exportImages, importImages, readImageArchive } from './imagefile';
 import { exportVolume, importVolume, readArchive, volumeWriters } from './volumefile';
 import { apiSource, serviceSpec } from './apisource';
 import { dialcatzMocks } from './dialcatz';
+import { socketLinkOf } from './sockets';
 import { removeContext, setPath as setCliPath } from './cli';
 import { findCatzoidApp, installCatzoidApp, installedVersion, installSteps, openCatzoidApp, platformId, siteAsset } from './companion';
 import { DockerError } from './docker/client';
@@ -569,6 +570,11 @@ function api(): DoCatzApi {
     },
 
     dialcatzMocks: async () => dialcatzMocks(domains.naming()),
+    socketLink: async (id) => {
+      const c = (await ops.listContainers(domains.urlFor).catch(() => [] as DcContainer[])).find((x) => x.id === id || x.name === id);
+      if (!c || c.state !== 'running') return null;
+      return socketLinkOf(c, await ops.containerEnv(c.id).catch(() => ({})));
+    },
     apiSource: async (project, service) => {
       const list = containers.filter((c) => c.project === project);
       const dir = list.find((c) => c.workingDir)?.workingDir ?? null;

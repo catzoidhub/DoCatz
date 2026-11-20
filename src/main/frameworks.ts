@@ -309,6 +309,12 @@ export function frameworkOf(project: string | null, service: string | null): DcF
   return { ...f.fw, version };
 }
 
+/** The folder a service is built from (its app in a monorepo), as learnt from the compose files; null when unknown. */
+export function serviceDirOf(project: string | null, service: string | null): string | null {
+  if (!project || !service) return null;
+  return cache.get(project)?.services[service]?.dir ?? null;
+}
+
 /** Learns the frameworks of a project's services from its compose files (once per change of those files). */
 export async function learnProject(project: string, files: string[], onLearned: () => void): Promise<void> {
   if (!files.length || !cliInstalled()) return;

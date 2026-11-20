@@ -53,6 +53,7 @@ export const MCATZP_COVERAGE: Record<keyof DoCatzApi, string> = {
   reveal: 'not a tool: opens the file manager',
   openSibling: 'tool: open_in_dialcatz, open_in_dbcatz, create_mock_server, open_mock_server',
   dialcatzMocks: 'tool: list_mock_servers',
+  socketLink: 'tool: open_socket_in_dialcatz',
   mcatzpActivity: 'not a tool: Settings → MCatzP',
   mcatzpClearActivity: 'never: the record of what clients did',
   mcatzpRevoke: 'never: a client does not manage approvals',

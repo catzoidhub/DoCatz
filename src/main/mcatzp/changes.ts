@@ -666,6 +666,17 @@ export function changeActions(api: DoCatzApi, scopes: Scopes, reads: EngineReads
       const opened = await api.openSibling('dialcatz', `dialcatz://open?docatz=${encodeURIComponent(p.name)}${typeof a.service === 'string' ? `&service=${encodeURIComponent(a.service)}` : ''}`);
       return ok({ opened });
     }, true),
+    change('open_socket_in_dialcatz', 'Open a socket service in DialCatz', "Opens a WebSocket tab in DialCatz connected to a socket service: Soketi, Sockudo or Laravel Reverb (Pusher protocol; the app key from the container, the secret only as a {{VARIABLE}} DialCatz fills from the project's .env), a Socket.IO app, or Centrifugo. Fails for a container that is not one. False when DialCatz is not installed; install_catzoid_app installs it.", OBJECT({ container: CONTAINER }, ['container']), async (a) => {
+      const c = await containerOf(a.container);
+      const s = await api.socketLink(c.id);
+      if (!s) throw new Error(`${c.name} is not a socket service DoCatz knows (Soketi, Sockudo, Reverb, Socket.IO, Centrifugo), or it is not running`);
+      return { title: `Open ${c.name} in DialCatz?`, facts: [...fact('As', s.label), ...fact('URL', s.url)], page: null };
+    }, async (a) => {
+      const c = await containerOf(a.container);
+      const s = await api.socketLink(c.id);
+      if (!s) throw new Error(`${c.name} is no longer a running socket service`);
+      return ok({ opened: await api.openSibling('dialcatz', s.link), mode: s.mode, url: s.url });
+    }, true),
     change('create_mock_server', 'Create a mock server of an API', "Asks DialCatz to make a mock server of a project's API service: DialCatz imports the service's routes with the project's environment (or reuses the collection made before), starts the mock and opens its panel; DoCatz then serves it at dialcatz-mock[-<service>].<project>.docatz.<tld> (list_mock_servers shows it once it runs). DialCatz may ask the user before importing. False when DialCatz is not installed; install_catzoid_app installs it.", OBJECT({ project: PROJECT, service: S('The API service (its compose service name).', 63) }, ['project', 'service']), async (a) => {
       const p = await projectOf(a.project);
       const service = String(a.service);
