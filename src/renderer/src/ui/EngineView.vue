@@ -10,7 +10,6 @@ import TaskSteps from './TaskSteps.vue';
 import WslSetup from './WslSetup.vue';
 import CopyName from './CopyName.vue';
 import MigrateDialog from './MigrateDialog.vue';
-import EngineChoice from './EngineChoice.vue';
 import { engineCards, engineRows } from './engines';
 
 /**
@@ -33,9 +32,7 @@ const isSystem = computed(() => s.value?.backend === 'system');
 /** The engines DoCatz can move from on this platform (#103: said when none is there). */
 const otherNames = computed(() => (isSystem.value ? 'Docker Desktop, Rancher Desktop, Colima or Podman' : s.value?.backend === 'wsl' ? 'Docker Desktop or Rancher Desktop' : 'Docker Desktop, OrbStack, Colima or Rancher Desktop'));
 const busy = ref('');
-/** Not set up yet (#106): the first start asks which engine — Standard or Lite — instead of a plain Set up button. */
-const choosing = computed(() => canLite.value && s.value?.status === 'missing' && !s.value.needs && !s.value.task);
-/** The page in tabs under the state card; remembered (a convenience). */
+/** The page in tabs under the state card. */
 type Tab = 'overview' | 'settings' | 'cli' | 'move';
 const TABS: { id: Tab; label: string }[] = [
   { id: 'overview', label: 'Overview' },
@@ -43,21 +40,21 @@ const TABS: { id: Tab; label: string }[] = [
   { id: 'cli', label: 'Docker CLI' },
   { id: 'move', label: 'Move from another Docker' },
 ];
-const saved = (() => {
-  try {
-    return localStorage.getItem('docatz.engine.tab');
-  } catch {
-    return null;
-  }
-})();
-const tab = ref<Tab>(TABS.some((t) => t.id === saved) ? (saved as Tab) : 'overview');
-watch(tab, (t) => {
-  try {
-    localStorage.setItem('docatz.engine.tab', t);
-  } catch {
-    /* no storage */
-  }
-});
+/**
+ * Which tab opens (user, 2026-11-21): Settings while the engine is not on — Standard or Lite and its resources are chosen
+ * before it starts (or set up) — and Overview once it runs. A sleeping Lite engine counts as on.
+ */
+const on = computed(() => s.value?.status === 'running' || s.value?.status === 'sleeping');
+const tab = ref<Tab>('overview');
+watch(
+  () => (s.value ? on.value : null),
+  (now, was) => {
+    if (now === null) return;
+    if (was === undefined || was === null) tab.value = now ? 'overview' : 'settings';
+    else if (now && !was) tab.value = 'overview';
+  },
+  { immediate: true },
+);
 const wslTask = computed(() => s.value?.task?.title === 'Installing WSL');
 async function run(name: string, fn: () => Promise<unknown>, done?: string) {
   busy.value = name;
@@ -150,15 +147,11 @@ const copy = (t: string) => {
                 <button class="btn btn-sm" :disabled="!!busy" @click="run('restart', () => api.engineRestart())"><span v-if="busy === 'restart'" class="loading loading-spinner loading-xs" />Restart</button>
                 <button class="btn btn-sm" :disabled="!!busy" @click="run('stop', () => api.engineStop())"><span v-if="busy === 'stop'" class="loading loading-spinner loading-xs" />Stop</button>
               </template>
-              <button v-else-if="!choosing && !['unsupported', 'starting', 'stopping'].includes(s.status) && (!s.task || s.task.error)" class="btn btn-primary btn-sm" @click="run('start', () => api.engineStart())">{{ s.status === 'missing' ? (isSystem ? 'Install Docker Engine' : 'Set up and start') : s.task?.error ? 'Try again' : 'Start' }}</button>
+              <button v-else-if="!['unsupported', 'starting', 'stopping'].includes(s.status) && (!s.task || s.task.error)" class="btn btn-primary btn-sm" @click="run('start', () => api.engineStart())">{{ s.status === 'missing' ? (isSystem ? 'Install Docker Engine' : 'Set up and start') : s.task?.error ? 'Try again' : 'Start' }}</button>
               <button v-else-if="s.task && !s.task.error && !wslTask" class="btn btn-ghost btn-sm" @click="api.engineCancel()">Cancel</button>
             </div>
             <!-- WSL's own install shows in the card above -->
             <p v-if="s.needs" class="text-sm opacity-70">The engine starts once WSL is ready (above).</p>
-            <template v-else-if="choosing">
-              <p class="text-sm opacity-70">Choose the engine to set up:</p>
-              <EngineChoice />
-            </template>
             <p v-else-if="s.message && s.status !== 'running'" class="text-sm opacity-70">{{ s.message }}</p>
             <TaskSteps v-if="s.task && !wslTask" :task="s.task" />
             <div v-if="s.task?.error && !wslTask" role="alert" class="alert alert-error alert-soft text-sm">
@@ -200,7 +193,7 @@ const copy = (t: string) => {
                   </div>
                   <span v-if="(c.kind ?? 'standard') === e.kind" class="badge badge-sm badge-primary shrink-0 gap-1">
                     <svg viewBox="0 0 20 20" class="size-3" fill="currentColor"><path fill-rule="evenodd" d="M16.7 5.3a1 1 0 0 1 0 1.4l-7.5 7.5a1 1 0 0 1-1.4 0l-3.5-3.5a1 1 0 1 1 1.4-1.4l2.8 2.8 6.8-6.8a1 1 0 0 1 1.4 0Z" clip-rule="evenodd" /></svg>
-                    In use
+                    {{ s.status === 'missing' ? 'Chosen' : 'In use' }}
                   </span>
                 </div>
                 <dl class="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-xs">
@@ -217,9 +210,9 @@ const copy = (t: string) => {
                     :disabled="!!busy"
                     @click="set({ kind: e.kind })"
                   >
-                    Switch to {{ e.name }}
+                    {{ s.status === 'missing' ? `Use ${e.name}` : `Switch to ${e.name}` }}
                   </button>
-                  <p v-else class="text-center text-xs opacity-55">The engine DoCatz runs now</p>
+                  <p v-else class="text-center text-xs opacity-55">{{ s.status === 'missing' ? 'Set up and start (above) sets this one up' : 'The engine DoCatz runs now' }}</p>
                 </div>
               </div>
             </div>

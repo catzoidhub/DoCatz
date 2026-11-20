@@ -677,6 +677,16 @@ function api(): DoCatzApi {
       if ((patch.kind === 'lite' || patch.kind === 'standard') && patch.kind !== before.kind) {
         const { kind, ...rest } = patch;
         if (Object.keys(rest).length) await engine.configure(rest);
+        // Nothing set up yet (the Settings tab before the first start, user 2026-11-21): only the choice is saved, with no
+        // question — Windows' Lite is the same distro; a Mac restarts once on the other backend.
+        if ((await engine.state()).status === 'missing') {
+          const r = await engine.configure({ kind });
+          if (process.platform === 'win32' && !helper) return r;
+          if (helper) await helper.call('helper.quit', false).catch(() => undefined);
+          relaunchDoCatz();
+          app.exit(0);
+          return r;
+        }
         await switchEngine(kind);
         return engine.state();
       }
