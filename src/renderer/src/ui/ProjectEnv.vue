@@ -2,10 +2,9 @@
 import { keyLabel } from '@shared/platform';
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import type { DcProjectEnv } from '@shared/types';
-import { api, attempt, containers, notify, runs, token } from '../store';
+import { api, attempt, containers, notify, projectRuns, projectTab, runs, startProjectRun, token } from '../store';
 import CodeEditor from '../components/CodeEditor.vue';
 import CatMood from './CatMood.vue';
-import RunPanel from './RunPanel.vue';
 
 /**
  * A compose project's own .env in DoCatz (like a Dokploy app's environment page; laid out like DevCatz's .env tab):
@@ -96,12 +95,14 @@ const problems = computed(() => {
 const varCount = computed(() => (locked.value ? saved.value : content.value).split('\n').filter((l) => /^\s*(?:export\s+)?[A-Za-z_][A-Za-z0-9_.]*\s*=/.test(l)).length);
 
 // Build & Up through DoCatz, which hands the containers this .env (a container keeps the environment it was created with).
-const runToken = ref<string | null>(null);
-const run = computed(() => (runToken.value ? runs.value[runToken.value] : null));
+// The project's latest run (store.projectRuns): its output is in the Output tab.
+const run = computed(() => (projectRuns.value[props.project] ? runs.value[projectRuns.value[props.project]] : null));
 async function recreate() {
   if (dirty.value) await save();
-  runToken.value = token();
-  await attempt(() => api.composeProject(props.project, 'build-up', runToken.value!));
+  const t = token();
+  startProjectRun(props.project, t);
+  projectTab.value = 'output';
+  await attempt(() => api.composeProject(props.project, 'build-up', t));
 }
 /** Running containers whose environment differs from this .env (key names only): asked again after saves and runs. */
 const drift = ref<{ container: string; service: string; keys: string[] }[]>([]);
@@ -173,6 +174,5 @@ const driftKeys = computed(() => [...new Set(drift.value.flatMap((d) => d.keys))
         <span>DoCatz gives these values to every service when it runs {{ project }} (Build &amp; Up, Up, the compose dialog), on top of the project’s own .env. A container keeps the values it was created with: after a change, Build &amp; Up. A run started elsewhere (a terminal, DevCatz) uses the project’s .env only.</span>
       </div>
     </div>
-    <RunPanel v-if="run" :run="run" tall @close="runToken = null" />
   </section>
 </template>

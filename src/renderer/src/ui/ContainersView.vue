@@ -2,13 +2,12 @@
 import { keyLabel } from '@shared/platform';
 import { computed, nextTick, ref, watch } from 'vue';
 import type { DcComposeAction, DcContainer } from '@shared/types';
-import { api, attempt, bytes, composeFile, composeOpen, containers, editProjectPrefs, engineUp, findFocus, findText, gatewayFocus, gatewayKindOf, gatewayLink, gateways, isFavorite, liveStats, moveToGroup, notify, openContainer, openProject, PROJECT_ICON, projectPrefs, projectTab, runs, toggleFavorite, token, type ProjectTab } from '../store';
+import { api, attempt, bytes, composeFile, composeOpen, containers, editProjectPrefs, engineUp, findFocus, findText, gatewayFocus, gatewayKindOf, gatewayLink, gateways, isFavorite, liveStats, moveToGroup, notify, openContainer, openProject, PROJECT_ICON, projectPrefs, projectTab, runs, startProjectRun, toggleFavorite, token, type ProjectTab } from '../store';
 import devcatzLogo from '../assets/logos/devcatz.png';
 import { useListView } from '../listview';
 import PopMenu from '../components/PopMenu.vue';
 import ContainerDetail from './ContainerDetail.vue';
 import EngineGate from './EngineGate.vue';
-import RunPanel from './RunPanel.vue';
 import ProjectDetail from './ProjectDetail.vue';
 import ConfirmDialog from '../components/ConfirmDialog.vue';
 import ServiceMark from './ServiceMark.vue';
@@ -232,7 +231,6 @@ function showProject(project: string, tab: ProjectTab = 'general') {
   openProject.value = project;
   projectTab.value = tab;
 }
-const runToken = ref<string | null>(null);
 const confirmDown = ref<string | null>(null);
 /** The compose run each project's row started (up / stop), so its row shows a spinner until that run is done. */
 const projectRun = ref<Record<string, { token: string; action: DcComposeAction }>>({});
@@ -248,8 +246,10 @@ const cancelProject = (p: string) => {
 async function compose(project: string, action: DcComposeAction) {
   if (projectBusy(project)) return;
   const t = token();
-  runToken.value = t;
   projectRun.value = { ...projectRun.value, [project]: { token: t, action } };
+  // Its output in the project's Output tab (no strip under the list any more; user, 2026-11-20).
+  startProjectRun(project, t);
+  showProject(project, 'output');
   await attempt(() => api.composeProject(project, action, t));
   // Refused before it ran (no run came back): the row is clickable again. A cancelled run ends as done (error: Cancelled).
   if (!runs.value[t]) {
@@ -257,7 +257,6 @@ async function compose(project: string, action: DcComposeAction) {
     projectRun.value = rest;
   }
 }
-const run = computed(() => (runToken.value ? runs.value[runToken.value] : null));
 
 const dot = (c: DcContainer) => (c.state === 'running' ? (c.health === 'unhealthy' ? 'status-error' : c.health === 'starting' ? 'status-warning' : 'status-success') : c.state === 'paused' || c.state === 'restarting' ? 'status-warning' : c.state === 'dead' ? 'status-error' : '');
 /** A built image shows as what it was built from, not its bare id. */
@@ -485,7 +484,6 @@ function openCompose() {
           </template>
         </template>
       </div>
-      <RunPanel v-if="run" :run="run" @close="runToken = null" />
     </aside>
 
     <!-- the open project or container -->

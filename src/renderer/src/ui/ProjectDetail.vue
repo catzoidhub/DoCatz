@@ -2,7 +2,7 @@
 import { computed, ref, watch } from 'vue';
 import type { DcComposeAction, DcComposeProject, DcContainer, DcStats } from '@shared/types';
 import { currentOS } from '@shared/platform';
-import { api, attempt, bytes, changes, composeFile, composeOpen, containerTab, databaseOf, dbcatzLink, gatewayKindOf, gatewayLink, gateways, notify, openContainer, isFavorite, openProject, PROJECT_ICON, projectTab, runs, statsHistory, toggleFavorite, token, type ProjectTab } from '../store';
+import { api, attempt, bytes, changes, composeFile, composeOpen, containerTab, databaseOf, dbcatzLink, gatewayKindOf, gatewayLink, gateways, notify, openContainer, isFavorite, openProject, PROJECT_ICON, projectRuns, projectTab, runs, startProjectRun, closeProjectRun, statsHistory, toggleFavorite, token, type ProjectTab } from '../store';
 import devcatzLogo from '../assets/logos/devcatz.png';
 import dbcatzLogo from '../assets/logos/dbcatz.png';
 import ConfirmDialog from '../components/ConfirmDialog.vue';
@@ -17,7 +17,7 @@ import TimeChart, { type Series } from './TimeChart.vue';
 /**
  * A compose project's page (as a Dokploy compose service): General (folder, compose files, Up / Restart / Stop /
  * Down / Pull / Build with their output), Environment (its own .env in DoCatz), Domains (each service's name, editable
- * before .docatz.<tld>), Containers (each service, opening its own page), Log (the last compose run's output) and Monitoring (CPU and memory, live).
+ * before .docatz.<tld>), Containers (each service, opening its own page), Output (the latest compose run's output) and Monitoring (CPU and memory, live).
  */
 const props = defineProps<{ project: string; containers: DcContainer[]; stats: Record<string, DcStats> }>();
 /** A DevCatz service (devcatz-gw-<kind> or devcatz-svc-<kind>): read-only here, DevCatz runs it. */
@@ -32,7 +32,7 @@ const TABS = computed<{ id: ProjectTab; label: string }[]>(() => [
   ...(gateway.value ? [] : [{ id: 'env' as const, label: 'Environment' }]),
   { id: 'domains', label: 'Domains' },
   { id: 'containers', label: 'Containers' },
-  { id: 'log', label: 'Log' },
+  { id: 'output', label: 'Output' },
   { id: 'monitoring', label: 'Monitoring' },
 ]);
 watch(gateway, (g) => g && projectTab.value === 'env' && (projectTab.value = 'general'), { immediate: true });
@@ -50,7 +50,8 @@ const running = computed(() => props.containers.filter((c) => c.state === 'runni
 const allUp = computed(() => props.containers.length > 0 && running.value === props.containers.length);
 
 // ---- General: compose actions
-const runToken = ref<string | null>(null);
+// The project's latest compose run, wherever it started (store.projectRuns): shown in the Output tab.
+const runToken = computed(() => projectRuns.value[props.project] ?? null);
 const run = computed(() => (runToken.value ? runs.value[runToken.value] : null));
 /** The action now running: its own button turns into a spinner, every action button is off until it is done. */
 const doing = ref<DcComposeAction | null>(null);
@@ -60,10 +61,11 @@ const confirmDown = ref(false);
 async function compose(action: DcComposeAction) {
   if (busy.value) return;
   doing.value = action;
-  runToken.value = token();
-  // Its output in the Log tab (it used to be a strip under the page; user, 2026-11-20).
-  projectTab.value = 'log';
-  await attempt(() => api.composeProject(props.project, action, runToken.value!));
+  const t = token();
+  startProjectRun(props.project, t);
+  // Its output in the Output tab (it used to be a strip under the page; user, 2026-11-20).
+  projectTab.value = 'output';
+  await attempt(() => api.composeProject(props.project, action, t));
   // Refused before it ran (no run came back): the buttons are on again.
   if (!run.value) doing.value = null;
 }
@@ -72,9 +74,9 @@ watch(() => run.value?.done, (done) => done && (doing.value = null));
 watch(
   () => Object.keys(runs.value).filter((t) => t.startsWith(`mcatzp:${props.project}:`)).at(-1),
   (t) => {
-    if (t && !doing.value) {
-      runToken.value = t;
-      projectTab.value = 'log';
+    if (t && !doing.value && projectRuns.value[props.project] !== t) {
+      startProjectRun(props.project, t);
+      projectTab.value = 'output';
     }
   },
   { immediate: true },
@@ -175,7 +177,7 @@ const rateText = (v: number) => `${bytes(v)}/s`;
     </header>
     <div class="flex shrink-0 items-center gap-2 border-b border-base-300/60 px-4 py-1.5">
       <div role="tablist" class="seg min-w-0 overflow-x-auto [scrollbar-width:none]">
-        <a v-for="t in TABS" :key="t.id" role="tab" class="seg-item" :class="{ 'is-active': projectTab === t.id }" @click="projectTab = t.id">{{ t.label }}<span v-if="t.id === 'log' && run && !run.done" class="loading loading-spinner loading-xs ml-1.5 align-middle" /></a>
+        <a v-for="t in TABS" :key="t.id" role="tab" class="seg-item" :class="{ 'is-active': projectTab === t.id }" @click="projectTab = t.id">{{ t.label }}<span v-if="t.id === 'output' && run && !run.done" class="loading loading-spinner loading-xs ml-1.5 align-middle" /></a>
       </div>
     </div>
 
@@ -336,9 +338,9 @@ const rateText = (v: number) => `${bytes(v)}/s`;
         </div>
       </div>
 
-      <!-- Log: the last compose run started here (or by an MCatzP client) -->
-      <div v-else-if="projectTab === 'log'" class="h-full">
-        <RunPanel v-if="run" :run="run" fill @close="runToken = null" />
+      <!-- Output: the project's latest compose run, wherever it started -->
+      <div v-else-if="projectTab === 'output'" class="h-full">
+        <RunPanel v-if="run" :run="run" fill @close="closeProjectRun(project)" />
         <div v-else class="grid h-full place-items-center p-8 text-center text-sm opacity-60">Up, Build &amp; Up, Restart, Stop and Down show their output here.</div>
       </div>
 

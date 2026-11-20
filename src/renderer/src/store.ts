@@ -41,7 +41,7 @@ export type ContainerTab = 'info' | 'logs' | 'terminal' | 'files' | 'stats';
 export const containerTab = ref<ContainerTab>('info');
 /** The open compose project's page (as a Dokploy compose service), and its tab. */
 export const openProject = ref<string | null>(null);
-export type ProjectTab = 'general' | 'env' | 'domains' | 'containers' | 'log' | 'monitoring';
+export type ProjectTab = 'general' | 'env' | 'domains' | 'containers' | 'output' | 'monitoring';
 export const projectTab = ref<ProjectTab>('general');
 /** A compose project's icon: a stack of layers (services together), not a folder. */
 export const PROJECT_ICON = 'M3.196 12.87l-.825.483a.75.75 0 0 0 0 1.294l7.25 4.25a.75.75 0 0 0 .758 0l7.25-4.25a.75.75 0 0 0 0-1.294l-.825-.484-5.666 3.322a2.25 2.25 0 0 1-2.276 0L3.196 12.87ZM3.196 8.87l-.825.483a.75.75 0 0 0 0 1.294l7.25 4.25a.75.75 0 0 0 .758 0l7.25-4.25a.75.75 0 0 0 0-1.294l-.825-.484-5.666 3.322a2.25 2.25 0 0 1-2.276 0L3.196 8.87ZM10.38 1.103a.75.75 0 0 0-.76 0l-7.25 4.25a.75.75 0 0 0 0 1.294l7.25 4.25a.75.75 0 0 0 .76 0l7.25-4.25a.75.75 0 0 0 0-1.294l-7.25-4.25Z';
@@ -87,6 +87,18 @@ export const containers = ref<DcContainer[]>([]);
 export const changes = ref(0);
 /** Compose runs and pulls, by token (the newest shows in the run panel). */
 export const runs = ref<Record<string, DcRun>>({});
+/**
+ * Each compose project's latest run (its token in `runs`), from wherever it started — the project page, the list's
+ * play / stop, Environment's Build & Up, an MCatzP client: the project page's Output tab shows it (user, 2026-11-20).
+ */
+export const projectRuns = ref<Record<string, string>>({});
+export function startProjectRun(project: string, token: string): void {
+  projectRuns.value = { ...projectRuns.value, [project]: token };
+}
+export function closeProjectRun(project: string): void {
+  const { [project]: _, ...rest } = projectRuns.value;
+  projectRuns.value = rest;
+}
 
 /** Windows: DevCatz Services — its Docker gateways and its servers with no Windows build (main/gateways.ts), reloaded with the list; [] elsewhere. */
 export const gateways = ref<DcGateway[]>([]);
