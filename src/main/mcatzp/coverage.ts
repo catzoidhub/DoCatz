@@ -83,6 +83,7 @@ export const MCATZP_COVERAGE: Record<keyof DoCatzApi, string> = {
 
   engineState: 'tool: get_engine',
   engineStart: 'tool: start_engine',
+  engineSetUp: 'not a tool: which engine to set up first (Standard or Lite) is the user’s choice, in the window',
   engineStop: 'tool: stop_engine',
   engineRestart: 'tool: restart_engine',
   engineReset: 'tool: reset_engine',

@@ -206,9 +206,9 @@ app.on('window-all-closed', () => undefined);
  * Restarts DoCatz (the helper switched, Standard ⇄ Lite). An AppImage runs from a /tmp mount that goes with this process:
  * relaunching that path brought nothing back (Linux VM, 2026-11-18) — the AppImage file itself is started instead.
  */
-function relaunchDoCatz(): void {
+function relaunchDoCatz(extra: string[] = []): void {
   if (process.env.APPIMAGE) relaunchAppImage(process.env.APPIMAGE);
-  else app.relaunch();
+  else app.relaunch(extra.length ? { args: [...process.argv.slice(1).filter((a) => !extra.includes(a)), ...extra] } : undefined);
 }
 
 /** DoCatz is quitting or installing an update: the helper is not started again when its channel closes. */
@@ -648,6 +648,23 @@ function api(): DoCatzApi {
 
     engineState: () => engine.state(),
     engineStart: () => engine.start(),
+    // First set-up (#106, user 2026-11-21: a new user never learnt Lite existed and set up Standard): the engine chosen
+    // in the welcome / Engine page. Windows' Lite is the same distro, only a saved choice — it starts at once; on a Mac
+    // the backend is picked when DoCatz starts, so DoCatz restarts once and sets the chosen engine up then.
+    // The Mac's CPUs, memory and disk chosen with it (user, 2026-11-21) go to that engine — after the restart when the
+    // backend changes, so the sizes land on the chosen engine, never on the other.
+    engineSetUp: async (kind, sizes) => {
+      const res = process.platform === 'darwin' && sizes ? { cpus: sizes.cpus, memoryGiB: sizes.memoryGiB, diskGiB: sizes.diskGiB } : null;
+      if (kind === engineConfig().kind) {
+        if (res) await engine.configure(res);
+        return engine.start();
+      }
+      await engine.configure({ kind });
+      if (process.platform === 'win32' && !helper) return engine.start();
+      if (helper) await helper.call('helper.quit', false).catch(() => undefined);
+      relaunchDoCatz(['--docatz-set-up', ...(res ? [`--docatz-set-up-sizes=${res.cpus},${res.memoryGiB},${res.diskGiB}`] : [])]);
+      app.exit(0);
+    },
     engineStop: () => engine.stop(),
     engineRestart: () => engine.restart(),
     engineReset: async (confirm) => {
@@ -983,7 +1000,11 @@ app.whenReady().then(async () => {
       n.on('click', () => openWindow('engine'));
       n.show();
     }
-    if (s.status === 'stopped' && s.config.autoStart) void engine.start().catch((e) => console.warn('engine autostart:', (e as Error).message));
+    // Restarted by the first set-up on the engine chosen (engineSetUp): its sizes are saved and it is set up now.
+    const setUp = s.status === 'missing' && process.argv.includes('--docatz-set-up');
+    const sizes = process.argv.find((a) => a.startsWith('--docatz-set-up-sizes='))?.split('=')[1]?.split(',').map(Number);
+    if (setUp && sizes?.length === 3 && sizes.every((n) => Number.isFinite(n) && n > 0)) await engine.configure({ cpus: sizes[0], memoryGiB: sizes[1], diskGiB: sizes[2] }).catch((e) => console.warn('engine sizes:', (e as Error).message));
+    if ((s.status === 'stopped' && s.config.autoStart) || setUp) void engine.start().catch((e) => console.warn('engine autostart:', (e as Error).message));
     else tray.update(s, []);
   }
   // A light poll while nothing else tells us (the VM stopped from outside, stats of the tray), with the :443 probe that

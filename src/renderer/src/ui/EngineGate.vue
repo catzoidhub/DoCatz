@@ -3,6 +3,7 @@ import { computed } from 'vue';
 import { api, attempt, engine, section } from '../store';
 import CatMood from './CatMood.vue';
 import TaskSteps from './TaskSteps.vue';
+import EngineChoice from './EngineChoice.vue';
 
 /**
  * What a section shows while the engine is not running: why, and the one button that fixes it — or the steps of a
@@ -30,15 +31,17 @@ const title = computed(() => {
   }
 });
 const start = () => attempt(() => api.engineStart());
+/** Not set up yet where Lite exists (#106): which engine is chosen here, not behind a plain Set up button. */
+const choosing = computed(() => !!s.value && ['wsl', 'lima', 'lite'].includes(s.value.backend) && s.value.status === 'missing' && !s.value.needs && !s.value.task);
 </script>
 
 <template>
   <div class="grid h-full place-items-center p-8">
-    <div class="w-full max-w-lg space-y-4 text-center">
+    <div class="w-full space-y-4 text-center" :class="choosing ? 'max-w-2xl' : 'max-w-lg'">
       <CatMood :mood="s?.status === 'error' || s?.task?.error ? 'error' : s?.status === 'unsupported' ? 'warning' : 'info'" class="mx-auto size-16" />
       <div class="space-y-1">
         <h2 class="text-lg font-semibold tracking-tight">{{ title }}</h2>
-        <p v-if="s?.task?.error || !s?.task" class="text-sm opacity-65">{{ s?.task?.error || s?.message || 'Start it to see your containers, images, volumes and networks.' }}</p>
+        <p v-if="s?.task?.error || !s?.task" class="text-sm opacity-65">{{ s?.task?.error || s?.message || (choosing ? 'Choose the engine to set up — you can switch later in Engine → Settings.' : 'Start it to see your containers, images, volumes and networks.') }}</p>
       </div>
       <TaskSteps v-if="s?.task && !s.task.error" :task="s.task" class="text-left" />
       <div v-if="s?.task && !s.task.error" class="flex justify-center"><button class="btn btn-ghost btn-sm" @click="api.engineCancel()">Cancel</button></div>
@@ -46,6 +49,7 @@ const start = () => attempt(() => api.engineStart());
         <button v-if="s.needs === 'install-wsl'" class="btn btn-primary btn-sm" @click="attempt(() => api.engineSetupWsl())">{{ s.task?.error ? 'Try again' : 'Install WSL' }}</button>
         <button v-else class="btn btn-primary btn-sm" @click="attempt(() => api.restartComputer())">Restart Windows</button>
       </div>
+      <EngineChoice v-else-if="choosing" class="text-left" />
       <div v-else-if="s && !['unsupported', 'starting', 'stopping'].includes(s.status)" class="flex justify-center gap-2">
         <button class="btn btn-primary btn-sm" @click="start">{{ noDocker ? (s.task?.error ? 'Try again' : 'Install Docker Engine') : s.status === 'missing' ? 'Set up and start' : s.task?.error ? 'Try again' : 'Start engine' }}</button>
         <button class="btn btn-ghost btn-sm" @click="section = 'engine'">Engine settings</button>

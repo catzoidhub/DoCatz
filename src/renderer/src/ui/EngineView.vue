@@ -10,6 +10,8 @@ import TaskSteps from './TaskSteps.vue';
 import WslSetup from './WslSetup.vue';
 import CopyName from './CopyName.vue';
 import MigrateDialog from './MigrateDialog.vue';
+import EngineChoice from './EngineChoice.vue';
+import { engineCards, engineRows } from './engines';
 
 /**
  * Engine (DoCatz TODO #5 / #6 / #7): the VM's state and Start / Stop / Restart, its CPUs, memory, disk and Rosetta,
@@ -20,38 +22,10 @@ const c = computed(() => s.value?.config);
 const isMac = computed(() => s.value?.backend === 'lima' || s.value?.backend === 'lite');
 /** On a Mac the two engines are two VMs: Reset takes only the one in use (on Windows Lite is the same distro). */
 const resetWhat = computed(() => (isMac.value ? (s.value?.backend === 'lite' ? { name: 'Lite', other: 'Standard' } : { name: 'Standard', other: 'Lite' }) : null));
-/** Standard and Lite side by side (TODO #106): what each is, and DoCatz's own measured numbers. */
-/** The two engines' cards: what each is in a line. */
 const isWsl = computed(() => s.value?.backend === 'wsl');
-const ENGINES = computed<{ kind: 'standard' | 'lite'; name: string; about: string }[]>(() =>
-  isWsl.value
-    ? [
-        { kind: 'standard', name: 'Standard', about: 'The WSL 2 engine runs while DoCatz runs.' },
-        { kind: 'lite', name: 'Lite', about: 'The same engine and disk, put to sleep when nothing runs so WSL gives its memory back to Windows.' },
-      ]
-    : [
-        { kind: 'standard', name: 'Standard', about: 'A full Ubuntu VM managed by Lima — the most compatible.' },
-        { kind: 'lite', name: 'Lite', about: 'DoCatz’s own small Linux VM — lighter and faster to wake. Some Docker features may not work yet.' },
-      ],
-);
-// Windows numbers: DoCatz's own on a Ryzen 5 3600 PC, WSL 2 with the default settings (Windows PC, 2026-11-18).
-const ENGINE_ROWS = computed<[string, string, string][]>(() =>
-  isWsl.value
-    ? [
-        ['Memory of WSL’s VM', 'about 1 GB while it runs', 'none while asleep'],
-        ['Nothing running for 15 min', 'Keeps running', 'Sleeps'],
-        ['First docker command after that', 'answers at once', 'wakes in about 5 s'],
-        ['Containers, images, volumes', 'Same disk', 'Same disk'],
-        ['Compatibility', 'Full', 'Full'],
-      ]
-    : [
-        ['First download', 'about 950 MB', 'about 90 MB'],
-        ['Memory when idle', 'about 2.8 GB', 'about 430 MB'],
-        ['Start until Docker answers', 'about 27 s', 'about 1 s'],
-        ['Nothing running for 15 min', 'Keeps running', 'Sleeps, wakes in about 1 s'],
-        ['Compatibility', 'Full', 'Most images and compose projects'],
-      ],
-);
+/** Standard and Lite side by side (TODO #106): what each is, and DoCatz's own measured numbers (engines.ts). */
+const ENGINES = computed(() => engineCards(isWsl.value));
+const ENGINE_ROWS = computed(() => engineRows(isWsl.value));
 /** Standard ⇄ Lite (TODO #106, beta): macOS, and on Windows the sleeping WSL engine. */
 const canLite = computed(() => isMac.value || isWsl.value);
 /** Linux (#101): the system's Docker Engine, no VM — no limits to set and no Reset. */
@@ -59,6 +33,8 @@ const isSystem = computed(() => s.value?.backend === 'system');
 /** The engines DoCatz can move from on this platform (#103: said when none is there). */
 const otherNames = computed(() => (isSystem.value ? 'Docker Desktop, Rancher Desktop, Colima or Podman' : s.value?.backend === 'wsl' ? 'Docker Desktop or Rancher Desktop' : 'Docker Desktop, OrbStack, Colima or Rancher Desktop'));
 const busy = ref('');
+/** Not set up yet (#106): the first start asks which engine — Standard or Lite — instead of a plain Set up button. */
+const choosing = computed(() => canLite.value && s.value?.status === 'missing' && !s.value.needs && !s.value.task);
 /** The page in tabs under the state card; remembered (a convenience). */
 type Tab = 'overview' | 'settings' | 'cli' | 'move';
 const TABS: { id: Tab; label: string }[] = [
@@ -174,11 +150,15 @@ const copy = (t: string) => {
                 <button class="btn btn-sm" :disabled="!!busy" @click="run('restart', () => api.engineRestart())"><span v-if="busy === 'restart'" class="loading loading-spinner loading-xs" />Restart</button>
                 <button class="btn btn-sm" :disabled="!!busy" @click="run('stop', () => api.engineStop())"><span v-if="busy === 'stop'" class="loading loading-spinner loading-xs" />Stop</button>
               </template>
-              <button v-else-if="!['unsupported', 'starting', 'stopping'].includes(s.status) && (!s.task || s.task.error)" class="btn btn-primary btn-sm" @click="run('start', () => api.engineStart())">{{ s.status === 'missing' ? (isSystem ? 'Install Docker Engine' : 'Set up and start') : s.task?.error ? 'Try again' : 'Start' }}</button>
+              <button v-else-if="!choosing && !['unsupported', 'starting', 'stopping'].includes(s.status) && (!s.task || s.task.error)" class="btn btn-primary btn-sm" @click="run('start', () => api.engineStart())">{{ s.status === 'missing' ? (isSystem ? 'Install Docker Engine' : 'Set up and start') : s.task?.error ? 'Try again' : 'Start' }}</button>
               <button v-else-if="s.task && !s.task.error && !wslTask" class="btn btn-ghost btn-sm" @click="api.engineCancel()">Cancel</button>
             </div>
             <!-- WSL's own install shows in the card above -->
             <p v-if="s.needs" class="text-sm opacity-70">The engine starts once WSL is ready (above).</p>
+            <template v-else-if="choosing">
+              <p class="text-sm opacity-70">Choose the engine to set up:</p>
+              <EngineChoice />
+            </template>
             <p v-else-if="s.message && s.status !== 'running'" class="text-sm opacity-70">{{ s.message }}</p>
             <TaskSteps v-if="s.task && !wslTask" :task="s.task" />
             <div v-if="s.task?.error && !wslTask" role="alert" class="alert alert-error alert-soft text-sm">

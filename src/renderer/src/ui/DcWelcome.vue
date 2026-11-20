@@ -4,6 +4,7 @@ import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { api, attempt, engine, section } from '../store';
 import CatMood from './CatMood.vue';
 import WslSetup from './WslSetup.vue';
+import EngineChoice from './EngineChoice.vue';
 
 /**
  * First-run welcome (the Catzoid family's Get started, as DevCatz's WelcomeDialog): what DoCatz does and three first
@@ -44,6 +45,13 @@ function done() {
   } catch {
     /* fine: it shows once more next time */
   }
+}
+/** Standard or Lite to choose (#106): Windows' WSL engine and a Mac. */
+const canLite = computed(() => ['wsl', 'lima', 'lite'].includes(engine.value?.backend ?? ''));
+/** The chosen engine is being set up (EngineChoice starts it): on to the Engine page to follow the steps. */
+function chosen() {
+  done();
+  section.value = 'engine';
 }
 function setUp() {
   done();
@@ -114,7 +122,15 @@ const privacy = () => site.value && api.openUrl(`${site.value}/docs/privacy-and-
             <WslSetup class="mt-3" />
           </div>
 
-          <div class="rounded-xl border border-base-300/70 bg-base-200/40 p-4" :class="needs && 'opacity-60'">
+          <!-- Where Lite exists (#106, user 2026-11-21): the engine is chosen here, so a new user sees both -->
+          <div v-if="canLite" class="rounded-xl border border-base-300/70 bg-base-200/40 p-4" :class="needs && 'opacity-60'">
+            <p class="font-medium">1 · Choose your engine</p>
+            <p class="mb-3 mt-1 text-sm opacity-70">
+              {{ isWsl ? 'Docker runs in a small Linux distro in WSL 2. Standard keeps it running; Lite puts it to sleep when nothing runs, so Windows gets the memory back.' : 'Docker runs in a small Linux VM. Standard is a full Ubuntu VM, the most compatible; Lite is DoCatz’s own, much smaller and quicker to start.' }}
+            </p>
+            <EngineChoice compact :disabled="!!needs" @started="chosen" />
+          </div>
+          <div v-else class="rounded-xl border border-base-300/70 bg-base-200/40 p-4" :class="needs && 'opacity-60'">
             <div class="flex items-start justify-between gap-4">
               <div class="min-w-0">
                 <p class="font-medium">1 · Set up the engine</p>
@@ -161,7 +177,7 @@ const privacy = () => site.value && api.openUrl(`${site.value}/docs/privacy-and-
           <button class="btn btn-ghost btn-sm" @click="done">Maybe later</button>
           <button v-if="needs === 'install-wsl'" class="btn btn-primary btn-sm" :disabled="!!wslTask && !wslTask.error" @click="installWsl">Install WSL</button>
           <button v-else-if="needs === 'restart'" class="btn btn-primary btn-sm" @click="restartWindows">Restart now</button>
-          <button v-else class="btn btn-primary btn-sm" @click="setUp">Get started</button>
+          <button v-else-if="!canLite" class="btn btn-primary btn-sm" @click="setUp">Get started</button>
         </div>
       </div>
       <div class="modal-backdrop" @click="done" />

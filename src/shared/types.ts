@@ -1017,6 +1017,9 @@ export interface DoCatzApi {
   engineState(): Promise<EngineState>;
   /** Downloads what is missing and creates the VM (first run), then starts it; progress in EngineState.task. */
   engineStart(): Promise<void>;
+  /** First set-up (#106): the engine chosen (Standard or Lite) — on a Mac with its CPUs, memory and disk — is saved,
+   * then set up and started. */
+  engineSetUp(kind: 'standard' | 'lite', sizes?: Pick<EngineConfig, 'cpus' | 'memoryGiB' | 'diskGiB'>): Promise<void>;
   engineStop(): Promise<void>;
   engineRestart(): Promise<void>;
   /** Deletes the VM and its disk (every container, image and volume); `confirm` must be "reset". */
@@ -1142,7 +1145,7 @@ export interface DoCatzApi {
 /** Every method of the bridge, registered as `docatz:<name>` IPC handlers. */
 export const API_METHODS: (keyof DoCatzApi)[] = [
   'appInfo', 'aboutInfo', 'updateState', 'updateCheck', 'updateNotes', 'updateDownload', 'updateCancel', 'updateSkip', 'updateInstall', 'updateConfigure', 'ratingSend', 'ratingRefresh', 'reportPreview', 'reportSend', 'captureWindow', 'reportError', 'reportSettings', 'reportConfigure', 'uninstallPlan', 'uninstallRun', 'settings', 'setSettings', 'setAiKey', 'aiModels', 'aiProbe', 'aiTest', 'aiCancel', 'aiAsk', 'aiPreviewAsk', 'aiExplainLog', 'aiPreviewLog', 'aiFile', 'aiPreviewFile', 'openUrl', 'browsers', 'reveal', 'openSibling', 'mcatzpActivity', 'mcatzpClearActivity', 'mcatzpRevoke', 'mcatzpSetup', 'mcatzpInstall', 'mcatzpUninstall', 'mcatzpInstallCancel', 'mcatzpApprovals', 'mcatzpTargets', 'mcatzpAddToClient', 'mcatzpRemoveFromClient', 'mcatzpUpdate', 'mcatzpPending', 'mcatzpAnswer', 'copyText', 'apiSource', 'dialcatzMocks', 'socketLink', 'siblingVersions', 'migrateSources', 'migrateInventory', 'migrateRun', 'migrateCancel', 'devcatzGateways', 'databases', 'siblingInstall', 'siblingInstallCancel', 'runInTerminal',
-  'engineState', 'engineStart', 'engineStop', 'engineRestart', 'engineReset', 'engineConfigure', 'engineCancel', 'engineSetupWsl', 'restartComputer', 'wslMemory', 'wslMemorySet', 'engineLog', 'contextSet', 'cliInstall', 'cliPath', 'diskUsage',
+  'engineState', 'engineStart', 'engineSetUp', 'engineStop', 'engineRestart', 'engineReset', 'engineConfigure', 'engineCancel', 'engineSetupWsl', 'restartComputer', 'wslMemory', 'wslMemorySet', 'engineLog', 'contextSet', 'cliInstall', 'cliPath', 'diskUsage',
   'containers', 'container', 'containerEnv', 'containerAction', 'containerRemove', 'stats', 'logsFollow', 'logsStop', 'termOpen', 'termInput', 'termResize', 'termClose', 'files', 'fileSave', 'projects', 'composePick', 'composeRun', 'composeProject', 'runCancel', 'activeJobs', 'k8sState', 'k8sStart', 'k8sStop', 'k8sRemove', 'k8sWorkloads', 'k8sDeletePod', 'k8sPodLogs', 'k8sInstallKubectl', 'readText', 'writeText',
   'images', 'imageRemove', 'imagePull', 'volumes', 'volumeRemove', 'volumeWriters', 'volumeExport', 'volumeImportPick', 'volumeImport', 'volumeCancel', 'imageExport', 'imageImportPick', 'imageImport', 'networks', 'networkRemove', 'prunePreview', 'prune',
   'projectPrefs', 'setProjectPrefs',
