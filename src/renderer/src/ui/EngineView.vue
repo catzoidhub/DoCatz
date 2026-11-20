@@ -55,6 +55,13 @@ watch(
   },
   { immediate: true },
 );
+/** Stopped (user, 2026-11-21) → back to Settings; only once it is down, so a restart (stopping → starting) stays put. */
+watch(
+  () => s.value?.status,
+  (now, was) => {
+    if (now === 'stopped' && was && was !== 'stopped' && busy.value !== 'restart') tab.value = 'settings';
+  },
+);
 const wslTask = computed(() => s.value?.task?.title === 'Installing WSL');
 async function run(name: string, fn: () => Promise<unknown>, done?: string) {
   busy.value = name;
