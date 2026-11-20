@@ -17,7 +17,7 @@ import TimeChart, { type Series } from './TimeChart.vue';
 /**
  * A compose project's page (as a Dokploy compose service): General (folder, compose files, Up / Restart / Stop /
  * Down / Pull / Build with their output), Environment (its own .env in DoCatz), Domains (each service's name, editable
- * before .docatz.<tld>), Containers (each service, opening its own page) and Monitoring (CPU and memory, live).
+ * before .docatz.<tld>), Containers (each service, opening its own page), Log (the last compose run's output) and Monitoring (CPU and memory, live).
  */
 const props = defineProps<{ project: string; containers: DcContainer[]; stats: Record<string, DcStats> }>();
 /** A DevCatz service (devcatz-gw-<kind> or devcatz-svc-<kind>): read-only here, DevCatz runs it. */
@@ -32,6 +32,7 @@ const TABS = computed<{ id: ProjectTab; label: string }[]>(() => [
   ...(gateway.value ? [] : [{ id: 'env' as const, label: 'Environment' }]),
   { id: 'domains', label: 'Domains' },
   { id: 'containers', label: 'Containers' },
+  { id: 'log', label: 'Log' },
   { id: 'monitoring', label: 'Monitoring' },
 ]);
 watch(gateway, (g) => g && projectTab.value === 'env' && (projectTab.value = 'general'), { immediate: true });
@@ -60,6 +61,8 @@ async function compose(action: DcComposeAction) {
   if (busy.value) return;
   doing.value = action;
   runToken.value = token();
+  // Its output in the Log tab (it used to be a strip under the page; user, 2026-11-20).
+  projectTab.value = 'log';
   await attempt(() => api.composeProject(props.project, action, runToken.value!));
   // Refused before it ran (no run came back): the buttons are on again.
   if (!run.value) doing.value = null;
@@ -69,7 +72,10 @@ watch(() => run.value?.done, (done) => done && (doing.value = null));
 watch(
   () => Object.keys(runs.value).filter((t) => t.startsWith(`mcatzp:${props.project}:`)).at(-1),
   (t) => {
-    if (t && !doing.value) runToken.value = t;
+    if (t && !doing.value) {
+      runToken.value = t;
+      projectTab.value = 'log';
+    }
   },
   { immediate: true },
 );
@@ -169,7 +175,7 @@ const rateText = (v: number) => `${bytes(v)}/s`;
     </header>
     <div class="flex shrink-0 items-center gap-2 border-b border-base-300/60 px-4 py-1.5">
       <div role="tablist" class="seg min-w-0 overflow-x-auto [scrollbar-width:none]">
-        <a v-for="t in TABS" :key="t.id" role="tab" class="seg-item" :class="{ 'is-active': projectTab === t.id }" @click="projectTab = t.id">{{ t.label }}</a>
+        <a v-for="t in TABS" :key="t.id" role="tab" class="seg-item" :class="{ 'is-active': projectTab === t.id }" @click="projectTab = t.id">{{ t.label }}<span v-if="t.id === 'log' && run && !run.done" class="loading loading-spinner loading-xs ml-1.5 align-middle" /></a>
       </div>
     </div>
 
@@ -330,6 +336,12 @@ const rateText = (v: number) => `${bytes(v)}/s`;
         </div>
       </div>
 
+      <!-- Log: the last compose run started here (or by an MCatzP client) -->
+      <div v-else-if="projectTab === 'log'" class="h-full">
+        <RunPanel v-if="run" :run="run" fill @close="runToken = null" />
+        <div v-else class="grid h-full place-items-center p-8 text-center text-sm opacity-60">Up, Build &amp; Up, Restart, Stop and Down show their output here.</div>
+      </div>
+
       <!-- Monitoring -->
       <div v-else-if="projectTab === 'monitoring'" class="h-full overflow-y-auto">
         <div class="mx-auto max-w-4xl space-y-4 p-5">
@@ -361,7 +373,6 @@ const rateText = (v: number) => `${bytes(v)}/s`;
       </div>
     </div>
 
-    <RunPanel v-if="run" :run="run" tall @close="runToken = null" />
     <ConfirmDialog v-if="confirmDown" :title="`Take ${project} down?`" :text="`docker compose down stops and removes ${project}’s containers and networks. Its volumes (your data) stay.`" confirm="Down" tone="error" @cancel="confirmDown = false" @ok="compose('down'); confirmDown = false" />
   </section>
 </template>
