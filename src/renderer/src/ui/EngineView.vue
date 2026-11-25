@@ -46,21 +46,24 @@ const TABS: { id: Tab; label: string }[] = [
  */
 const on = computed(() => s.value?.status === 'running' || s.value?.status === 'sleeping');
 const tab = ref<Tab>('overview');
-watch(
-  () => (s.value ? on.value : null),
-  (now, was) => {
-    if (now === null) return;
-    if (was === undefined || was === null) tab.value = now ? 'overview' : 'settings';
-    else if (now && !was) tab.value = 'overview';
-  },
-  { immediate: true },
-);
-/** Stopped (user, 2026-11-21) → back to Settings; only once it is down, so a restart (stopping → starting) stays put. */
+/** The engine was really down, so its next start opens Overview; a restart (stopping → starting → running) keeps the tab. */
+let wasDown = false;
 watch(
   () => s.value?.status,
   (now, was) => {
-    if (now === 'stopped' && was && was !== 'stopped' && busy.value !== 'restart') tab.value = 'settings';
+    if (!now) return;
+    if (!was) {
+      tab.value = on.value ? 'overview' : 'settings';
+      wasDown = !on.value;
+    } else if (on.value) {
+      if (wasDown) tab.value = 'overview';
+      wasDown = false;
+    } else if (['stopped', 'missing', 'error'].includes(now) && busy.value !== 'restart') {
+      wasDown = true;
+      if (now === 'stopped') tab.value = 'settings';
+    }
   },
+  { immediate: true },
 );
 const wslTask = computed(() => s.value?.task?.title === 'Installing WSL');
 async function run(name: string, fn: () => Promise<unknown>, done?: string) {
