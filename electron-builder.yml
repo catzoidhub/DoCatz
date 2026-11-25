@@ -87,7 +87,8 @@ nsis:
 # Linux (#101): AppImage + .deb, as DevCatz's (Catzoid #93: the AppImage's install window and the .deb's App Center page
 # come with the installer step).
 linux:
-  icon: resources/icon.png
+  # One PNG per size: the hicolor theme has no 1024x1024, so a lone icon.png showed as a gear (Ubuntu, 2026-11-25).
+  icon: resources/linux/icons
   category: Development
   maintainer: Mahryan Rakhmatullah <109191921+ryankucingg@users.noreply.github.com>
   executableName: docatz

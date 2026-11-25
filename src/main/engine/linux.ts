@@ -124,10 +124,14 @@ else
   echo "No apt-get or dnf here: install Docker Engine from docs.docker.com/engine/install" >&2; exit 1
 fi
 `;
+    // Enabled and started apart: `enable --now` answers 0 when the start fails, and DoCatz then waited 90 s for Docker
+    // (Ubuntu x64 VM, 2026-11-25). reset-failed first: systemd refuses a 4th start within a minute.
     const res = await runAsRootLinux(
       `${install}groupadd -f docker
 usermod -aG docker ${user}
-${onDemand() ? 'systemctl start docker.socket docker.service' : 'systemctl enable --now docker'}
+systemctl reset-failed docker.socket docker.service 2>/dev/null || true
+${onDemand() ? '' : 'systemctl enable docker'}
+systemctl start ${onDemand() ? 'docker.socket docker.service' : 'docker'} || { echo "it did not start ($(systemctl show -p Result --value docker.service)): see the engine log" >&2; exit 1; }
 for i in $(seq 1 30); do [ -S ${sock} ] && break; sleep 1; done
 command -v setfacl >/dev/null 2>&1 && setfacl -m u:${user}:rw ${sock} || true`,
       r.signal,
